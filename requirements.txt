@@ -14,3 +14,4 @@ pandas
 streamlit_bokeh_events
 natsort
 streamlit_lottie
+streamlit_ketcher

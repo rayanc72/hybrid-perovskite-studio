@@ -3,3 +3,4 @@ spglib
 MDAnalysis
 plotly
 seaborn
+pymatgen

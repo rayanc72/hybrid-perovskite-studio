@@ -4,3 +4,10 @@ MDAnalysis
 plotly
 seaborn
 pymatgen
+ipyspeck
+matplotlib
+numpy
+holoviews
+bokeh
+scipy
+pandas

@@ -12,3 +12,4 @@ bokeh
 scipy
 pandas
 streamlit_bokeh_events
+natsort

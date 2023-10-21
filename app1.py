@@ -1270,7 +1270,7 @@ if plot_bs_option:
                 os.chdir(temp_dir)
 
                 # Call scan_CBM.py and extract the shift value
-                scan_cbm_output = subprocess.check_output("python3 ./scan_CBM.py", shell=True,
+                scan_cbm_output = subprocess.check_output("python ./scan_CBM.py", shell=True,
                                                           stderr=subprocess.DEVNULL).decode('utf-8')
 
                 for line in scan_cbm_output.splitlines():

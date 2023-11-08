@@ -662,7 +662,7 @@ if st.session_state.atoms is not None:
         with st.form(key="symmetry_form"):
             symprec_lower = st.number_input("Enter the lower bound for tolerance", value=1e-3, step=1e-3, format="%.4f")
             symprec_upper = st.number_input("Enter the upper bound for tolerance", value=1e-1, step=1e-3, format="%.4f")
-            symprec_list = np.linspace(st.session_state.symprec_lower, st.session_state.symprec_upper, 6)
+            symprec_list = np.linspace(symprec_lower, symprec_upper, 6)
             angle_tol = st.number_input("Enter a tolerance for angles", value=5.0, step=1e-3, format="%.4f")
 
             if symprec_lower > symprec_upper:

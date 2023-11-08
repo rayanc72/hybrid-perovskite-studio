@@ -62,29 +62,64 @@ with st.expander("Expand for options"):
                     mime=f"text/{file_extension[1:]}"  # assuming mime type to be text/in or text/cif
                 )
 
-            # if st.button("Load structure"):
-            #     structure_file_path = extract_structure_file_path(zip_data)
-            #     if not structure_file_path:
-            #         st.write("No .in or .cif file found in the zip archive.")
 
         except requests.exceptions.RequestException as err:
             st.write(f"Error fetching dataset: {err}")
 
-    # Handling the logic based on the provided input
+
     elif system_id:  # Next priority is system ID
+
         try:
+
             matched_df = systems[systems['id'] == int(system_id)][['id', 'compound_name', 'formula']]
+
             if not matched_df.empty:
+
                 st.write(f"Information for ID '{system_id}':")
+
                 st.dataframe(matched_df, hide_index=True, use_container_width=True)
+
                 dataset_results = fetch_materials_datasets(conn, int(system_id))
 
-                # Displaying only 'dataset_id' and 'space_group' columns
-                st.write("Associated structure datasets:")
-                st.dataframe(dataset_results[['id', 'space_group']], hide_index=True, use_container_width=True)
+                # Safely format the list of integers for the SQL query
+
+                ref_ids = dataset_results['reference_id'].tolist()
+
+                ref_ids_string = ','.join(
+                    map(str, ref_ids))  # Converts each id to a string and then joins them with commas
+
+                # Formulate the SQL query with the ref_ids_string
+
+                reference_query = f"SELECT `id`,`title`, `year`, `doi_isbn` FROM materials_reference WHERE `id` IN ({ref_ids_string})"
+
+                reference_data = conn.query(reference_query)
+
+                # Convert the result to a DataFrame
+
+                reference_df = pd.DataFrame(reference_data, columns=['id', 'title', 'year', 'doi_isbn'])
+                reference_df.rename(columns={'id': 'reference_id'}, inplace=True)
+
+
+                # Merge the dataframes on 'reference_id'
+
+                merged_results = pd.merge(dataset_results, reference_df, on='reference_id',
+                                          how='left')
+
+                # After the merge, the DataFrame 'merged_results' will contain columns from both 'dataset_results' and 'reference_df'
+
+                # If the column names are not as expected, adjust the line below accordingly:
+
+                st.write("Associated structure datasets with DOIs:")
+
+                st.dataframe(merged_results[['id', 'space_group', 'title', 'year', 'doi_isbn']], hide_index=True,
+                             use_container_width=True)
+
             else:
+
                 st.write(f"No results found for ID '{system_id}'.")
+
         except ValueError:
+
             st.write("Please enter a valid ID.")
     elif user_input:  # Only check for search string if ID is not provided
         matched_ids = search_database(systems, user_input)

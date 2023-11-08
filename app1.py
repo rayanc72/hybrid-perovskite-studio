@@ -22,78 +22,75 @@ st.set_page_config(page_title="hPAME", layout="wide")
 
 st.title("hybrid :red[Perovskite Analysis and Modelling Engine]")
 
-# st.divider()
-# st.latex(r'''\rm Download\; a\;  structure\;  file\;  from\;  HybriD^3:''')
-# with st.expander("Expand for options"):
+st.divider()
+st.latex(r'''\rm Download\; a\;  structure\;  file\;  from\;  HybriD^3:''')
+with st.expander("Expand for options"):
 
-#     # image_db = Image.open(
-#     #     '/Users/rayanchakraborty/Documents/Project-local/LHPs/computational/modify_structure/for_streamlit/assets/database_gr.png')
-
-#     col1, col2, col3 = st.columns([3,0.5,3])
-#     with col2:
-#         # st.image(image_db, use_column_width=True)
-#         st_lottie("https://lottie.host/90f085a3-e3b9-440d-83ab-ddec87f2b5d6/e904WGCrzS.json")
+    col1, col2, col3 = st.columns([3,0.5,3])
+    with col2:
+        # st.image(image_db, use_column_width=True)
+        st_lottie("https://lottie.host/90f085a3-e3b9-440d-83ab-ddec87f2b5d6/e904WGCrzS.json")
 
 
 
-#     conn = st.experimental_connection("hybrid3_1410", type="sql", autocommit=True)
-#     systems = conn.query("select * from materials_system")
+    conn = st.experimental_connection("hybrid3_1410", type="sql", autocommit=True)
+    systems = conn.query("select * from materials_system")
 
-#     # Taking user input for the search string, system ID, and dataset ID
-#     user_input = st.text_input("Enter search string (e.g., BA2PbI4):")
-#     system_id = st.text_input("Enter system ID:")
-#     dataset_id = st.text_input("Enter dataset ID:")
+    # Taking user input for the search string, system ID, and dataset ID
+    user_input = st.text_input("Enter search string (e.g., BA2PbI4):")
+    system_id = st.text_input("Enter system ID:")
+    dataset_id = st.text_input("Enter dataset ID:")
 
-#     structure_file_path = None
+    structure_file_path = None
 
-#     # Handling the logic based on the provided input
-#     if dataset_id:  # If dataset ID is provided, it takes precedence
-#         try:
-#             zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
-#             response = requests.get(zip_url, stream=True)
-#             response.raise_for_status()
+    # Handling the logic based on the provided input
+    if dataset_id:  # If dataset ID is provided, it takes precedence
+        try:
+            zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
+            response = requests.get(zip_url, stream=True)
+            response.raise_for_status()
 
-#             # Writing the zip file to a temporary location and allowing the user to download
-#             zip_data = response.content
-#             file_content, file_extension = extract_structure_file(zip_data)
-#             if file_content:
-#                 # Use st.download_button to allow the user to download the file
-#                 st.download_button(
-#                     label=f"Download {dataset_id}{file_extension}",
-#                     data=file_content,
-#                     file_name=f"{dataset_id}{file_extension}",
-#                     mime=f"text/{file_extension[1:]}"  # assuming mime type to be text/in or text/cif
-#                 )
+            # Writing the zip file to a temporary location and allowing the user to download
+            zip_data = response.content
+            file_content, file_extension = extract_structure_file(zip_data)
+            if file_content:
+                # Use st.download_button to allow the user to download the file
+                st.download_button(
+                    label=f"Download {dataset_id}{file_extension}",
+                    data=file_content,
+                    file_name=f"{dataset_id}{file_extension}",
+                    mime=f"text/{file_extension[1:]}"  # assuming mime type to be text/in or text/cif
+                )
 
-#             # if st.button("Load structure"):
-#             #     structure_file_path = extract_structure_file_path(zip_data)
-#             #     if not structure_file_path:
-#             #         st.write("No .in or .cif file found in the zip archive.")
+            # if st.button("Load structure"):
+            #     structure_file_path = extract_structure_file_path(zip_data)
+            #     if not structure_file_path:
+            #         st.write("No .in or .cif file found in the zip archive.")
 
-#         except requests.exceptions.RequestException as err:
-#             st.write(f"Error fetching dataset: {err}")
+        except requests.exceptions.RequestException as err:
+            st.write(f"Error fetching dataset: {err}")
 
-#     # Handling the logic based on the provided input
-#     elif system_id:  # Next priority is system ID
-#         try:
-#             matched_df = systems[systems['id'] == int(system_id)][['id', 'compound_name', 'formula']]
-#             if not matched_df.empty:
-#                 st.write(f"Information for ID '{system_id}':")
-#                 st.dataframe(matched_df, hide_index=True, use_container_width=True)
-#                 dataset_results = fetch_materials_datasets(conn, int(system_id))
+    # Handling the logic based on the provided input
+    elif system_id:  # Next priority is system ID
+        try:
+            matched_df = systems[systems['id'] == int(system_id)][['id', 'compound_name', 'formula']]
+            if not matched_df.empty:
+                st.write(f"Information for ID '{system_id}':")
+                st.dataframe(matched_df, hide_index=True, use_container_width=True)
+                dataset_results = fetch_materials_datasets(conn, int(system_id))
 
-#                 # Displaying only 'dataset_id' and 'space_group' columns
-#                 st.write("Associated structure datasets:")
-#                 st.dataframe(dataset_results[['id', 'space_group']], hide_index=True, use_container_width=True)
-#             else:
-#                 st.write(f"No results found for ID '{system_id}'.")
-#         except ValueError:
-#             st.write("Please enter a valid ID.")
-#     elif user_input:  # Only check for search string if ID is not provided
-#         matched_ids = search_database(systems, user_input)
-#         matched_df = systems[systems['id'].isin(matched_ids)][['id', 'compound_name', 'formula']]
-#         st.write(f"Information for matched IDs with '{user_input}':")
-#         st.dataframe(matched_df, hide_index=True, use_container_width=True)
+                # Displaying only 'dataset_id' and 'space_group' columns
+                st.write("Associated structure datasets:")
+                st.dataframe(dataset_results[['id', 'space_group']], hide_index=True, use_container_width=True)
+            else:
+                st.write(f"No results found for ID '{system_id}'.")
+        except ValueError:
+            st.write("Please enter a valid ID.")
+    elif user_input:  # Only check for search string if ID is not provided
+        matched_ids = search_database(systems, user_input)
+        matched_df = systems[systems['id'].isin(matched_ids)][['id', 'compound_name', 'formula']]
+        st.write(f"Information for matched IDs with '{user_input}':")
+        st.dataframe(matched_df, hide_index=True, use_container_width=True)
 
 
 

@@ -1387,11 +1387,6 @@ if MD_option:
         if st.button("Generate files"):
             # zip_file, spt_file, movie_file = run_perl_script(file_buffer_md)
             zip_file, spt_file = run_perl_script(file_buffer_md)
-            # st.write(zip_file)
-            #
-            # st.markdown(get_download_link_md(zip_file, "geometries.zip"), unsafe_allow_html=True)
-            # st.markdown(get_download_link_md(spt_file, "geometries.spt"), unsafe_allow_html=True)
-            # st.markdown(get_download_link_md(movie_file, "xyz_structures"), unsafe_allow_html=True)
 
             # Provide native download option for zip_file
             with open(zip_file, "rb") as f:
@@ -1696,28 +1691,6 @@ if MDanalysis_option:
         elif analysis_type == "Pair Distribution Function":
             handle_rdf_analysis(u)
 
-
-# image = Image.open('/Users/rayanchakraborty/Documents/Project-local/LHPs/computational/modify_structure/for_streamlit/assets/database_gr.png')
-#
-# col1, col2, col3 = st.columns([1, 2, 1])
-#
-# with col2:
-#     st.image(image, width = 400)
-
-# Embed image in HTML within a CSS container
-# image_base64 = image_to_base64('/Users/rayanchakraborty/Documents/Project-local/LHPs/computational/modify_structure/for_streamlit/assets/database_gr.png')
-#
-#
-# page_bg_img = '''
-# <style>
-# body {
-# background-image: url("https://images.unsplash.com/photo-1542281286-9e0a16bb7366");
-# background-size: cover;
-# }
-# </style>
-# '''
-#
-# st.markdown(page_bg_img, unsafe_allow_html=True)
 
 
 

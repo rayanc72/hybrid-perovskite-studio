@@ -662,6 +662,8 @@ if st.session_state.atoms is not None:
         with st.form(key="symmetry_form"):
             symprec_lower = st.number_input("Enter the lower bound for tolerance", value=1e-3, step=1e-3, format="%.4f")
             symprec_upper = st.number_input("Enter the upper bound for tolerance", value=1e-1, step=1e-3, format="%.4f")
+            symprec_list = np.linspace(st.session_state.symprec_lower, st.session_state.symprec_upper, 6)
+            angle_tol = st.number_input("Enter a tolerance for angles", value=5.0, step=1e-3, format="%.4f")
 
             if symprec_lower > symprec_upper:
                 st.error("Lower bound should be less than or equal to the upper bound.")
@@ -670,42 +672,38 @@ if st.session_state.atoms is not None:
 
         # Update space groups if form_submitted is True or if space groups have not been calculated yet
         if form_submitted or 'space_groups' not in st.session_state:
-            st.session_state.symprec_lower = symprec_lower
-            st.session_state.symprec_upper = symprec_upper
+            # Here, calculate_space_groups should return both symprec_list and space_groups
+            st.session_state['symprec_list'], st.session_state['space_groups'] = calculate_space_groups(modified_atoms,
+                                                                                                        symprec_lower,
+                                                                                                        symprec_upper,
+                                                                                                        angle_tol)
+            st.session_state['space_group_strings'] = get_space_group_strings(st.session_state['symprec_list'],
+                                                                              st.session_state['space_groups'])
 
-            space_groups = []
-            for symprec in np.linspace(st.session_state.symprec_lower, st.session_state.symprec_upper, 6):
-                st.session_state.symprec = symprec
-                space_group = get_spacegroup(modified_atoms, symprec=st.session_state.symprec)
-                space_groups.append(space_group)
-
-            st.session_state.space_groups = space_groups
-            space_group_strings = [f"Tolerance: {symprec:.4f} - Space group: {space_group.symbol}"
-                                   for symprec, space_group in
-                                   zip(np.linspace(symprec_lower, symprec_upper, 6), space_groups)]
-
-            st.session_state.space_group_strings = space_group_strings
-
-        if 'space_groups' in st.session_state:
-            selected_index = st.selectbox("Select the desired space group",
+        # Ensure that 'space_group_strings' and 'symprec_list' are available for the dropdown and button actions
+        if 'space_group_strings' in st.session_state and 'symprec_list' in st.session_state:
+            selected_string = st.selectbox("Select the desired space group",
                                           options=st.session_state.space_group_strings,
                                           index=0)
 
             if st.button("Generate CIF"):
-                file_name_m = os.path.splitext(file_name)[0]
-                output_cif_file = f"{file_name_m}_high_symm.cif"
-                standardized_atoms, selected_symprec = write_cif_with_higher_symmetry(modified_atoms, symprec_lower,
-                                                                                      symprec_upper, selected_index)
+                try:
+                    file_name_m = os.path.splitext(file_name)[0]
+                    output_cif_file = f"{file_name_m}_high_symm.cif"
+                    selected_symprec = extract_symprec_from_string(selected_string)
+                    pymatgen_structure = generate_symmetrized_structure(modified_atoms, selected_symprec, angle_tol)
 
-                pymatgen_structure = AseAtomsAdaptor.get_structure(standardized_atoms)
+                    cif_writer = CifWriter(pymatgen_structure, symprec=selected_symprec, angle_tolerance=st.session_state.angle_tol)
 
-                cif_writer = CifWriter(pymatgen_structure, symprec=selected_symprec)
-
-                with tempfile.NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as output_file:
-                    cif_writer.write_file(output_file.name)  # Write the content to the temporary file
-                    output_file.seek(0)
-                    output_content = output_file.read()
-                    st.markdown(get_download_link(f"{output_cif_file}", output_content), unsafe_allow_html=True)
+                    with tempfile.NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as output_file:
+                        cif_writer.write_file(output_file.name)  # Write the content to the temporary file
+                        output_file.seek(0)
+                        output_content = output_file.read()
+                        st.markdown(get_download_link(f"{output_cif_file}", output_content), unsafe_allow_html=True)
+                except ValueError as e:
+                    st.error(f"An error occurred when processing the selected space group: {e}")
+                except Exception as e:
+                    st.error(f"An unexpected error occurred: {e}")
 
     if create_cent_option:
         st.header("Create Idealized Structure")

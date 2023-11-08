@@ -33,7 +33,7 @@ with st.expander("Expand for options"):
 
 
 
-    conn = st.experimental_connection("hybrid3_1410", type="sql", autocommit=True)
+    conn = st.connection("hybrid3_1410", type="sql", autocommit=True)
     systems = conn.query("select * from materials_system")
 
     # Taking user input for the search string, system ID, and dataset ID

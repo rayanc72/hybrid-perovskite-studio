@@ -113,49 +113,6 @@ def write_modified_aims_file(atoms, file_name):
         for i, atom in enumerate(atoms):
             f.write(f"atom {atom.position[0]} {atom.position[1]} {atom.position[2]} {modified_symbols[i]}\n")
 
-# def detect_molecules(atoms):
-#
-#     cov_radii = [covalent_radii[a.number] for a in atoms]
-#     element_tolerance = [0.1 if a.symbol in ["C", "H", "N", "O", "S"] else 0.25 for a in atoms]
-#     cutoffs = [natural_cutoff + tolerance for natural_cutoff, tolerance in
-#                zip(natural_cutoffs(atoms), element_tolerance)]
-#     coords = atoms.get_positions()
-#
-#     # Convert cutoffs to a NumPy array
-#     cutoffs = np.array(cutoffs)
-#
-#     # Calculate vector differences between all atoms, considering periodic boundary conditions
-#     vec_diffs, _ = get_distances(coords, coords, cell=atoms.cell, pbc=atoms.pbc)
-#
-#     # Calculate scalar distances
-#     dist_matrix = np.linalg.norm(vec_diffs, axis=-1)
-#     bonded_atoms = dist_matrix < cutoffs[:, None] + cutoffs
-#
-#     # Create a graph of bonded atoms
-#     graph = {}
-#     for i, atom in enumerate(atoms):
-#         graph[i] = bonded_atoms[i].nonzero()[0].tolist()
-#
-#     def dfs_visit(i, visited, graph, component):
-#         visited[i] = True
-#         component.append(i)
-#
-#         for neighbor in graph[i]:
-#             if not visited[neighbor]:
-#                 dfs_visit(neighbor, visited, graph, component)
-#
-#     visited = [False] * len(atoms)
-#     molecules = []
-#     for i, atom in enumerate(atoms):
-#         if not visited[i]:
-#             component = []
-#             dfs_visit(i, visited, graph, component)
-#             molecules.append(component)
-#
-#     return molecules
-
-
-
 
 def detect_molecules(atoms, exceptions: List[Tuple[str, str]] = None):
     exceptions = exceptions if exceptions else []
@@ -885,30 +842,69 @@ def print_space_group(atoms, symprec=1e-3):
     formatted_space_group = f"Space Group: {space_group}"
     return formatted_space_group
 
-def write_cif_with_higher_symmetry(atoms, symprec_lower, symprec_upper, selected_option):
-    if symprec_lower != symprec_upper:
-        symprec_values = np.linspace(symprec_lower, symprec_upper, 6)
-    else:
-        symprec_values = [symprec_lower]
+# def write_cif_with_higher_symmetry(atoms, symprec_lower, symprec_upper, selected_option):
+#     if symprec_lower != symprec_upper:
+#         symprec_values = np.linspace(symprec_lower, symprec_upper, 6)
+#     else:
+#         symprec_values = [symprec_lower]
 
+#     space_groups = []
+#     for symprec in symprec_values:
+#         space_group = get_spacegroup(atoms, symprec=symprec)
+#         space_groups.append(space_group)
+
+#     space_group_strings = [f"Tolerance: {symprec:.4f} - Space group: {space_group.symbol}"
+#                            for symprec, space_group in zip(symprec_values, space_groups)]
+
+#     selected_index = space_group_strings.index(selected_option)
+#     selected_symprec = symprec_values[selected_index]
+#     selected_space_group = space_groups[selected_index]
+
+#     lattice, scaled_positions, numbers = spglib.standardize_cell(atoms, to_primitive=False, no_idealize=False, symprec=selected_symprec)
+
+#     standardized_atoms = Atoms(cell=lattice, scaled_positions=scaled_positions, numbers=numbers)
+#     standardized_atoms.info['spacegroup'] = selected_space_group
+
+#     return standardized_atoms, selected_symprec
+def calculate_space_groups(atoms, symprec_lower, symprec_upper, angle_tol):
+    symprec_list = np.linspace(symprec_lower, symprec_upper, 6)
     space_groups = []
-    for symprec in symprec_values:
-        space_group = get_spacegroup(atoms, symprec=symprec)
-        space_groups.append(space_group)
 
-    space_group_strings = [f"Tolerance: {symprec:.4f} - Space group: {space_group.symbol}"
-                           for symprec, space_group in zip(symprec_values, space_groups)]
+    for symprec in symprec_list:
+        try:
+            structure = AseAtomsAdaptor.get_structure(atoms)
+            space_group_an = SpacegroupAnalyzer(structure, symprec=symprec, angle_tolerance=angle_tol)
+            space_group_symbol = space_group_an.get_space_group_symbol()
+            point_group_symbol = space_group_an.get_point_group_symbol()
+            if space_group_symbol is not None:
+                space_groups.append((space_group_symbol, point_group_symbol))
+            else:
+                space_groups.append('Not found')
+        except Exception as e:
+            space_groups.append(f"Not found (tolerance too high)")
+    return symprec_list, space_groups
 
-    selected_index = space_group_strings.index(selected_option)
-    selected_symprec = symprec_values[selected_index]
-    selected_space_group = space_groups[selected_index]
 
-    lattice, scaled_positions, numbers = spglib.standardize_cell(atoms, to_primitive=False, no_idealize=False, symprec=selected_symprec)
+def get_space_group_strings(symprec_list, space_groups):
+    return [f"Tolerance: {symprec:.4f} - Space group: {sg[0]}, Point group: {sg[1]}"
+            if sg != 'Not found' and sg != 'Not found (tolerance too high)'
+            else f"Tolerance: {symprec:.4f} - {sg}"
+            for symprec, sg in zip(symprec_list, space_groups)]
 
-    standardized_atoms = Atoms(cell=lattice, scaled_positions=scaled_positions, numbers=numbers)
-    standardized_atoms.info['spacegroup'] = selected_space_group
+def extract_symprec_from_string(selected_string):
+    try:
+        # Assuming the string format is "Tolerance: {symprec:.4f} - Space group: {space_group}"
+        selected_symprec_str = selected_string.split(' - ')[0].replace('Tolerance: ', '')
+        return float(selected_symprec_str)
+    except (IndexError, ValueError) as e:
+        raise ValueError(f"Failed to extract symprec: {e}")
 
-    return standardized_atoms, selected_symprec
+def generate_symmetrized_structure(atoms, symprec, angle_tol):
+    structure = AseAtomsAdaptor.get_structure(atoms)
+    space_group_analyzer = SpacegroupAnalyzer(structure, symprec=symprec, angle_tolerance=angle_tol)
+    return space_group_analyzer.get_symmetrized_structure()
+
+
 
 def translate_molecule(atoms, molecules, scope_choice, selected_indices, axes_choice, translation_distances):
     if scope_choice == 'molecules':

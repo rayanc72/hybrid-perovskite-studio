@@ -2067,3 +2067,23 @@ def extract_structure_file_path(zip_data):
                     tmp_file.write(source_file.read())
                 return tmp_file.name  # Return the path to the temporary file
         return None
+def handle_bridging_angles(result):
+    angle, beta = result
+    return [
+        ('Bridging angle(s)', str(list(angle.keys())[0:]).strip('[]')),
+        ('Beta', str(beta).strip('[]'))
+    ]
+
+def handle_in_out_deviations(result):
+    output = []
+    angle_count = 0
+    for angle, deviations in result.items():
+        angle_count += 1
+        angle_name = f'Bridging angle {angle_count}' if angle_count > 1 else 'Bridging angle'
+
+        output.extend([
+            (angle_name, angle),
+            ('In-plane deviation', f'{deviations["in_plane"]:.3f}'),
+            ('Out-of-plane deviation', f'{deviations["out_plane"]:.3f}')
+        ])
+    return output

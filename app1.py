@@ -942,7 +942,7 @@ if st.session_state.atoms is not None:
             st.dataframe(found_distances, use_container_width=True, hide_index=True)
 
     if distortion_option:
-        st.header("Calculate octahedral distortions")
+        st.header("Calculate distortion parameters")
 
         # User input for atomic symbols
         center_atom = st.text_input('Enter the symbol of the center atom (A):', value="Pb")
@@ -951,7 +951,8 @@ if st.session_state.atoms is not None:
         # User input for type of distortion(s)
         distortion_type = st.selectbox(
             'Select the type of distortion to calculate:',
-            ('Bond distance variance', 'Angle variance', 'Bridging angle(s)', 'In and out deviations', 'Beta parameter', 'all')
+            ('Bond distance variance', 'Angle variance', 'Bridging angle(s)', 'In and out deviations', 'Beta parameter',
+             'all')
         )
 
         # Button for confirmation
@@ -959,55 +960,41 @@ if st.session_state.atoms is not None:
             super_atoms, periodic_image_dict = filter_atoms_by_symbols_and_extend(modified_atoms, center_atom,
                                                                                   surrounding_atoms)
             AB6_octahedra, AB_distances = identify_AB_groups(super_atoms, center_atom, surrounding_atoms)
-
             unq_AB_distances = filter_unique_distances(AB_distances)
-
-            octahedral_distances = find_matching_distances(modified_atoms, center_atom, surrounding_atoms, unq_AB_distances)
+            octahedral_distances = find_matching_distances(modified_atoms, center_atom, surrounding_atoms,
+                                                           unq_AB_distances)
 
             st.markdown(f'**Distance of {center_atom} - {surrounding_atoms} bonds in octahedra**')
             st.dataframe(octahedral_distances, use_container_width=True, hide_index=True)
 
-            # Create a dictionary to map distortion types to functions
             distortion_mapping = {
-                'Bond distance variance': lambda x, y: calculate_bond_distance_variance(x, y),
-                'Angle variance': lambda x, y: calculate_angle_variance(x, y),
-                'Bridging angle(s)': lambda x, y: calculate_unique_ABA_angles(x, y),
-                'In and out deviations': lambda x, y: calculate_in_out_planes(x, y),
+                'Bond distance variance': calculate_bond_distance_variance,
+                'Angle variance': calculate_angle_variance,
+                'Bridging angle(s)': calculate_unique_ABA_angles,
+                'In and out deviations': calculate_in_out_planes,
             }
 
-            # Call the respective function based on the selected option
-            output_list = []
+            output_data = []
             if distortion_type == 'all':
                 for func_name, func in distortion_mapping.items():
                     result = func(AB6_octahedra, super_atoms)
                     if func_name == 'Bridging angle(s)':
-                        angle, beta = result
-                        output_list.append(f'''   **Bridging angle(s):** :violet[{str(list(angle.keys())[0:]).strip('[]')}]  ''')
-                        output_list.append(f'''   **Beta parameter:** :violet[{str(beta).strip('[]')}]  ''')
+                        output_data.extend(handle_bridging_angles(result))
                     elif func_name == 'In and out deviations':
-                        output_list.append(f'''   **In and Out of plane deviations:**  ''')
-                        for angle, deviations in result.items():
-                            output_list.append(f'''   **Bridging angle:** :gray[{angle}]   ''')
-                            output_list.append(f'''   In-plane deviation: :violet[{deviations['in_plane']:.3f}]   ''')
-                            output_list.append(f'''   Out-of-plane deviation: :violet[{deviations['out_plane']:.3f}]   ''')
+                        output_data.extend(handle_in_out_deviations(result))
                     else:
-                        output_list.append(f"  **{func_name}:** :violet[{str(result).strip('[]')}]  ")
+                        output_data.append((func_name, str(result).strip('[]')))
             else:
                 result = distortion_mapping[distortion_type](AB6_octahedra, super_atoms)
                 if distortion_type == 'Bridging angle(s)':
-                    angle, beta = result
-                    output_list.append(f'''   **Bridging angle(s):** :violet[{str(list(angle.keys())[0:]).strip('[]')}]  ''')
-                    output_list.append(f'''   **Beta parameter:** :violet[{str(beta).strip('[]')}]  ''')
+                    output_data.extend(handle_bridging_angles(result))
                 elif distortion_type == 'In and out deviations':
-                    output_list.append(f'''   **In and Out of plane deviations:**  ''')
-                    for angle, deviations in result.items():
-                        output_list.append(f'''   **Bridging angle:** :gray[{angle}]   ''')
-                        output_list.append(f'''   In-plane deviation: :violet[{deviations['in_plane']:.3f}]   ''')
-                        output_list.append(f'''   Out-of-plane deviation: :violet[{deviations['out_plane']:.3f}]   ''')
+                    output_data.extend(handle_in_out_deviations(result))
                 else:
-                    output_list.append(f"  {distortion_type}: **{str(result).strip('[]')}**  ")
+                    output_data.append((distortion_type, str(result).strip('[]')))
 
-            st.markdown("\n\n".join(output_list))
+            df = pd.DataFrame(output_data, columns=['Distortion Parameter', 'Value'])
+            st.dataframe(df, use_container_width=True, hide_index=True)
 
 if interpolate_option:
     st.header("Interpolate Structures")

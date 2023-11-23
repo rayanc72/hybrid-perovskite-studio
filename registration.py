@@ -13,7 +13,7 @@ def connect_to_db():
     except Error as e:
         st.error(f"Error while connecting to MySQL: {e}")
     finally:
-        if connection is not connected():
+        if connection and connection.is_connected():
             connection.close()
 
 def check_password():

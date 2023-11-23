@@ -24,108 +24,108 @@ st.title("hybrid :red[Perovskite Analysis and Modelling Engine]")
 
 st.divider()
 st.latex(r'''\rm Download\; a\;  structure\;  file\;  from\;  HybriD^3:''')
-with st.expander("Expand for options"):
-
-    col1, col2, col3 = st.columns([3,0.5,3])
-    with col2:
-        # st.image(image_db, use_column_width=True)
-        st_lottie("https://lottie.host/90f085a3-e3b9-440d-83ab-ddec87f2b5d6/e904WGCrzS.json")
-
-
-
-    conn = st.connection("1107_dump", type="sql", autocommit=True)
-    systems = conn.query("select * from materials_system")
-
-    # Taking user input for the search string, system ID, and dataset ID
-    user_input = st.text_input("Enter search string (e.g., BA2PbI4):")
-    system_id = st.text_input("Enter system ID:")
-    dataset_id = st.text_input("Enter dataset ID:")
-
-    structure_file_path = None
-
-    # Handling the logic based on the provided input
-    if dataset_id:  # If dataset ID is provided, it takes precedence
-        try:
-            zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
-            response = requests.get(zip_url, stream=True)
-            response.raise_for_status()
-
-            # Writing the zip file to a temporary location and allowing the user to download
-            zip_data = response.content
-            file_content, file_extension = extract_structure_file(zip_data)
-            if file_content:
-                # Use st.download_button to allow the user to download the file
-                st.download_button(
-                    label=f"Download {dataset_id}{file_extension}",
-                    data=file_content,
-                    file_name=f"{dataset_id}{file_extension}",
-                    mime=f"text/{file_extension[1:]}"  # assuming mime type to be text/in or text/cif
-                )
-
-
-        except requests.exceptions.RequestException as err:
-            st.write(f"Error fetching dataset: {err}")
-
-
-    elif system_id:  # Next priority is system ID
-
-        try:
-
-            matched_df = systems[systems['id'] == int(system_id)][['id', 'compound_name', 'formula']]
-
-            if not matched_df.empty:
-
-                st.write(f"Information for ID '{system_id}':")
-
-                st.dataframe(matched_df, hide_index=True, use_container_width=True)
-
-                dataset_results = fetch_materials_datasets(conn, int(system_id))
-
-                # Safely format the list of integers for the SQL query
-
-                ref_ids = dataset_results['reference_id'].tolist()
-
-                ref_ids_string = ','.join(
-                    map(str, ref_ids))  # Converts each id to a string and then joins them with commas
-
-                # Formulate the SQL query with the ref_ids_string
-
-                reference_query = f"SELECT `id`,`title`, `year`, `doi_isbn` FROM materials_reference WHERE `id` IN ({ref_ids_string})"
-
-                reference_data = conn.query(reference_query)
-
-                # Convert the result to a DataFrame
-
-                reference_df = pd.DataFrame(reference_data, columns=['id', 'title', 'year', 'doi_isbn'])
-                reference_df.rename(columns={'id': 'reference_id'}, inplace=True)
-
-
-                # Merge the dataframes on 'reference_id'
-
-                merged_results = pd.merge(dataset_results, reference_df, on='reference_id',
-                                          how='left')
-
-                # After the merge, the DataFrame 'merged_results' will contain columns from both 'dataset_results' and 'reference_df'
-
-                # If the column names are not as expected, adjust the line below accordingly:
-
-                st.write("Associated structure datasets with DOIs:")
-
-                st.dataframe(merged_results[['id', 'space_group', 'title', 'year', 'doi_isbn']], hide_index=True,
-                             use_container_width=True)
-
-            else:
-
-                st.write(f"No results found for ID '{system_id}'.")
-
-        except ValueError:
-
-            st.write("Please enter a valid ID.")
-    elif user_input:  # Only check for search string if ID is not provided
-        matched_ids = search_database(systems, user_input)
-        matched_df = systems[systems['id'].isin(matched_ids)][['id', 'compound_name', 'formula']]
-        st.write(f"Information for matched IDs with '{user_input}':")
-        st.dataframe(matched_df, hide_index=True, use_container_width=True)
+# with st.expander("Expand for options"):
+#
+#     col1, col2, col3 = st.columns([3,0.5,3])
+#     with col2:
+#         # st.image(image_db, use_column_width=True)
+#         st_lottie("https://lottie.host/90f085a3-e3b9-440d-83ab-ddec87f2b5d6/e904WGCrzS.json")
+#
+#
+#
+#     conn = st.connection("1107_dump", type="sql", autocommit=True)
+#     systems = conn.query("select * from materials_system")
+#
+#     # Taking user input for the search string, system ID, and dataset ID
+#     user_input = st.text_input("Enter search string (e.g., BA2PbI4):")
+#     system_id = st.text_input("Enter system ID:")
+#     dataset_id = st.text_input("Enter dataset ID:")
+#
+#     structure_file_path = None
+#
+#     # Handling the logic based on the provided input
+#     if dataset_id:  # If dataset ID is provided, it takes precedence
+#         try:
+#             zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
+#             response = requests.get(zip_url, stream=True)
+#             response.raise_for_status()
+#
+#             # Writing the zip file to a temporary location and allowing the user to download
+#             zip_data = response.content
+#             file_content, file_extension = extract_structure_file(zip_data)
+#             if file_content:
+#                 # Use st.download_button to allow the user to download the file
+#                 st.download_button(
+#                     label=f"Download {dataset_id}{file_extension}",
+#                     data=file_content,
+#                     file_name=f"{dataset_id}{file_extension}",
+#                     mime=f"text/{file_extension[1:]}"  # assuming mime type to be text/in or text/cif
+#                 )
+#
+#
+#         except requests.exceptions.RequestException as err:
+#             st.write(f"Error fetching dataset: {err}")
+#
+#
+#     elif system_id:  # Next priority is system ID
+#
+#         try:
+#
+#             matched_df = systems[systems['id'] == int(system_id)][['id', 'compound_name', 'formula']]
+#
+#             if not matched_df.empty:
+#
+#                 st.write(f"Information for ID '{system_id}':")
+#
+#                 st.dataframe(matched_df, hide_index=True, use_container_width=True)
+#
+#                 dataset_results = fetch_materials_datasets(conn, int(system_id))
+#
+#                 # Safely format the list of integers for the SQL query
+#
+#                 ref_ids = dataset_results['reference_id'].tolist()
+#
+#                 ref_ids_string = ','.join(
+#                     map(str, ref_ids))  # Converts each id to a string and then joins them with commas
+#
+#                 # Formulate the SQL query with the ref_ids_string
+#
+#                 reference_query = f"SELECT `id`,`title`, `year`, `doi_isbn` FROM materials_reference WHERE `id` IN ({ref_ids_string})"
+#
+#                 reference_data = conn.query(reference_query)
+#
+#                 # Convert the result to a DataFrame
+#
+#                 reference_df = pd.DataFrame(reference_data, columns=['id', 'title', 'year', 'doi_isbn'])
+#                 reference_df.rename(columns={'id': 'reference_id'}, inplace=True)
+#
+#
+#                 # Merge the dataframes on 'reference_id'
+#
+#                 merged_results = pd.merge(dataset_results, reference_df, on='reference_id',
+#                                           how='left')
+#
+#                 # After the merge, the DataFrame 'merged_results' will contain columns from both 'dataset_results' and 'reference_df'
+#
+#                 # If the column names are not as expected, adjust the line below accordingly:
+#
+#                 st.write("Associated structure datasets with DOIs:")
+#
+#                 st.dataframe(merged_results[['id', 'space_group', 'title', 'year', 'doi_isbn']], hide_index=True,
+#                              use_container_width=True)
+#
+#             else:
+#
+#                 st.write(f"No results found for ID '{system_id}'.")
+#
+#         except ValueError:
+#
+#             st.write("Please enter a valid ID.")
+#     elif user_input:  # Only check for search string if ID is not provided
+#         matched_ids = search_database(systems, user_input)
+#         matched_df = systems[systems['id'].isin(matched_ids)][['id', 'compound_name', 'formula']]
+#         st.write(f"Information for matched IDs with '{user_input}':")
+#         st.dataframe(matched_df, hide_index=True, use_container_width=True)
 
 
 
@@ -725,7 +725,7 @@ if st.session_state.atoms is not None:
                     selected_symprec = extract_symprec_from_string(selected_string)
                     pymatgen_structure = generate_symmetrized_structure(modified_atoms, selected_symprec, angle_tol)
 
-                    cif_writer = CifWriter(pymatgen_structure, symprec=selected_symprec, angle_tolerance=st.session_state.angle_tol)
+                    cif_writer = CifWriter(pymatgen_structure, symprec=selected_symprec, angle_tolerance=angle_tol)
 
                     with tempfile.NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as output_file:
                         cif_writer.write_file(output_file.name)  # Write the content to the temporary file
@@ -1287,7 +1287,7 @@ if plot_bs_option:
                 os.chdir(temp_dir)
 
                 # Call scan_CBM.py and extract the shift value
-                scan_cbm_output = subprocess.check_output("python ./scan_CBM.py", shell=True,
+                scan_cbm_output = subprocess.check_output("python ../scan_CBM.py", shell=True,
                                                           stderr=subprocess.DEVNULL).decode('utf-8')
 
                 for line in scan_cbm_output.splitlines():
@@ -1296,7 +1296,7 @@ if plot_bs_option:
                         break
 
                 plot_band_output = subprocess.check_output(
-                    f"python3 ./plot_band.py {shift} {ymin} {ymax} output_band.png {plot_color}", shell=True,
+                    f"python ../plot_band.py {shift} {ymin} {ymax} output_band.png {plot_color}", shell=True,
                     stderr=subprocess.DEVNULL).decode('utf-8')
 
                 # Layout
@@ -1338,13 +1338,64 @@ if plot_bs_option:
 
 if plot_spin_option:
     st.title("Plot Spin Texture")
-    st.title("Still in development...")
 
     # File uploader
-    uploaded_files = st.file_uploader("Upload_files:", type=['dat'], accept_multiple_files=False)
+    uploaded_file = st.file_uploader("Upload spin_texture.dat", type=['dat'], accept_multiple_files=False)
 
-    # Plot state input
-    plot_range = st.slider("Select plot range:", min_value=-30.0, max_value=30.0, value=(-2.0, 5.0), step=1.0)
+    # File uploader for .out file
+    uploaded_out_file = st.file_uploader("Upload .out file from spin texture calculation (optional)", type=['out'], accept_multiple_files=False)
+
+    if uploaded_out_file is not None:
+        uploaded_out_file.seek(0)  # Reset file pointer
+        out_df = parse_out_file(uploaded_out_file)
+        st.dataframe(out_df, hide_index=True, use_container_width=True)
+
+    if uploaded_file is not None:
+        # Get the range of available states
+        min_state, max_state = get_state_range(uploaded_file)
+
+        # Display the range of available states
+        st.markdown(f"Range of available states for spin texture plot: {min_state} to {max_state}")
+
+        # Input for states
+        state_input = st.text_input("Enter states (separated by commas, max 8):")
+
+        # Input for energy shift
+        shift_e = st.number_input("Enter the energy shift:")
+
+        #Input for spin direction
+        spin_direction = st.selectbox("Spin direction", ['x', 'y', 'z'])
+
+        # Scale for the arrows
+        scale_param = st.number_input("Scale parameter for the spin arrows (optional)", value=15)
+
+        # Process the input states
+        if state_input:
+            states = [int(s.strip()) for s in state_input.split(',') if s.strip().isdigit()]
+            states = states[:8]  # Limit to maximum 8 states
+
+            if all(min_state <= state <= max_state for state in states):
+                if st.button("Plot spin texture"):
+                    # Create a 2x2 grid of columns
+                    cols = st.columns(2)
+                    col_index = 0  # To keep track of which column to use
+
+                    for state in states:
+                        uploaded_file.seek(0)
+                        try:
+                            fig = plot_spin_quivers(uploaded_file, state, spin_direction, shift_e, scale=scale_param, axis_limits=None)
+
+                            # Display plot in the grid
+                            with cols[col_index % 2]:
+                                st.markdown(f"### State {state}")
+                                st.pyplot(fig)
+
+                            col_index += 1
+
+                        except Exception as e:
+                            st.error(f"An error occurred while plotting: {e}")
+            else:
+                st.error("Entered states are out of the available range.")
 
 
 

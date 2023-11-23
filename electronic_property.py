@@ -17,6 +17,7 @@ from holoviews import opts
 from bokeh.plotting import figure, show
 import streamlit_bokeh_events as bokeh_events
 from bokeh.models import Span
+import re
 
 
 def plot_pdos_streamlit(dos_data, shift, plot_range):
@@ -442,21 +443,134 @@ def plot_band(uploaded_files, energyshift=None, ymin=None, ymax=None,
     st.bokeh_chart(p)
 
 
-def filter_state_data(filename, target_state):
-    # Read the file
-    df = pd.read_csv(filename, delim_whitespace=True, comment='#', header=None)
-
-    # Assign column names
+def get_state_range(uploaded_file):
+    df = pd.read_csv(uploaded_file, delim_whitespace=True, comment='#', header=None)
     column_names = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z']
     df.columns = column_names
+    states = df['State'].unique()
+    return states.min(), states.max()
 
-    # Filter rows by target_state
-    filtered_df = df[df['State'] == target_state]
 
-    # Drop the 'State' column as it's constant
-    filtered_df.drop('State', axis=1, inplace=True)
-
-    # Reset index for aesthetics
+def filter_state_data(uploaded_file, target_state):
+    # Read the file directly from the file-like object
+    df = pd.read_csv(uploaded_file, delim_whitespace=True, comment='#', header=None)
+    uploaded_file.seek(0)  # Reset the file pointer to the beginning after reading
+    column_names = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z']
+    df.columns = column_names
+    filtered_df = df[df['State'] == target_state].copy()
+    filtered_df = filtered_df.drop('State', axis=1)
     filtered_df.reset_index(drop=True, inplace=True)
-
     return filtered_df
+
+
+def prepare_plot_data(filename, state):
+    filtered_df = filter_state_data(filename, state)
+    k_points = filtered_df[['kx', 'ky', 'kz']].to_numpy()
+    spins = filtered_df[['sigma_x', 'sigma_y', 'sigma_z']].to_numpy()
+    energy = filtered_df['Eigenvalue'].to_numpy()
+
+    return k_points, spins, energy
+
+
+def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type='coolwarm', alpha=0.2):
+    shifted_energy = energy - energy_shift
+
+    # Normalize shifted energy values to a range of 0 to 1
+    energy_min = shifted_energy.min()
+    energy_max = shifted_energy.max()
+    normalized_energy = (shifted_energy - energy_min) / (energy_max - energy_min)
+
+    # Create the filled contour plot
+    contourf_plot = ax.tricontourf(kx, ky, normalized_energy, levels=levels, vmin=0, vmax=1,
+                                   cmap=cmap_type, zorder=2, alpha=alpha)
+
+    # Create a colorbar at the top of the figure
+    cbar = plt.colorbar(contourf_plot, orientation='horizontal', pad=0.1, fraction=0.046, aspect=30, location='top')
+    cbar.set_label('Energy (eV)')
+    # Set ticks based on the normalized range but label with the actual energy values
+    cbar.set_ticks([0, 0.5, 1])
+    cbar.set_ticklabels([f'{energy_min:.2f}',
+                         f'{(energy_min + energy_max) / 2:.2f}',
+                         f'{energy_max:.2f}'])
+
+    ax.autoscale(tight=True)
+
+def plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale):
+    norm = plt.Normalize(color_component.min(), color_component.max())
+    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap='copper', norm=norm)
+    plt.colorbar(quivers, ax=ax).set_label(f'$<\sigma_{spin_direction}>$ component')
+
+def plot_spin_quivers(filename, state, spin_direction, shift_energy, scale, axis_limits=None):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    plt.rcParams["font.family"] = "Arial"
+    plt.rcParams.update({'font.size': 18})
+
+    k_points, spins, energy = prepare_plot_data(filename, state)
+
+    if spin_direction == 'z':
+        kx, ky = k_points[:, 0], k_points[:, 1]
+        spin_x, spin_y, color_component = spins[:, 0], spins[:, 1], spins[:, 2]
+        ax_label_x, ax_label_y = "-X$\Gamma$X ($// \\vec{b}$) ($\AA^{-1}$)", "-Y$\Gamma$Y ($// \\vec{c}$) ($\AA^{-1}$)"
+    elif spin_direction == 'x':
+        ky, kz = k_points[:, 1], k_points[:, 2]
+        spin_y, spin_z, color_component = spins[:, 1], spins[:, 2], spins[:, 0]
+        kx, spin_x = kz, spin_z
+        ax_label_x, ax_label_y = "-Y$\Gamma$Y ($// \\vec{c}$) ($\AA^{-1}$)", "-Z$\Gamma$Z ($// \\vec{a}$) ($\AA^{-1}$)"
+    elif spin_direction == 'y':
+        kx, kz = k_points[:, 0], k_points[:, 2]
+        spin_x, spin_z, color_component = spins[:, 0], spins[:, 2], spins[:, 1]
+        ky, spin_y = kz, spin_z
+        ax_label_x, ax_label_y = "-X$\Gamma$X ($// \\vec{b}$) ($\AA^{-1}$)", "-Z$\Gamma$Z ($// \\vec{a}$) ($\AA^{-1}$)"
+    else:
+        raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
+
+    plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale=scale)
+
+    try:
+        plot_energy_contours(ax, kx, ky, energy, shift_energy)
+    except Exception as e:
+        st.error(f"An error occurred while plotting the energy contours: {e}")
+
+    ax.set_xlabel(ax_label_x)
+    ax.set_ylabel(ax_label_y)
+
+    if axis_limits:
+        ax.axis(axis_limits)
+
+    plt.tight_layout()
+    return plt
+
+
+def parse_out_file(out_file):
+    data = []
+
+    lines = out_file.readlines()
+
+    for i, line in enumerate(lines):
+        # Decode the binary line to string
+        line = line.decode('utf-8')
+
+        # Check for the line with atoms and electrons
+        if "The structure contains" in line:
+            numbers = re.findall(r"\d+\.?\d*", line)
+            if len(numbers) >= 2:
+                data.append({"System parameter": "Number of atoms", "Value": numbers[0]})
+                data.append({"System parameter": "Total number of electrons", "Value": numbers[1]})
+
+        # Check for the specific block with energy states
+        if "Spin-orbit-coupled \"band gap\" of total set of bands:" in line:
+            # Process the next three lines for energy details
+            for offset in range(1, 4):
+                if i + offset < len(lines):
+                    energy_line = lines[i + offset].decode("utf-8")
+                    energy_data = re.findall(r"-?\d+\.\d+", energy_line)
+                    if "Lowest unoccupied state" in energy_line:
+                        data.append({"System parameter": "Lowest unoccupied state", "Value": energy_data[0] + " eV"})
+                    elif "Highest occupied state" in energy_line:
+                        data.append({"System parameter": "Highest occupied state", "Value": energy_data[0] + " eV"})
+                    elif "Energy difference" in energy_line:
+                        data.append({"System parameter": "Energy difference", "Value": energy_data[0] + " eV"})
+
+    # Create DataFrame from the list of dictionaries
+    df = pd.DataFrame(data)
+    return df

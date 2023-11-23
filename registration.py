@@ -10,11 +10,8 @@ def connect_to_db():
     try:
         connection = st.connection("hpame_users", type="sql", autocommit=True)
         yield connection
-    except Error as e:
+    except error as e:
         st.error(f"Error while connecting to MySQL: {e}")
-    finally:
-        if connection:
-            connection.close()
 
 def check_password():
     """Returns `True` if the user had a correct password."""

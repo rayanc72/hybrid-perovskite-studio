@@ -44,7 +44,7 @@ def hash_password(password):
 def verify_login(username, password):
     try:
         connection = st.connection("hpame_users", type="sql", autocommit=True)
-        if connection.is_connected():
+        if connection:
             cursor = connection.cursor()
             cursor.execute("SELECT password FROM users WHERE user_id = %s", (username,))
             record = cursor.fetchone()
@@ -53,7 +53,7 @@ def verify_login(username, password):
         st.error("Database connection failed")
         return False
     finally:
-        if connection.is_connected():
+        if connection:
             cursor.close()
             connection.close()
 
@@ -61,7 +61,7 @@ def verify_login(username, password):
 def register_user(user_id, email, hashed_password):
     try:
         connection = st.connection("hpame_users", type="sql", autocommit=True)
-        if connection.is_connected():
+        if connection:
             cursor = connection.cursor()
             cursor.execute("INSERT INTO users (user_id, email, password) VALUES (%s, %s, %s)",
                            (user_id, email, hashed_password))
@@ -71,7 +71,7 @@ def register_user(user_id, email, hashed_password):
         st.error("Error while connecting to MySQL", e)
         return False
     finally:
-        if connection.is_connected():
+        if connection:
             cursor.close()
             connection.close()
 

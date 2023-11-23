@@ -3,8 +3,6 @@ import hashlib
 import hmac
 
 from contextlib import contextmanager
-import mysql.connector
-from mysql.connector import Error
 
 @contextmanager
 def connect_to_db():

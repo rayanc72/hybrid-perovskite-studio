@@ -2,6 +2,22 @@ import streamlit as st
 import hashlib
 import hmac
 
+from contextlib import contextmanager
+import mysql.connector
+from mysql.connector import Error
+
+@contextmanager
+def connect_to_db():
+    connection = None
+    try:
+        connection = st.connection("hpame_users", type="sql", autocommit=True)
+        yield connection
+    except Error as e:
+        st.error(f"Error while connecting to MySQL: {e}")
+    finally:
+        if connection is not connected():
+            connection.close()
+
 def check_password():
     """Returns `True` if the user had a correct password."""
 
@@ -42,38 +58,19 @@ def hash_password(password):
 
 # Function to check user credentials in the database
 def verify_login(username, password):
-    try:
-        connection = st.connection("hpame_users", type="sql", autocommit=True)
-        if connection:
-            cursor = connection.cursor()
-            cursor.execute("SELECT password FROM users WHERE user_id = %s", (username,))
-            record = cursor.fetchone()
-            return record and hashlib.sha256(password.encode()).hexdigest() == record[0]
-    except Error as e:
-        st.error("Database connection failed")
-        return False
-    finally:
-        if connection:
-            cursor.close()
-            connection.close()
+    with connect_to_db() as connection:
+        cursor = connection.cursor()
+        cursor.execute("SELECT password FROM users WHERE user_id = %s", (username,))
+        record = cursor.fetchone()
+        return record and hashlib.sha256(password.encode()).hexdigest() == record[0]
 
-# Function to register a new user
 def register_user(user_id, email, hashed_password):
-    try:
-        connection = st.connection("hpame_users", type="sql", autocommit=True)
-        if connection:
-            cursor = connection.cursor()
-            cursor.execute("INSERT INTO users (user_id, email, password) VALUES (%s, %s, %s)",
-                           (user_id, email, hashed_password))
-            connection.commit()
-            return True
-    except Error as e:
-        st.error("Error while connecting to MySQL", e)
-        return False
-    finally:
-        if connection:
-            cursor.close()
-            connection.close()
+    with connect_to_db() as connection:
+        cursor = connection.cursor()
+        cursor.execute("INSERT INTO users (user_id, email, password) VALUES (%s, %s, %s)",
+                       (user_id, email, hashed_password))
+        connection.commit()
+        return cursor.rowcount == 1
 
 def login_form():
     """Form with widgets to collect user information"""

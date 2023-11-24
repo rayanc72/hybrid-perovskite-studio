@@ -15,14 +15,36 @@ from PIL import Image
 from streamlit_lottie import st_lottie
 import streamlit_authenticator as stauth
 # from streamlit_ketcher import st_ketcher
-import yaml
+from streamlit_extras.mention import mention
+from streamlit_extras.jupyterlite import jupyterlite
 
-# structure_content = None
+import yaml
+def twitter_link():
+    twitter_mention = mention(
+        label="",
+        icon="twitter",
+        url="https://www.twitter.com/padfoot_c4",
+        write=False,
+    )
+    st.write(f"{twitter_mention}", unsafe_allow_html=True)
+def email_link():
+    inline_mention = mention(
+        label="",
+        icon="✉️",
+        url="mailto:rayan.chakraborty@duke.edu",
+        write=False,
+    )
+    st.write(f"{inline_mention}", unsafe_allow_html=True)
 
 st.set_page_config(page_title="hPAME", layout="wide")
 
 st.title("hybrid :red[Perovskite Analysis and Modelling Engine]")
 
+col1, col2, col3 = st.columns([30,0.5,0.5])
+with col2:
+    email_link()
+with col3:
+    twitter_link()
 
 
 from yaml.loader import SafeLoader
@@ -266,10 +288,6 @@ with st.sidebar:
     st.sidebar.header("Structure Transformations")
     #Section 2 - operations
     rotate_option = st.sidebar.checkbox("Rotation", value=False)
-    # rotation_all_same_options = st.sidebar.checkbox("Rotate Multiple Molecules", value=False)
-    # rotate_some_atoms_option = st.sidebar.checkbox("Rotate Part of Molecules", value=False)
-    # interp_rotate_option = st.sidebar.checkbox("Interpolation by Rotation", value=False)
-    # rotate_by_dm_option = st.sidebar.checkbox("Rotate dipole moment", value=False)
     reflect_option = st.sidebar.checkbox("Reflection", value=False)
     translation_option = st.sidebar.checkbox("Translation", value=False)
     delete_option = st.sidebar.checkbox("Deletion", value=False)
@@ -277,8 +295,6 @@ with st.sidebar:
     interpolate_option = st.sidebar.checkbox("Standard interpolation", value=False)
     trans_rotate_option = st.sidebar.checkbox("Interpolation by Translation + Rotation", value=False)
 
-    # visulization_option = st.sidebar.checkbox("Visualize Structures", value=False)
-    # exp_option = st.sidebar.checkbox("Experimental", value=False)
 
     st.divider()
 
@@ -296,24 +312,16 @@ with st.sidebar:
     MD_option = st.sidebar.checkbox("Analyze AIMS MD output", value=False)
     MDanalysis_option = st.sidebar.checkbox("Distance analysis with MDA", value=False)
 
-    # st.divider()
-    #
-    # st.sidebar.header("Access Databases")
-    # local_database = st.sidebar.checkbox("Access HybriD3 Database (local)", value=False)
+    st.divider()
 
-# sketch_option = st.sidebar.checkbox("Get SMILES", value=False)
+    st.sidebar.header("Experimental")
+    script_option=st.sidebar.checkbox("Run your own script", value=False)
 
-# perpendicular_axis_option = st.sidebar.checkbox("Get perpendicular axis", value=False)
-
-
-# if 'use_custom_axis' not in st.session_state:
-#     st.session_state.use_custom_axis = True
 
 
 if st.session_state.atoms is not None:
 
     modified_atoms = st.session_state.atoms.copy()
-    # st.session_state.modified_atoms = modified_atoms
     molecules = st.session_state.molecules.copy()
 
 
@@ -1444,9 +1452,6 @@ if plot_spin_option:
             else:
                 st.error("Entered states are out of the available range.")
 
-
-
-
 if deviation_calculation_option:
     st.title("Calculate deviation")
 
@@ -1722,10 +1727,6 @@ def handle_rdf_analysis(u):
     pass
 
 
-
-
-
-
 def handle_distortion_analysis(u, n, A, B):
     outputs = []
     for idx, ts in enumerate(u.trajectory[::n]):
@@ -1812,6 +1813,10 @@ if MDanalysis_option:
             handle_rdf_analysis(u)
 
 
+if script_option:
+    st.title("Run your own python script!")
+    st.text("This feature uses JupyterLite and runs the script entirely on your browser. At this time, this enviroment does not have access to any previously uploaded file.")
+    jupyterlite(900, 1600)
 
 
 

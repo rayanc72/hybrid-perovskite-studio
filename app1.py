@@ -16,19 +16,13 @@ from streamlit_lottie import st_lottie
 from registration import *
 from streamlit_ketcher import st_ketcher
 
-
-
 # structure_content = None
 
 st.set_page_config(page_title="hPAME", layout="wide")
 
 st.title("hybrid :red[Perovskite Analysis and Modelling Engine]")
-username = st.text_input("Username")
-password = st.text_input("Password", type="password")
-if st.button("Log in"):
-    if verify_login(username, password):
-        st.success("Login successful!")
-else:
+
+if not check_password():
     st.stop()
 
 st.divider()

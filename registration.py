@@ -1,5 +1,6 @@
 import hashlib
 import streamlit as st
+import hmac
 
 conn = st.connection('hpame_users', type='sql')
 
@@ -14,7 +15,7 @@ def verify_login(username, password):
         return False
 
 
-import hmac
+
 
 
 def check_password():

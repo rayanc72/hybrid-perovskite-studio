@@ -23,20 +23,12 @@ from streamlit_ketcher import st_ketcher
 st.set_page_config(page_title="hPAME", layout="wide")
 
 st.title("hybrid :red[Perovskite Analysis and Modelling Engine]")
-
-if 'registration_mode' not in st.session_state:
-    st.session_state['registration_mode'] = False
-
-if st.session_state['registration_mode']:
-    registration_form()
+username = st.text_input("Username")
+password = st.text_input("Password", type="password")
+if st.button("Log in"):
+    if verify_login(username, password):
+        st.success("Login successful!")
 else:
-    login_form()
-    if st.button("Register"):
-        st.session_state['registration_mode'] = True
-    if st.button("Forgot Password"):
-        st.write("Password recovery feature not implemented yet.")
-
-if not check_password():
     st.stop()
 
 st.divider()

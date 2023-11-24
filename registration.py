@@ -18,7 +18,6 @@ def check_password():
     # Return True if the username + password is validated.
     if st.session_state.get("password_correct", False):
         return True
-
     # Show inputs for username + password.
     login_form()
     if "password_correct" in st.session_state:
@@ -47,7 +46,7 @@ def register_user(user_id, email, hashed_password):
 
 def login_form():
     """Form with widgets to collect user information"""
-    with st.form("Credentials"):
+    with st.form("Credentials", key="login"):
         st.text_input("Username", key="username")
         st.text_input("Password", type="password", key="password")
         st.form_submit_button("Log in", on_click=password_entered)

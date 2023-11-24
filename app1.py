@@ -13,8 +13,9 @@ from pathlib import Path
 import requests
 from PIL import Image
 from streamlit_lottie import st_lottie
-from registration import *
-from streamlit_ketcher import st_ketcher
+import streamlit_authenticator as stauth
+# from streamlit_ketcher import st_ketcher
+import yaml
 
 # structure_content = None
 
@@ -22,8 +23,47 @@ st.set_page_config(page_title="hPAME", layout="wide")
 
 st.title("hybrid :red[Perovskite Analysis and Modelling Engine]")
 
-if not check_password():
+
+
+from yaml.loader import SafeLoader
+with open('./login_info.yaml') as file:
+    config = yaml.load(file, Loader=SafeLoader)
+
+
+
+authenticator = stauth.Authenticate(
+    config['credentials'],
+    config['cookie']['name'],
+    config['cookie']['key'],
+    config['cookie']['expiry_days'],
+    config['preauthorized']
+)
+
+
+with st.expander("Register"):
+    try:
+        if authenticator.register_user('Register user', preauthorization=False):
+            st.success('User registered successfully')
+            with open('./login_info.yaml', 'w') as file:
+                yaml.dump(config, file, default_flow_style=False)
+    except Exception as e:
+        st.error(e)
+
+
+name, authentication_status, username = authenticator.login('Login', 'main')
+
+
+
+if st.session_state["authentication_status"]:
+    authenticator.logout('Logout', 'sidebar', key='unique_key')
+    st.write(f'Welcome, *{st.session_state["name"]}*')
+elif st.session_state["authentication_status"] is False:
+    st.error('Username/password is incorrect')
     st.stop()
+elif st.session_state["authentication_status"] is None:
+    st.warning('Please enter your username and password')
+    st.stop()
+
 
 st.divider()
 st.latex(r'''\rm Download\; a\;  structure\;  file\;  from\;  HybriD^3:''')
@@ -129,7 +169,6 @@ with st.expander("Expand for options"):
         matched_df = systems[systems['id'].isin(matched_ids)][['id', 'compound_name', 'formula']]
         st.write(f"Information for matched IDs with '{user_input}':")
         st.dataframe(matched_df, hide_index=True, use_container_width=True)
-
 
 
 

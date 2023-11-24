@@ -39,7 +39,7 @@ authenticator = stauth.Authenticate(
     config['preauthorized']
 )
 
-name, authentication_status, username = authenticator.login('Login', 'main')
+name, authentication_status, username = authenticator.login('Login', 'sidebar')
 
 
 
@@ -48,9 +48,17 @@ if st.session_state["authentication_status"]:
     st.write(f'Welcome, *{st.session_state["name"]}*')
 elif st.session_state["authentication_status"] is False:
     st.error('Username/password is incorrect')
+    with st.expander("Register"):
+        try:
+            if authenticator.register_user('Register user', preauthorization=False):
+                st.success('User registered successfully')
+                with open('./login_info.yaml', 'w') as file:
+                    yaml.dump(config, file, default_flow_style=False)
+        except Exception as e:
+            st.error(e)
     st.stop()
 elif st.session_state["authentication_status"] is None:
-    st.warning('Please enter your username and password')
+    st.warning('Expand sidebar to login')
     with st.expander("Register"):
         try:
             if authenticator.register_user('Register user', preauthorization=False):

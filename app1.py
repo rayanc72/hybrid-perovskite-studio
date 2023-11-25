@@ -291,9 +291,9 @@ with st.sidebar:
     reflect_option = st.sidebar.checkbox("Reflection", value=False)
     translation_option = st.sidebar.checkbox("Translation", value=False)
     delete_option = st.sidebar.checkbox("Deletion", value=False)
-    create_cent_option = st.sidebar.checkbox("Create centrosymmetric structure", value=False)
+    # create_cent_option = st.sidebar.checkbox("Create centrosymmetric structure", value=False, label_visibility='collapsed')
     interpolate_option = st.sidebar.checkbox("Standard interpolation", value=False)
-    trans_rotate_option = st.sidebar.checkbox("Interpolation by Translation + Rotation", value=False)
+    # trans_rotate_option = st.sidebar.checkbox("Interpolation by Translation + Rotation", value=False)
 
 
     st.divider()
@@ -326,7 +326,7 @@ if st.session_state.atoms is not None:
 
 
     if rotate_option:
-        st.header("Rotation")
+        st.header("Rotation", divider='violet')
 
         rotate_type = st.selectbox("Select Rotation Type", (
         "Rotate Individual Molecules", "Rotate Multiple Molecules", "Interpolate by Rotation", "Rotate Part of Molecules", "Rotate by Dipole Moment"))
@@ -591,7 +591,7 @@ if st.session_state.atoms is not None:
                     create_labelled_download_file(modified_atoms, file_name, output_suffix)
 
     if reflect_option:
-        st.header("Reflect molecules on a plane")
+        st.header("Reflect molecules on a plane", divider='violet')
 
         molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
 
@@ -637,7 +637,7 @@ if st.session_state.atoms is not None:
             create_labelled_download_file(modified_atoms, file_name, output_suffix)
 
     if translation_option:
-        st.header("Translation")
+        st.header("Translation", divider='violet')
 
         translate_type = st.selectbox("Select Translation Type", (
             "Molecules", "Atoms"))
@@ -724,7 +724,7 @@ if st.session_state.atoms is not None:
                         atoms_to_speck(modified_atoms, "translation")
 
     if delete_option:
-        st.header("Delete Molecules")
+        st.header("Delete Molecules", divider='violet')
         with st.form(key="delete_form"):
 
             selected_indices = st.multiselect("Select molecule indices to delete",
@@ -745,7 +745,7 @@ if st.session_state.atoms is not None:
                 atoms_to_speck(modified_atoms, "deletion")
 
     if symmetry_option:
-        st.header("Symmetrize structure")
+        st.header("Symmetrize structure", divider='violet')
         with st.form(key="symmetry_form"):
             symprec_lower = st.number_input("Enter the lower bound for tolerance", value=1e-3, step=1e-3, format="%.4f")
             symprec_upper = st.number_input("Enter the upper bound for tolerance", value=1e-1, step=1e-3, format="%.4f")
@@ -792,100 +792,100 @@ if st.session_state.atoms is not None:
                 except Exception as e:
                     st.error(f"An unexpected error occurred: {e}")
 
-    if create_cent_option:
-        st.header("Create Idealized Structure")
-
-        atoms_idl = None
-
-
-        inorganic_indices_acent = st.multiselect("Enter inorganic molecule indices, separated by spaces: ",
-                                                options=range(1, len(molecules) + 1), key='initial_cent')
-
-        if inorganic_indices_acent:
-            initial_organic_acent, initial_inorganic_acent = generate_substructure(modified_atoms, molecules,
-                                                                                 inorganic_indices_acent)
-            # create_labelled_download_file(initial_inorganic_acent, "initial_inorganic", "")
-
-
-
-            file_name_ac = os.path.splitext(file_name)[0]
-
-            output_cif_file_acent = f"{file_name_ac}_inorganic.cif"
-            # standardized_atoms, selected_symprec = write_cif_with_higher_symmetry(modified_atoms, symprec_lower,
-            #                                                                       symprec_upper, selected_index)
-
-            lattice, scaled_positions, numbers = spglib.standardize_cell(initial_inorganic_acent, to_primitive=False, no_idealize=False,
-                                                                         symprec=0.0001)
-
-            standardized_atoms = Atoms(cell=lattice, scaled_positions=scaled_positions, numbers=numbers)
-
-            pymatgen_structure = AseAtomsAdaptor.get_structure(standardized_atoms)
-
-            cif_writer = CifWriter(pymatgen_structure, symprec=0.0001)
-
-            with tempfile.NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as output_file:
-                cif_writer.write_file(output_file.name)  # Write the content to the temporary file
-                output_file.seek(0)
-                output_content = output_file.read()
-                st.markdown(get_download_link(f"{output_cif_file_acent}", output_content), unsafe_allow_html=True)
-
-            # create_labelled_download_file(initial_organic_acent, file_name_ac, "_acentric_organic")
-            create_aims_download_file(initial_organic_acent, file_name_ac,"_organic")
-
-            file_buffer_idl = st.file_uploader("Upload the idealized inorganic structure (Do a PseudoSymmetry analysis)",
-                                               type=[".in", ".cif", ".next_step"])
-            if file_buffer_idl:
-                file_name_idl = file_buffer_idl.name
-                file_format_idl = get_file_format(file_name_idl)
-                atoms_idl, molecules_idl, modified_symbols_idl = initialize_structure_v2(file_buffer_idl,
-                                                                                         file_format_idl)
-
-            if initial_organic_acent is not None and atoms_idl is not None:
-                molecules_io_acent = detect_molecules(initial_organic_acent)
-                modified_symbols_acent = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(initial_organic_acent)]
-
-                print_detected_molecules(modified_symbols_acent, molecules_io_acent, "initial organic sublattice")
-
-                rotate_indices_acent = st.multiselect(
-                    "Enter molecular indices you want to rotate, separated by spaces: ",
-                    options=range(1, len(molecules_io_acent) + 1), key='rotate_mol')
-
-                if rotate_indices_acent:
-                    if "rotation_axes" not in st.session_state:
-                        st.session_state.rotation_axes = [None] * len(molecules_io_acent)
-
-                    for i in rotate_indices_acent:
-                        st.subheader(f"Molecule {i}")
-
-                        with st.form(key=f"molecule_{i}_form"):
-                            hkl_input = st.text_input("Enter crystal direction as h, k, l separated by spaces")
-
-                            if st.form_submit_button(f"Set Axis for Molecule {i}"):
-                                hkl = np.array([int(val) for val in hkl_input.split()])
-                                lattice_vectors = initial_organic_acent.get_cell()
-                                axis = np.dot(hkl, lattice_vectors)
-                                axis /= np.linalg.norm(axis)
-
-                                st.session_state.rotation_axes[i - 1] = axis
-
-                generate_structure_button = st.button("Generate Structure")
-
-                if generate_structure_button:
-                    chosen_rotation_axes = [st.session_state.rotation_axes[i - 1] for i in rotate_indices_acent]
-                    chosen_molecules = [molecules_io_acent[i - 1] for i in rotate_indices_acent]
-                    rotation_angle = 180
-
-                    rotated_organic_structure = initial_organic_acent.copy()
-                    for molecule, axis in zip(chosen_molecules, chosen_rotation_axes):
-                        rotated_organic_structure = rotate_molecules_v2(rotated_organic_structure, molecule, axis,
-                                                                        rotation_angle)
-
-                    # Merge O2 and I2
-                    cent_str = merge_structures(rotated_organic_structure, atoms_idl)
-                    create_aims_download_file(cent_str, file_name, "_centric")
+    # if create_cent_option:
+    #     st.header("Create Idealized Structure")
+    #
+    #     atoms_idl = None
+    #
+    #
+    #     inorganic_indices_acent = st.multiselect("Enter inorganic molecule indices, separated by spaces: ",
+    #                                             options=range(1, len(molecules) + 1), key='initial_cent')
+    #
+    #     if inorganic_indices_acent:
+    #         initial_organic_acent, initial_inorganic_acent = generate_substructure(modified_atoms, molecules,
+    #                                                                              inorganic_indices_acent)
+    #         # create_labelled_download_file(initial_inorganic_acent, "initial_inorganic", "")
+    #
+    #
+    #
+    #         file_name_ac = os.path.splitext(file_name)[0]
+    #
+    #         output_cif_file_acent = f"{file_name_ac}_inorganic.cif"
+    #         # standardized_atoms, selected_symprec = write_cif_with_higher_symmetry(modified_atoms, symprec_lower,
+    #         #                                                                       symprec_upper, selected_index)
+    #
+    #         lattice, scaled_positions, numbers = spglib.standardize_cell(initial_inorganic_acent, to_primitive=False, no_idealize=False,
+    #                                                                      symprec=0.0001)
+    #
+    #         standardized_atoms = Atoms(cell=lattice, scaled_positions=scaled_positions, numbers=numbers)
+    #
+    #         pymatgen_structure = AseAtomsAdaptor.get_structure(standardized_atoms)
+    #
+    #         cif_writer = CifWriter(pymatgen_structure, symprec=0.0001)
+    #
+    #         with tempfile.NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as output_file:
+    #             cif_writer.write_file(output_file.name)  # Write the content to the temporary file
+    #             output_file.seek(0)
+    #             output_content = output_file.read()
+    #             st.markdown(get_download_link(f"{output_cif_file_acent}", output_content), unsafe_allow_html=True)
+    #
+    #         # create_labelled_download_file(initial_organic_acent, file_name_ac, "_acentric_organic")
+    #         create_aims_download_file(initial_organic_acent, file_name_ac,"_organic")
+    #
+    #         file_buffer_idl = st.file_uploader("Upload the idealized inorganic structure (Do a PseudoSymmetry analysis)",
+    #                                            type=[".in", ".cif", ".next_step"])
+    #         if file_buffer_idl:
+    #             file_name_idl = file_buffer_idl.name
+    #             file_format_idl = get_file_format(file_name_idl)
+    #             atoms_idl, molecules_idl, modified_symbols_idl = initialize_structure_v2(file_buffer_idl,
+    #                                                                                      file_format_idl)
+    #
+    #         if initial_organic_acent is not None and atoms_idl is not None:
+    #             molecules_io_acent = detect_molecules(initial_organic_acent)
+    #             modified_symbols_acent = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(initial_organic_acent)]
+    #
+    #             print_detected_molecules(modified_symbols_acent, molecules_io_acent, "initial organic sublattice")
+    #
+    #             rotate_indices_acent = st.multiselect(
+    #                 "Enter molecular indices you want to rotate, separated by spaces: ",
+    #                 options=range(1, len(molecules_io_acent) + 1), key='rotate_mol')
+    #
+    #             if rotate_indices_acent:
+    #                 if "rotation_axes" not in st.session_state:
+    #                     st.session_state.rotation_axes = [None] * len(molecules_io_acent)
+    #
+    #                 for i in rotate_indices_acent:
+    #                     st.subheader(f"Molecule {i}")
+    #
+    #                     with st.form(key=f"molecule_{i}_form"):
+    #                         hkl_input = st.text_input("Enter crystal direction as h, k, l separated by spaces")
+    #
+    #                         if st.form_submit_button(f"Set Axis for Molecule {i}"):
+    #                             hkl = np.array([int(val) for val in hkl_input.split()])
+    #                             lattice_vectors = initial_organic_acent.get_cell()
+    #                             axis = np.dot(hkl, lattice_vectors)
+    #                             axis /= np.linalg.norm(axis)
+    #
+    #                             st.session_state.rotation_axes[i - 1] = axis
+    #
+    #             generate_structure_button = st.button("Generate Structure")
+    #
+    #             if generate_structure_button:
+    #                 chosen_rotation_axes = [st.session_state.rotation_axes[i - 1] for i in rotate_indices_acent]
+    #                 chosen_molecules = [molecules_io_acent[i - 1] for i in rotate_indices_acent]
+    #                 rotation_angle = 180
+    #
+    #                 rotated_organic_structure = initial_organic_acent.copy()
+    #                 for molecule, axis in zip(chosen_molecules, chosen_rotation_axes):
+    #                     rotated_organic_structure = rotate_molecules_v2(rotated_organic_structure, molecule, axis,
+    #                                                                     rotation_angle)
+    #
+    #                 # Merge O2 and I2
+    #                 cent_str = merge_structures(rotated_organic_structure, atoms_idl)
+    #                 create_aims_download_file(cent_str, file_name, "_centric")
 
     if com_option:
-        st.header('Get center of mass of molecules')
+        st.header('Get center of mass of molecules', divider='violet')
         # scale_choice = st.checkbox("Scaled (Fractional) co-ordinates")
         scale_choice = False
         df_centroids, df_distance_matrix, lattice_vectors, df_merged = get_distance_matrix(modified_atoms, molecules)
@@ -940,7 +940,7 @@ if st.session_state.atoms is not None:
         # col2.plotly_chart(fig2, use_container_width=True)
 
     if dm_option:
-        st.header("Get dipole moment direction")
+        st.header("Get dipole moment direction", divider='violet')
 
         # Gather user inputs for rotation using Streamlit widgets
         molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
@@ -977,7 +977,7 @@ if st.session_state.atoms is not None:
             #
 
     if distance_option:
-        st.header("Calculate atomic distances")
+        st.header("Calculate atomic distances", divider='violet')
 
         # User input for atomic symbols
         first_atom = st.text_input('Enter the symbol of the first atom (A):', value="Pb")
@@ -997,7 +997,7 @@ if st.session_state.atoms is not None:
             st.dataframe(found_distances, use_container_width=True, hide_index=True)
 
     if distortion_option:
-        st.header("Calculate distortion parameters")
+        st.header("Calculate distortion parameters", divider='violet')
 
         # User input for atomic symbols
         center_atom = st.text_input('Enter the symbol of the center atom (A):', value="Pb")
@@ -1052,7 +1052,7 @@ if st.session_state.atoms is not None:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
 if interpolate_option:
-    st.header("Interpolate Structures")
+    st.header("Interpolate Structures", divider='violet')
     file_buffer1 = st.file_uploader("Upload an initial structure file (AIMS or CIF)", type=[".in", ".cif"],
                                     key="file_buffer1")
     file_buffer2 = st.file_uploader("Upload a final structure file (AIMS or CIF)", type=[".in", ".cif"],
@@ -1103,93 +1103,93 @@ if interpolate_option:
             except Exception as e:
                 st.error(f"Error: {e}")
 
-if trans_rotate_option:
-    st.header("Translate Inorganic and Rotate Organic Subunits")
-    file_buffer1 = st.file_uploader("Upload an initial structure file (AIMS or CIF)", type=[".in", ".cif"],
-                                    key="file_buffer1")
-    file_buffer2 = st.file_uploader("Upload a final structure file (AIMS or CIF)", type=[".in", ".cif"],
-                                    key="file_buffer2")
-
-    if file_buffer1 is not None and file_buffer2 is not None:
-
-        atoms1, molecules1 = process_file_and_print_molecules(file_buffer1, "initial structure")
-
-        inorganic_indices1 = st.multiselect("Enter inorganic molecule indices, separated by spaces: ",
-                                            options=range(1, len(molecules1) + 1), key='initial')
-
-        initial_organic, initial_inorganic = generate_substructure(atoms1, molecules1, inorganic_indices1)
-
-        atoms2, molecules2 = process_file_and_print_molecules(file_buffer2, "final structure")
-
-        inorganic_indices2 = st.multiselect("Enter inorganic molecule indices, separated by spaces: ",
-                                            options=range(1, len(molecules2) + 1), key='final')
-
-        final_organic, final_inorganic = generate_substructure(atoms2, molecules2, inorganic_indices2)
-
-        # Let user decide whether to show download links for initial/final organic/inorganic files
-        show_download_links = st.checkbox("Show download links for initial/final organic/inorganic files")
-
-        if show_download_links:
-            create_labelled_download_file(initial_inorganic, "initial_inorganic", "")
-            create_labelled_download_file(initial_organic, "initial_organic", "")
-            create_labelled_download_file(final_inorganic, "final_inorganic", "")
-            create_labelled_download_file(final_organic, "final_organic", "")
-
-        if inorganic_indices1 and inorganic_indices2:
-
-            st.subheader("Starting Interpolation")
-            n = st.number_input("Enter the number of interpolated structures to generate:", min_value=1,
-                                step=1)
-            n = (n + 1)
-
-            molecules_io = detect_molecules(initial_organic)
-            modified_symbols = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(initial_organic)]
-
-            print_detected_molecules(modified_symbols, molecules_io, "initial organic sublattice")
-
-            rotate_indices = st.multiselect("Enter molecular indices you want to rotate, separated by spaces: ",
-                                            options=range(1, len(molecules_io) + 1), key='rotate_mol')
-
-            use_custom_axis = st.checkbox("Use custom rotation axis")
-
-            axis_input = st.text_input(
-                "Enter custom axis as x, y, z separated by spaces") if use_custom_axis else None
-            axis = axis_input.split() if axis_input else st.selectbox("Select rotation axis",
-                                                                      options=["x", "y", "z"])
-
-            if use_custom_axis:
-                axis = np.array([float(val) for val in axis_input.split()])
-            else:
-                axis_dict = {'x': [1, 0, 0], 'y': [0, 1, 0], 'z': [0, 0, 1]}
-                axis = axis_dict[axis]
-
-            if st.button("Generate Interpolated Structures"):
-                if atoms1 is not None and atoms2 is not None:
-                    try:
-                        # Rotate the organic
-                        rotated_organic_structures = rotate_organic_molecules(initial_organic,molecules_io, n, rotate_indices, axis)       #180 deg rotated structure is the last one
-
-
-                        # Translate the inorganic
-                        if rotated_organic_structures is not None:
-
-                            inorganic_interpolated_structures = interpolate_inorganic_lattice(initial_inorganic,
-                                                                                              final_inorganic, n)
-
-
-                            if rotated_organic_structures is not None and inorganic_interpolated_structures is not None:
-                                st.subheader("Here are the interpolated structures:")
-                                # Save interpolated structures to a temporary ZIP file
-                                merge_and_create_zip(rotated_organic_structures, inorganic_interpolated_structures)
-
-
-
-
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+# if trans_rotate_option:
+#     st.header("Translate Inorganic and Rotate Organic Subunits")
+#     file_buffer1 = st.file_uploader("Upload an initial structure file (AIMS or CIF)", type=[".in", ".cif"],
+#                                     key="file_buffer1")
+#     file_buffer2 = st.file_uploader("Upload a final structure file (AIMS or CIF)", type=[".in", ".cif"],
+#                                     key="file_buffer2")
+#
+#     if file_buffer1 is not None and file_buffer2 is not None:
+#
+#         atoms1, molecules1 = process_file_and_print_molecules(file_buffer1, "initial structure")
+#
+#         inorganic_indices1 = st.multiselect("Enter inorganic molecule indices, separated by spaces: ",
+#                                             options=range(1, len(molecules1) + 1), key='initial')
+#
+#         initial_organic, initial_inorganic = generate_substructure(atoms1, molecules1, inorganic_indices1)
+#
+#         atoms2, molecules2 = process_file_and_print_molecules(file_buffer2, "final structure")
+#
+#         inorganic_indices2 = st.multiselect("Enter inorganic molecule indices, separated by spaces: ",
+#                                             options=range(1, len(molecules2) + 1), key='final')
+#
+#         final_organic, final_inorganic = generate_substructure(atoms2, molecules2, inorganic_indices2)
+#
+#         # Let user decide whether to show download links for initial/final organic/inorganic files
+#         show_download_links = st.checkbox("Show download links for initial/final organic/inorganic files")
+#
+#         if show_download_links:
+#             create_labelled_download_file(initial_inorganic, "initial_inorganic", "")
+#             create_labelled_download_file(initial_organic, "initial_organic", "")
+#             create_labelled_download_file(final_inorganic, "final_inorganic", "")
+#             create_labelled_download_file(final_organic, "final_organic", "")
+#
+#         if inorganic_indices1 and inorganic_indices2:
+#
+#             st.subheader("Starting Interpolation")
+#             n = st.number_input("Enter the number of interpolated structures to generate:", min_value=1,
+#                                 step=1)
+#             n = (n + 1)
+#
+#             molecules_io = detect_molecules(initial_organic)
+#             modified_symbols = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(initial_organic)]
+#
+#             print_detected_molecules(modified_symbols, molecules_io, "initial organic sublattice")
+#
+#             rotate_indices = st.multiselect("Enter molecular indices you want to rotate, separated by spaces: ",
+#                                             options=range(1, len(molecules_io) + 1), key='rotate_mol')
+#
+#             use_custom_axis = st.checkbox("Use custom rotation axis")
+#
+#             axis_input = st.text_input(
+#                 "Enter custom axis as x, y, z separated by spaces") if use_custom_axis else None
+#             axis = axis_input.split() if axis_input else st.selectbox("Select rotation axis",
+#                                                                       options=["x", "y", "z"])
+#
+#             if use_custom_axis:
+#                 axis = np.array([float(val) for val in axis_input.split()])
+#             else:
+#                 axis_dict = {'x': [1, 0, 0], 'y': [0, 1, 0], 'z': [0, 0, 1]}
+#                 axis = axis_dict[axis]
+#
+#             if st.button("Generate Interpolated Structures"):
+#                 if atoms1 is not None and atoms2 is not None:
+#                     try:
+#                         # Rotate the organic
+#                         rotated_organic_structures = rotate_organic_molecules(initial_organic,molecules_io, n, rotate_indices, axis)       #180 deg rotated structure is the last one
+#
+#
+#                         # Translate the inorganic
+#                         if rotated_organic_structures is not None:
+#
+#                             inorganic_interpolated_structures = interpolate_inorganic_lattice(initial_inorganic,
+#                                                                                               final_inorganic, n)
+#
+#
+#                             if rotated_organic_structures is not None and inorganic_interpolated_structures is not None:
+#                                 st.subheader("Here are the interpolated structures:")
+#                                 # Save interpolated structures to a temporary ZIP file
+#                                 merge_and_create_zip(rotated_organic_structures, inorganic_interpolated_structures)
+#
+#
+#
+#
+#                     except Exception as e:
+#                         st.error(f"Error: {e}")
 
 if plot_polarization_option:
-    st.title("Polarization Analysis")
+    st.header("Polarization Analysis", divider='violet')
 
     uploaded_files = st.file_uploader("Upload one or more AIMS output files (.out)", accept_multiple_files=True,
                                       type=".out")
@@ -1267,7 +1267,7 @@ if plot_polarization_option:
     # st.write("This is outside the container")
 
 if plot_pdos_option:
-    st.title("Plot PDOS")
+    st.header("Plot PDOS", divider='violet')
 
     # File uploader for all DOS files
     uploaded_files = st.file_uploader("Upload Total DOS and element DOS files:", type=['dat', 'txt'],
@@ -1310,7 +1310,7 @@ if plot_pdos_option:
         #     st.warning("Please upload the required files.")
 
 if plot_bs_option:
-    st.title("Plot Bandstructure")
+    st.header("Plot Bandstructure", divider='violet')
 
     # File uploader
     uploaded_files = st.file_uploader("Upload_files:", type=['in', 'out'], accept_multiple_files=True)
@@ -1392,7 +1392,7 @@ if plot_bs_option:
             st.warning("Please upload files before plotting.")
 
 if plot_spin_option:
-    st.title("Plot Spin Texture")
+    st.header("Plot Spin Texture", divider='violet')
 
     # File uploader
     uploaded_file = st.file_uploader("Upload spin_texture.dat", type=['dat'], accept_multiple_files=False)
@@ -1453,7 +1453,7 @@ if plot_spin_option:
                 st.error("Entered states are out of the available range.")
 
 if deviation_calculation_option:
-    st.title("Calculate deviation")
+    st.header("Calculate deviation", divider='violet')
 
     file_buffer1 = st.file_uploader("Upload an initial structure file (AIMS or CIF)", type=[".in", ".cif"],
                                     key="file_buffer1")
@@ -1489,7 +1489,7 @@ if deviation_calculation_option:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
 if MD_option:
-    st.title("Analyze AIMS Molecular Dynamics (MD) Output files")
+    st.header("Analyze AIMS Molecular Dynamics (MD) Output files", divider='violet')
 
     file_buffer_md = st.file_uploader("Upload MD output files", type=[".out"], accept_multiple_files=True,
                                       key="file_buffer_md")
@@ -1766,7 +1766,7 @@ def create_universe(file_buffer_md, timestep):
 previous_file_buffer = None
 
 if MDanalysis_option:
-    st.title("Distance Analysis on MD Trajectory")
+    st.header("Analysis on MD Trajectory", divider='violet')
     timestep = st.number_input("Enter timestep in fs (dt)", min_value=0.0, max_value=5.0, step=0.1)
     file_buffer_md = st.file_uploader("Upload zipped directory", type=["zip"], key="file_buffer_zip")
 
@@ -1814,7 +1814,7 @@ if MDanalysis_option:
 
 
 if script_option:
-    st.title("Run your own python script!")
+    st.header("Run your own python script!", divider='violet')
     st.text("This feature uses JupyterLite and runs the script entirely on your browser. At this time, this enviroment does not have access to any previously uploaded file.")
     jupyterlite(900, 1600)
 

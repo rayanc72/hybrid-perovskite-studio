@@ -1191,6 +1191,10 @@ if interpolate_option:
 if plot_polarization_option:
     st.header("Polarization Analysis", divider='violet')
 
+    st.text(f'''
+                Upload all aims.out files from polarization calculation. 
+                ''')
+
     uploaded_files = st.file_uploader("Upload one or more AIMS output files (.out)", accept_multiple_files=True,
                                       type=".out")
 
@@ -1269,6 +1273,12 @@ if plot_polarization_option:
 if plot_pdos_option:
     st.header("Plot PDOS", divider='violet')
 
+    st.text(f'''
+        Upload all pdos dat files. 
+        If you wish to scale the energy axis similar to the bandstructure,
+         you'll need to provide the energy shift (fermi level) value. This can be found using the "Plot Bandstructure" module.
+        ''')
+
     # File uploader for all DOS files
     uploaded_files = st.file_uploader("Upload Total DOS and element DOS files:", type=['dat', 'txt'],
                                       accept_multiple_files=True)
@@ -1312,8 +1322,12 @@ if plot_pdos_option:
 if plot_bs_option:
     st.header("Plot Bandstructure", divider='violet')
 
+    st.text(f'''
+    Upload "control.in", "geometry.in", and all "band****.out" files.
+    Mulliken bandstructure files are not supported.''')
+
     # File uploader
-    uploaded_files = st.file_uploader("Upload_files:", type=['in', 'out'], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Upload files:", type=['in', 'out'], accept_multiple_files=True)
 
     # Plot range input
     plot_range = st.slider("Select plot range:", min_value=-30.0, max_value=30.0, value=(-2.0, 5.0), step=1.0)
@@ -1393,6 +1407,11 @@ if plot_bs_option:
 
 if plot_spin_option:
     st.header("Plot Spin Texture", divider='violet')
+
+    st.text(f'''
+            Upload the spin_texture.dat file. 
+            Optionally, if you provide the "aims.out" file, the app will display other relevant information (e.g., band edges).
+            ''')
 
     # File uploader
     uploaded_file = st.file_uploader("Upload spin_texture.dat", type=['dat'], accept_multiple_files=False)

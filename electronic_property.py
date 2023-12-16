@@ -18,6 +18,7 @@ from bokeh.plotting import figure, show
 import streamlit_bokeh_events as bokeh_events
 from bokeh.models import Span
 import re
+import colorcet as cc
 
 
 def plot_pdos_streamlit(dos_data, shift, plot_range):
@@ -79,74 +80,7 @@ def plot_pdos_streamlit(dos_data, shift, plot_range):
 
     return fig
 
-class Band(object):
 
-    def __init__(self, eigenvalues={}, sampling=0, coordinate=[]):
-        self.eigenvalues = eigenvalues
-        self.sampling = sampling
-        self.coordinate = coordinate
-
-    def process_band_file(self, file):
-        data = file.readlines()
-        self.sampling = len(data)
-        for grid in range(self.sampling):
-            item = data[grid].split()
-            self.coordinate.append([float(k) for k in item[1:4]])
-            for i in range(1, (len(item) - 4) // 2 + 1):
-                try:
-                    self.eigenvalues[i].append(float(item[2 * i + 3]))
-                except KeyError:
-                    self.eigenvalues[i] = [float(item[2 * i + 3])]
-        file.seek(0)  # Reset file pointer to the beginning
-
-    def print_VBM(self, line=0.00):
-        for state in self.eigenvalues:
-            if (max(self.eigenvalues[state + 1]) > line):
-                break
-        max_energy = max(self.eigenvalues[state])
-        VBM_list = [x for x in range(len(self.eigenvalues[state]))
-                    if (self.eigenvalues[state][x] == max_energy)]
-        st.write("VBM energy: " + str(max_energy) + " eV")
-        st.write("Current state: " + str(state))
-        for i in range(len(VBM_list)):
-            st.write("Coordinate: " + str(self.coordinate[VBM_list[i]]) + "  " +
-                  "Energy: " + str(max_energy) + " eV")
-
-    def print_CBM(self, line=0.00):
-        for state in self.eigenvalues:
-            if (max(self.eigenvalues[state + 1]) > line):
-                break
-        state = state + 1
-        min_energy = min(self.eigenvalues[state])
-        CBM_list = [x for x in range(len(self.eigenvalues[state]))
-                    if (self.eigenvalues[state][x] == min_energy)]
-        st.write("CBM energy: " + str(min_energy) + " eV")
-        st.write("Current state: " + str(state))
-        for i in range(len(CBM_list)):
-            st.write("Coordinate: " + str(self.coordinate[CBM_list[i]]) + "  " +
-                  "Energy: " + str(min_energy) + " eV")
-
-    def find_VBM_state(self, line=0.01):
-        for state in self.eigenvalues:
-            if (max(self.eigenvalues[state + 1]) > line):
-                break
-        return state
-
-    def find_VBM_energy(self, line=0.01):
-        VBM_state = self.find_VBM_state(line)
-        st.write(" ")
-        st.write(VBM_state)
-        return (max(self.eigenvalues[VBM_state]))
-
-
-def band_files_process(uploaded_files):
-    current_band = Band()
-
-    for file in uploaded_files:
-        file = StringIO(file.getvalue().decode())  # Convert the file-like object to StringIO with decoded content
-        current_band.process_band_file(file)
-
-    return current_band
 
 class Input(object):
 
@@ -250,69 +184,47 @@ def process_input_files(geometry_file, control_file):
     return input_data
 
 
-def process_geometry_file(uploaded_files):
-    # Look for the "geometry.in" file in the uploaded files
-    geometry_file = None
-    for uploaded_file in uploaded_files:
-        if uploaded_file.name == "geometry.in":
-            geometry_file = uploaded_file
-            break
-
-    # Raise an error if the file was not found
-    if geometry_file is None:
-        raise ValueError("The 'geometry.in' file was not uploaded.")
-
+def process_geometry_file(uploaded_file):
     latvec = []
     rlatvec = []
+    lattice_vectors = []
+    reciprocal_lattice_vectors = []
 
-    # Convert binary object to string
-    file_text = geometry_file.read().decode()
-
-    # Use StringIO to treat the string as a file for parsing
-    f = io.StringIO(file_text)
-    for line in f:
+    for line in uploaded_file:
+        line = line.decode('utf-8')  # Decoding may be necessary for binary files
         words = line.strip().split()
         if len(words) == 0:
             continue
         if words[0] == "lattice_vector":
             latvec.append([float(i) for i in words[1:4]])
 
-    # Calculate reciprocal lattice vectors
-    volume = (np.dot(latvec[0], np.cross(latvec[1], latvec[2])))
+    # Calculating reciprocal lattice vectors
+    volume = np.dot(latvec[0], np.cross(latvec[1], latvec[2]))
+    pi = np.pi  # Define pi
     rlatvec.append(2 * pi * np.cross(latvec[1], latvec[2]) / volume)
     rlatvec.append(2 * pi * np.cross(latvec[2], latvec[0]) / volume)
     rlatvec.append(2 * pi * np.cross(latvec[0], latvec[1]) / volume)
 
-    return rlatvec
+    for j in range(3):
+        lattice_vectors.append(latvec[j])
+        reciprocal_lattice_vectors.append(rlatvec[j])
+
+    return lattice_vectors, reciprocal_lattice_vectors
 
 
-def process_control_file(uploaded_files, rlatvec):
-    # Look for the "control.in" file in the uploaded files
-    control_file = None
-    for uploaded_file in uploaded_files:
-        if uploaded_file.name == "control.in":
-            control_file = uploaded_file
-            break
-
-    # Raise an error if the file was not found
-    if control_file is None:
-        raise ValueError("The 'control.in' file was not uploaded.")
-
+def process_control_file(uploaded_file, rlatvec):
     k_label = []
     kpoint = []
 
-    # Convert binary object to string
-    file_text = control_file.read().decode()
-
-    # Use StringIO to treat the string as a file for parsing
-    f = io.StringIO(file_text)
-    for line in f:
+    for line in uploaded_file:
+        line = line.decode('utf-8')  # Decoding for binary files
         if line.strip().startswith('output band'):
             words = line.strip().split()
             kpoint.append([float(i) for i in words[2:8]])
             n_sample = int(words[-3])
             k_label.append(words[-2:])
 
+    # Processing k labels
     k_label_reduce = []
     for k_pair in k_label:
         for i in range(len(k_pair)):
@@ -326,26 +238,18 @@ def process_control_file(uploaded_files, rlatvec):
             else:
                 k_label_reduce.append(k)
 
+    # Calculating x values
     xvals = []
+    band_len = []
     for i in kpoint:
-        kvec = []
-        for j in range(3):
-            kvec.append(i[j + 3] - i[j])
+        kvec = [i[j + 3] - i[j] for j in range(3)]
         temp = math.sqrt(sum([k * k for k in list(np.dot(kvec, rlatvec))]))
         step = temp / (n_sample - 1)
-        xval = []
-        for i in range(n_sample):
-            xval.append(i * step)
+        xval = [i * step for i in range(n_sample)]
         xvals.append(xval)
-        band_len = [len(x) for x in xvals]
+        band_len.append(temp)
 
-    band_len_tot = []
-    for i in range(len(band_len)):
-        if i == 0:
-            band_len_tot.append(0)
-        else:
-            band_len_tot.append(sum(band_len[:i]))
-
+    band_len_tot = [0 if i == 0 else sum(band_len[:i]) for i in range(len(band_len))]
     for i in range(len(xvals)):
         xvals[i] = [j + band_len_tot[i] for j in xvals[i]]
 
@@ -354,93 +258,43 @@ def process_control_file(uploaded_files, rlatvec):
     return k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot
 
 
-def parse_output_files(uploaded_files, energyshift=None):
+def parse_band_out_files(uploaded_files, energyshift=None):
+    # Filtering and sorting the relevant files
+    bandfiles = [f for f in uploaded_files if f.name.startswith('band') and f.name.endswith('.out') and len(f.name) == 12]
+    bandfiles.sort(key=lambda x: int(x.name[4:-4]))
+
     bands_all_files = []
+    for uploaded_file in bandfiles:
+        energys = []
 
-    # Uploaded files is a list of binary objects
-    for uploaded_file in uploaded_files:
-        # Filter out .out files
-        if uploaded_file.name.endswith('.out'):
-            # Convert binary object to string
-            file_text = uploaded_file.read().decode()
+        # Reading file content
+        for line in uploaded_file:
+            line = line.decode('utf-8')  # Decoding for binary files
+            words = line.strip().split()
+            energy = []
+            occ_ene = words[4:]
+            for i in range(0, len(occ_ene), 2):
+                energy.append(float(occ_ene[i + 1]) - energyshift)
+            energys.append(energy)
 
-            energys = []
-
-            # Use StringIO to treat the string as a file for parsing
-            f = io.StringIO(file_text)
-            for line in f:
-                words = line.strip().split()
-                energy = []
-                occ_ene = words[4:]
-                for i in range(0, len(occ_ene), 2):
-                    energy.append(float(occ_ene[i+1]) - energyshift)
-                energys.append(energy)
-
-            bands = []
-            for i in range(len(energy)):
-                band = []
-                for j in range(len(energys)):
-                    band.append(energys[j][i])
-                bands.append(band)
-            bands_all_files.append(bands)
+        bands = []
+        for i in range(len(energy)):
+            band = []
+            for j in range(len(energys)):
+                band.append(energys[j][i])
+            bands.append(band)
+        bands_all_files.append(bands)
 
     return bands_all_files
 
 
-def plot_band(uploaded_files, energyshift=None, ymin=None, ymax=None,
-               orghomo=[], inorghomo=[], orglumo=[], inorglumo=[], special_line=3, solid=None, black_bands=1):
-    #Process each file
-    bands_all_files = parse_output_files(uploaded_files=uploaded_files, energyshift=energyshift)
-    rlatvec = process_geometry_file(uploaded_files=uploaded_files)
-    k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot = process_control_file(uploaded_files=uploaded_files,
-                                                                                          rlatvec=rlatvec)
-
-    # Prepare the data for DataFrame
-    df_dict = {}
-
-    # Fill the DataFrame with energy levels and x-values
+def plot_bands(ax, bands_all_files, xvals=None, plot_color='blue'):
     for file_id, bands in enumerate(bands_all_files):
         for band_id, band in enumerate(bands):
-            df_dict[f"X_{band_id}_File_{file_id}"] = xvals[file_id]
-            df_dict[f"Y_{band_id}_File_{file_id}"] = band
-
-    # Create DataFrame
-    df = pd.DataFrame(df_dict)
-
-    curve_dict = {}
-    for file_id, bands in enumerate(bands_all_files):
-        for band_id, band in enumerate(bands):
-            key = f"Band_{band_id}_File_{file_id}"
-            curve = hv.Curve((df[f"X_{band_id}_File_{file_id}"], df[f"Y_{band_id}_File_{file_id}"]), 'X', 'Y')
-            curve.opts(line_width=special_line if band_id in orghomo or band_id in inorghomo or band_id in orglumo or band_id in inorglumo else black_bands)
-            curve.opts(color='g' if band_id in orghomo else 'r' if band_id in inorghomo else 'b' if band_id in orglumo else 'r' if band_id in inorglumo else 'k')
-            curve_dict[key] = curve
-
-    ndoverlay = hv.NdOverlay(curve_dict)
-
-    # Set options
-    ndoverlay.opts(opts.Curve(width=800, height=600, tools=['hover']))
-
-    p = hv.render(ndoverlay, backend='bokeh')
-
-    # Add vertical lines at each k point
-    for kpoint_x in band_len_tot[1:]:
-        vline = Span(location=kpoint_x, dimension='width', line_color='black', line_dash='dashed', line_width=1)
-        p.renderers.extend([vline])
-
-    # Zero energy horizontal line
-    hline = Span(location=0, dimension='height', line_color='black', line_dash='dashed', line_width=1)
-    p.renderers.extend([hline])
-
-    # Update y axis
-    p.y_range.start = ymin
-    p.y_range.end = ymax
-
-    # Update x axis
-    p.xaxis.ticker = band_len_tot
-    p.xaxis.major_label_overrides = dict(zip(band_len_tot, k_label_reduce))
-
-    st.bokeh_chart(p)
+            ax.plot(xvals[file_id], band, color=plot_color, lw=1)
+    ax.axhline(0, color='k', linestyle = '--', lw=1).set_dashes([5,5])
+    # Clear the default x-tick labels
+    ax.set_xticks([])
 
 
 def get_state_range(uploaded_file):
@@ -472,7 +326,7 @@ def prepare_plot_data(filename, state):
     return k_points, spins, energy
 
 
-def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type='coolwarm', alpha=0.2):
+def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=cc.cm.bwy, alpha=0.2):
     shifted_energy = energy - energy_shift
 
     # Normalize shifted energy values to a range of 0 to 1
@@ -497,7 +351,7 @@ def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=
 
 def plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale):
     norm = plt.Normalize(color_component.min(), color_component.max())
-    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap='copper', norm=norm)
+    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm)
     plt.colorbar(quivers, ax=ax).set_label(f'$<\sigma_{spin_direction}>$ component')
 
 def plot_spin_quivers(filename, state, spin_direction, shift_energy, scale, axis_limits=None):
@@ -536,9 +390,30 @@ def plot_spin_quivers(filename, state, spin_direction, shift_energy, scale, axis
 
     if axis_limits:
         ax.axis(axis_limits)
+        # plt.xlim(axis_limits[0],axis_limits[1])
 
     plt.tight_layout()
     return plt
+
+
+def get_rec_vector(filename):
+    kpoint = []
+    latvec = []
+    f = open(filename, 'r')
+    for line in f:
+        if line.strip().startswith("lattice"):
+            latvec.append([float(i) for i in line.strip().split()[1:4]])
+    f.close()
+
+    rlatvec = []
+    pi = math.pi
+    volume = (np.dot(latvec[0], np.cross(latvec[1], latvec[2])))
+    rlatvec.append(2 * pi * np.cross(latvec[1], latvec[2]) / volume)
+    rlatvec.append(2 * pi * np.cross(latvec[2], latvec[0]) / volume)
+    rlatvec.append(2 * pi * np.cross(latvec[0], latvec[1]) / volume)
+
+    return rlatvec
+
 
 
 def parse_out_file(out_file):
@@ -553,9 +428,21 @@ def parse_out_file(out_file):
         # Check for the line with atoms and electrons
         if "The structure contains" in line:
             numbers = re.findall(r"\d+\.?\d*", line)
-            if len(numbers) >= 2:
+            if len(numbers) >= 1:
                 data.append({"System parameter": "Number of atoms", "Value": numbers[0]})
                 data.append({"System parameter": "Total number of electrons", "Value": numbers[1]})
+
+        ##  | Chemical potential (Fermi level):    -5.83007747 eV
+        # Check for fermi level
+        if "Chemical potential (Fermi level) in eV" in line:
+            numbers = re.findall(r"-?\d*\.?\d+(?:E[+-]?\d+)?", line)
+            if numbers:
+                data.append({"System parameter": "Fermi level (ELSI) (eV)", "Value": numbers[0]})
+
+        # if "Chemical potential is" in line:
+        #     numbers_cp = re.findall(r"-?\d*\.?\d+(?:E[+-]?\d+)?", line)
+        #     if numbers_cp:
+        #         data.append({"System parameter": "Fermi level (internal zero) (eV)", "Value": numbers_cp[0]})
 
         # Check for the specific block with energy states
         if "Spin-orbit-coupled \"band gap\" of total set of bands:" in line:
@@ -574,3 +461,114 @@ def parse_out_file(out_file):
     # Create DataFrame from the list of dictionaries
     df = pd.DataFrame(data)
     return df
+
+
+def get_file_uploads(num_data_sets, default_colors):
+    uploaded_files = []
+    colors = []
+    energyshifts = []
+
+    for i in range(num_data_sets):
+        st.text(f"Upload files for data set {i + 1}:")
+        files = st.file_uploader(f"Data set {i + 1} files", type=['in', 'out'], accept_multiple_files=True,
+                                 key=f"uploader{i + 1}")
+        color = st.text_input(f"Color for data set {i + 1} (optional):",
+                              value=default_colors[i % len(default_colors)], key=f"color{i + 1}")
+        energyshift = st.number_input('Enter shift value:', value=0.000, min_value=-30.000, max_value=30.000, key=i)
+        if files:
+            edges = get_energy_edges(files)
+            st.dataframe(edges, use_container_width=True, hide_index=True)
+            uploaded_files.append(files)
+            colors.append(color)
+            energyshifts.append(energyshift)
+
+    return uploaded_files, colors, energyshifts
+
+
+def process_files(uploaded_files_list, user_defined_colors, user_defined_energyshifts):
+    all_data = []
+    for index, uploaded_files in enumerate(uploaded_files_list):
+        energyshift = user_defined_energyshifts[index]
+        bands_all_files = parse_band_out_files(uploaded_files, energyshift=energyshift)
+        lattice_vectors, reciprocal_lattice_vectors, k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot = (None,)*8
+        geometry_file = next((file for file in uploaded_files if file.name == 'geometry.in'), None)
+        control_file = next((file for file in uploaded_files if file.name == 'control.in'), None)
+
+        if geometry_file and control_file:
+            lattice_vectors, reciprocal_lattice_vectors = process_geometry_file(geometry_file)
+            k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot = process_control_file(control_file, reciprocal_lattice_vectors)
+
+        plot_color = user_defined_colors[index]
+        all_data.append((bands_all_files, xvals, band_len_tot, k_label_reduce, plot_color))
+    return all_data
+
+
+def calculate_scaling_factors(all_data):
+    reference_length = all_data[0][2][-1]  # The total k-path length of the first dataset
+    scaling_factors = [reference_length / band_len_tot[-1] for _, _, band_len_tot, _, _ in all_data]
+    return scaling_factors
+
+
+def scale_data(all_data, scaling_factors):
+    for index, (bands_all_files, xvals, band_len_tot, k_label_reduce, plot_color) in enumerate(all_data):
+        if index > 0:
+            scale = scaling_factors[index]
+            xvals = np.array(xvals, dtype=np.float64)
+            band_len_tot = np.array(band_len_tot, dtype=np.float64)
+            scaled_xvals = [x * scale for x in xvals]
+            scaled_band_len_tot = [x * scale for x in band_len_tot]
+            all_data[index] = (bands_all_files, scaled_xvals, scaled_band_len_tot, k_label_reduce, plot_color)
+    return all_data
+
+
+def plot_all_bands(ax, all_data, apply_scaling, num_data_sets):
+    # Determine the color for the dashed lines
+    dashed_line_color = 'black' if num_data_sets == 1 or apply_scaling else None
+
+    for index, (bands_all_files, xvals, band_len_tot, k_label_reduce, plot_color) in enumerate(all_data):
+        plot_bands(ax, bands_all_files, xvals, plot_color)
+
+        # Draw dashed lines only if it's the first dataset or if scaling is not applied
+        if index == 0 or not apply_scaling:
+            for kpoint_x in band_len_tot[1:]:
+                ax.axvline(kpoint_x, color=dashed_line_color or plot_color, linestyle='--', lw=1).set_dashes([5, 5])
+
+
+def set_custom_labels(ax, all_data, apply_scaling, n_data_sets):
+
+    if n_data_sets > 1:
+        if apply_scaling:
+            # Use the first dataset's labels and positions
+            band_len_tot, k_label_reduce, _ = all_data[0][2], all_data[0][3], all_data[0][4]
+            # Set color to black
+            label_color = 'black'
+            # Set the x-axis labels based on the first dataset
+            ax.set_xticks(band_len_tot)
+            ax.set_xticklabels(k_label_reduce, color=label_color)
+        else:
+            # Set labels for each dataset without scaling
+            label_y_position = -0.05  # Initial y-position for the first set of labels
+            y_step = -0.06  # Step to move down the labels for each subsequent data set
+            for data in all_data:
+                band_len_tot, k_label_reduce, plot_color = data[2], data[3], data[4]
+                label_color = plot_color
+                for pos, label in zip(band_len_tot, k_label_reduce):
+                    ax.text(pos, label_y_position, label, color=label_color, ha='center', transform=ax.get_xaxis_transform())
+                label_y_position += y_step
+    else:
+        band_len_tot, k_label_reduce, _ = all_data[0][2], all_data[0][3], all_data[0][4]
+        # Set color to black
+        label_color = 'black'
+        # Set the x-axis labels based on the first dataset
+        ax.set_xticks(band_len_tot)
+        ax.set_xticklabels(k_label_reduce, color=label_color)
+
+def get_energy_edges(uploaded_files):
+    for uploaded_file in uploaded_files:
+        # Check if the file extension is '.out' and does not start with 'band'
+        if uploaded_file.name.endswith('.out') and not uploaded_file.name.startswith('band'):
+            # Call parse_out_file and return its output
+            return parse_out_file(uploaded_file)
+
+    # Return an empty DataFrame if no matching file is found
+    return pd.DataFrame()

@@ -1322,88 +1322,51 @@ if plot_pdos_option:
 if plot_bs_option:
     st.header("Plot Bandstructure", divider='violet')
 
-    st.text(f'''
-    Upload "control.in", "geometry.in", and all "band****.out" files.
-    Mulliken bandstructure files are not supported.''')
+    # Configuration for the number of datasets and default settings
+    num_data_sets = st.number_input("How many plot data sets do you want to provide?",
+                                    min_value=1, max_value=10, value=1)
+    default_colors = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'orange', 'purple', 'brown']
 
-    # File uploader
-    uploaded_files = st.file_uploader("Upload files:", type=['in', 'out'], accept_multiple_files=True)
+    # Get file uploads and user preferences
+    uploaded_files_list, user_defined_colors, user_defined_eshifts = get_file_uploads(num_data_sets, default_colors)
 
-    # Plot range input
-    plot_range = st.slider("Select plot range:", min_value=-30.0, max_value=30.0, value=(-2.0, 5.0), step=1.0)
+    # Get the user-defined plot range
+    plot_range = st.slider("Select plot range for Energy axis (eV):", min_value=-10.0, max_value=10.0, value=(-2.0, 5.0), step=0.1)
+    ymin, ymax = plot_range
 
-    # Plot color
-    plot_color = st.text_input("Color for the bandstructure", value='blue')
+    # Checkbox for scaling, visible only if more than one dataset is uploaded
+    apply_scaling = st.checkbox("Scale x-axis to match the first dataset?") if num_data_sets > 1 else False
 
-    # Plot button
+    # Button to trigger the plotting
     plot_button = st.button("Plot")
 
-    # Process the uploaded files to create dos_data dictionary
-    if plot_button:
-        if uploaded_files:
-            ymin, ymax = plot_range
+    if uploaded_files_list:
+        if plot_button:
 
-            with st.spinner('Processing files...'):
-                temp_dir = Path("temp_band_files")
-                if temp_dir.exists():
-                    shutil.rmtree(temp_dir)
-                temp_dir.mkdir()
+            # Set up the plot with custom configurations
+            fig, ax = plt.subplots(figsize=(16, 12))
+            plt.rcParams["font.family"] = "Arial"
+            plt.rcParams.update({'font.size': 28})
+            for spine in ['bottom', 'left', 'top', 'right']:
+                ax.spines[spine].set_linewidth(2)
 
-                for uploaded_file in uploaded_files:
-                    with open(temp_dir / uploaded_file.name, "wb") as f:
-                        f.write(uploaded_file.getvalue())
+            # Process files and potentially apply scaling
+            all_data = process_files(uploaded_files_list, user_defined_colors, user_defined_eshifts)
+            if apply_scaling:
+                scaling_factors = calculate_scaling_factors(all_data)
+                all_data = scale_data(all_data, scaling_factors)
 
-                os.chdir(temp_dir)
+            # Plot bands and set labels
+            line_and_text_color = 'black' if apply_scaling else None
+            plot_all_bands(ax, all_data, apply_scaling, num_data_sets)
+            set_custom_labels(ax, all_data, apply_scaling, num_data_sets)
 
-                # Call scan_CBM.py and extract the shift value
-                scan_cbm_output = subprocess.check_output("python ../scan_CBM.py", shell=True,
-                                                          stderr=subprocess.DEVNULL).decode('utf-8')
-
-                for line in scan_cbm_output.splitlines():
-                    if "VBM energy:" in line:
-                        shift = float(line.split(":")[1].split("eV")[0].strip())
-                        break
-
-                plot_band_output = subprocess.check_output(
-                    f"python ../plot_band.py {shift} {ymin} {ymax} output_band.png {plot_color}", shell=True,
-                    stderr=subprocess.DEVNULL).decode('utf-8')
-
-                # Layout
-                col1, col2 = st.columns([1, 4])
-
-                with col1:
-                    with st.expander("Band Edge Scan Output"):
-                        # Band Edge Scan Results
-                        # st.subheader("Band Edge Scan")
-                        formatted_scan_cbm = scan_cbm_output.replace("\n", "<br>")
-                        scan_cbm_box = f'<div style="height:220px; text-align: center; width:100%; overflow:auto; background-color:#333333; color:#FFFFFF; border-radius:10px; padding: 0px;"><pre>{formatted_scan_cbm}</pre></div>'
-                        st.markdown(scan_cbm_box, unsafe_allow_html=True)
-
-                    # Space
-                    st.empty()
-
-                    # Bandstructure Plot Results
-                    with st.expander("Bandstructure Plot Output"):
-                        formatted_plot_band = plot_band_output.replace("\n", "<br>")
-                        plot_band_box = f'<div style="height:220px; text-align: center; width:100%; overflow:auto; background-color:#333333; color:#FFFFFF; border-radius:10px; padding: 0px;"><pre>{formatted_plot_band}</pre></div>'
-                        st.markdown(plot_band_box, unsafe_allow_html=True)
-
-                with col2:
-                    st.subheader("Generated Bandstructure")
-                    st.image("output_band.png", caption=" ", use_column_width=True)
-
-                with open("output_band.png", "rb") as f:
-                    btn = st.download_button(
-                        label="Download Bandstructure Image",
-                        data=f,
-                        file_name="output_band.png",
-                        mime="image/png"
-                    )
-
-                os.chdir("..")
-                shutil.rmtree(temp_dir)
-        else:
-            st.warning("Please upload files before plotting.")
+            # Finalize and show the plot
+            plt.ylabel('Energy (eV)')
+            plt.axis([0, max([abs(i) for data in all_data for i in data[1][-1]]), ymin, ymax])
+            st.pyplot(fig)
+    else:
+        st.warning("Please upload files before plotting.")
 
 if plot_spin_option:
     st.header("Plot Spin Texture", divider='violet')
@@ -1443,6 +1406,21 @@ if plot_spin_option:
         # Scale for the arrows
         scale_param = st.number_input("Scale parameter for the spin arrows (optional)", value=15)
 
+        # Axis range for the texture
+        axis_limits = st.text_input("Enter axis limits (xmin, xmax, ymin, ymax):", "")
+        # Initialize limits to None
+        if axis_limits.strip():
+            try:
+                values = axis_limits.split(',')
+                # Ensure there are exactly 4 values or fill missing ones with None
+                x_min, x_max, y_min, y_max = [float(v.strip()) if v.strip() else None for v in values] + [None] * (
+                            4 - len(values))
+            except ValueError:
+                st.error("Please enter the limits in the correct format: xmin, xmax, ymin, ymax")
+        else:
+            # Default to None if no input is provided
+            x_min, x_max, y_min, y_max = [None] * 4
+
         # Process the input states
         if state_input:
             states = [int(s.strip()) for s in state_input.split(',') if s.strip().isdigit()]
@@ -1450,6 +1428,7 @@ if plot_spin_option:
 
             if all(min_state <= state <= max_state for state in states):
                 if st.button("Plot spin texture"):
+
                     # Create a 2x2 grid of columns
                     cols = st.columns(2)
                     col_index = 0  # To keep track of which column to use
@@ -1457,7 +1436,7 @@ if plot_spin_option:
                     for state in states:
                         uploaded_file.seek(0)
                         try:
-                            fig = plot_spin_quivers(uploaded_file, state, spin_direction, shift_e, scale=scale_param, axis_limits=None)
+                            fig = plot_spin_quivers(uploaded_file, state, spin_direction, shift_e, scale=scale_param, axis_limits= [x_min, x_max, y_min, y_max])
 
                             # Display plot in the grid
                             with cols[col_index % 2]:

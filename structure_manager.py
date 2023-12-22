@@ -118,7 +118,7 @@ def detect_molecules(atoms, exceptions: List[Tuple[str, str]] = None):
     exceptions = exceptions if exceptions else []
 
     cov_radii = [covalent_radii[a.number] for a in atoms]
-    element_tolerance = [0.1 if a.symbol in ["C", "H", "N", "O", "S"] else 0.25 for a in atoms]
+    element_tolerance = [0.1 if a.symbol in ["C", "H", "N", "O", "S"] else 0.5 if a.symbol in ["Cl"] else 0.25 for a in atoms]
     cutoffs = [natural_cutoff + tolerance for natural_cutoff, tolerance in
                zip(natural_cutoffs(atoms), element_tolerance)]
     coords = atoms.get_positions()

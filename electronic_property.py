@@ -326,7 +326,7 @@ def prepare_plot_data(filename, state):
     return k_points, spins, energy
 
 
-def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=cc.cm.bwy, alpha=0.2):
+def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=cc.cm.CET_L18, alpha=0.05):
     shifted_energy = energy - energy_shift
 
     # Normalize shifted energy values to a range of 0 to 1

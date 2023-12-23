@@ -1780,7 +1780,7 @@ if MDanalysis_option:
 
         u = create_universe(file_buffer_md, timestep)
 
-        analysis_type = st.selectbox("Select Analysis Type", ("H-Bond Analysis", "Distance Analysis", "Average Structure", "Distortion Analysis", "Pair Distribution Function"))
+        analysis_type = st.selectbox("Select Analysis Type", ("H-Bond Analysis", "Distance Analysis", "Average Structure", "Distortion Analysis", "Pair Distribution Function","Anisotropic Displacement Parameter"))
 
         if analysis_type == "H-Bond Analysis":
             handle_h_bond_analysis(u)
@@ -1809,6 +1809,26 @@ if MDanalysis_option:
 
         elif analysis_type == "Pair Distribution Function":
             handle_rdf_analysis(u)
+
+        elif analysis_type == "Anisotropic Displacement Parameter":
+            st.subheader("Analysis of Anisotropic Displacement Parameter")
+            start_time = st.number_input("Enter time (ps) to set first frame: ", min_value=0.00, max_value=100.0, step=0.0001)
+            start_frame_no = np.round(start_time*1000 / timestep)
+
+            if start_time is not None and st.button("Get ADP values"):
+                atom_frame_pos_df = get_atom_frame_positions_dataframe(u, start_frame_no)
+                ADP_values = get_ADP(u, atom_frame_pos_df)
+                ADP_values_w_vol = calculate_ellipsoid_volumes(ADP_values, ignore_atoms=None)
+
+                with st.expander("View ADP data"):
+                    st.dataframe(ADP_values_w_vol, use_container_width=True, hide_index=True)
+
+                elp_vol_plot = plot_atom_volumes_violinplot(ADP_values_w_vol)
+                st.plotly_chart(elp_vol_plot, use_container_width=True)
+
+                # Create and display the download button for the rdf_df data.
+                csv_data = ADP_values_w_vol.to_csv(index=False).encode()
+                st.download_button("Download ADP data as CSV", csv_data, file_name="ADP_values.csv", mime="text/csv")
 
 
 if script_option:

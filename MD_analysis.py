@@ -926,3 +926,199 @@ def plot_atom_pairs_rdf(df):
                                         yaxis_title='g(r)', font_size=16, color_text='black', l_orientation='v', l_yplace=0.5))
 
     return fig
+
+def get_atom_frame_positions_dataframe(universe, start_frame=None):
+    """
+    Extracts the positions of each atom for each frame from an MDAnalysis Universe,
+    and returns them as a Pandas DataFrame.
+
+    Parameters:
+    - universe: MDAnalysis.Universe object
+    - start_frame: The starting frame index to consider (optional)
+
+    Returns:
+    - Pandas DataFrame containing the positions
+    """
+
+    # Initialize an empty list to hold the DataFrame records
+    records = []
+
+    # Loop through all atoms in the universe
+    for atom_index, atom in enumerate(universe.atoms):
+
+        # Loop through each frame in the trajectory
+        for frame_index, ts in enumerate(universe.trajectory):
+
+            # Skip frames before the start_frame, if specified
+            if start_frame is not None and frame_index < start_frame:
+                continue
+
+            # Get atom's position
+            x, y, z = atom.position
+
+            # Append a record for this atom and frame
+            records.append({
+                "atom_index": atom_index,
+                "frame_index": frame_index,
+                "x": x,
+                "y": y,
+                "z": z
+            })
+
+    # Create a DataFrame from the records
+    df = pd.DataFrame(records)
+
+    return df
+
+
+def get_ADP(universe, df):
+    """
+    Calculate ADP (Anisotropic Displacement Parameters) for atoms from a DataFrame.
+
+    Parameters:
+    - universe: MDAnalysis Universe object containing atom information
+    - df: Pandas DataFrame containing atom positions for each frame
+
+    Returns:
+    - DataFrame containing the ADP values and atom labels for each atom
+    """
+    # Initialize an empty DataFrame to store ADP values for all atoms
+    adp_df = pd.DataFrame(columns=['Atom Label', 'U11', 'U22', 'U33', 'U23', 'U13', 'U12'])
+
+    # Get unique atom indices
+    atom_indices = df['atom_index'].unique()
+
+    # Loop through each unique atom index
+    for at in atom_indices:
+
+        # Get atom name from MDAnalysis universe and create label
+        atom_name = universe.atoms[at].name
+        atom_label = f"{atom_name}{at}"
+
+        # Filter DataFrame to only include records for the current atom
+        atom_df = df[df['atom_index'] == at]
+
+        # Initialize variables for intermediate calculations
+        U11_pre, U22_pre, U33_pre, U23_pre, U13_pre, U12_pre = 0, 0, 0, 0, 0, 0
+
+        # Retrieve positions of a single atom across different frames
+        single_atom_positions = atom_df[['x', 'y', 'z']].values
+
+        # Calculate the mean position for the single atom
+        single_atom_average = np.mean(single_atom_positions, axis=0)
+
+        # Calculate pre-final values for the ADP components
+        for pos in single_atom_positions:
+            x, y, z = pos
+            U11_pre += (x - single_atom_average[0]) ** 2
+            U22_pre += (y - single_atom_average[1]) ** 2
+            U33_pre += (z - single_atom_average[2]) ** 2
+            U23_pre += (y - single_atom_average[1]) * (z - single_atom_average[2])
+            U13_pre += (x - single_atom_average[0]) * (z - single_atom_average[2])
+            U12_pre += (x - single_atom_average[0]) * (y - single_atom_average[1])
+
+        # Finalize the ADP component values
+        num_positions = len(single_atom_positions)
+        U11, U22, U33 = U11_pre / num_positions, U22_pre / num_positions, U33_pre / num_positions
+        U23, U13, U12 = U23_pre / num_positions, U13_pre / num_positions, U12_pre / num_positions
+
+        # Append the ADP values and atom label for this atom to the master DataFrame
+        adp_df.loc[at] = [atom_label, U11, U22, U33, U23, U13, U12]
+
+    return adp_df
+
+
+def calculate_ellipsoid_volumes(adp_df, ignore_atoms=None):
+    """
+    Add a column for ellipsoid volumes to the existing adp_df.
+
+    Parameters:
+    - adp_df: DataFrame containing ADP values and atom labels
+    - ignore_atoms: List of atom symbols to ignore (Optional)
+
+    Returns:
+    - Modified adp_df containing a new 'Volume' column
+    """
+
+    # Initialize a new 'Volume' column with NaN values
+    adp_df['Volume'] = np.nan
+
+    # Loop through each row in the adp_df DataFrame
+    for index, row in adp_df.iterrows():
+        atom_label = row['Atom Label']
+
+        # Extract atom name from the atom_label (assuming format is "<atom_name>_<atom_index>")
+        atom_name = ''.join([char for char in atom_label if not char.isdigit()])
+
+        # Skip atoms present in ignore_atoms list, if provided
+        if ignore_atoms and atom_name in ignore_atoms:
+            continue
+
+        # Extract Uij values
+        U11, U22, U33, U23, U13, U12 = row[['U11', 'U22', 'U33', 'U23', 'U13', 'U12']]
+
+        # Calculate determinant of U-matrix
+        U_matrix = np.array([[U11, U12, U13], [U12, U22, U23], [U13, U23, U33]])
+        det_U = np.linalg.det(U_matrix)
+
+        # Calculate ellipsoid volume
+        volume = 4 / 3 * np.pi * np.sqrt(det_U)
+
+        # Update 'Volume' column for the current atom
+        adp_df.at[index, 'Volume'] = volume
+
+    return adp_df
+
+
+def plot_atom_volumes_violinplot(adp_df):
+    """
+    Create a violin plot for atom volumes using Plotly.
+
+    Parameters:
+    - adp_df: DataFrame containing ADP values, atom labels, and volumes
+
+    Returns:
+    - Plotly Figure object
+    """
+
+    # Extract unique atom types from Atom_Labels for plotting
+    atom_types = adp_df['Atom Label'].apply(lambda x: ''.join([char for char in x if not char.isdigit()]))
+    unique_atom_types = atom_types.unique()
+
+    # Create an empty Plotly Figure object
+    fig = go.Figure()
+
+    # Add a violin plot trace for each atom type
+    for atom_type in unique_atom_types:
+        atom_df = adp_df[atom_types == atom_type]
+
+        fig.add_trace(go.Violin(
+            y=atom_df['Volume'],
+            x=[atom_type] * len(atom_df),
+            name=atom_type,
+            box_visible=True,
+            meanline_visible=True
+        ))
+
+        # Add scatter plot trace to overlap with the violin plot
+        fig.add_trace(go.Scatter(
+            y=atom_df['Volume'],
+            x=[atom_type] * len(atom_df),
+            mode='markers',
+            marker=dict(
+                color='rgba(0, 0, 0, 0.6)',  # semi-transparent outline
+            ),
+            name=f"{atom_type} Points"
+        ))
+
+    layout = generate_layout(title='Ellipsoid Volumes', xaxis_title='Atom Type', yaxis_title='Volume (Å^6)',
+                        font_size=16, color_text='black', l_orientation='h', l_yplace=0.2)
+
+    fig.update_layout(**layout)
+
+    # Update layout
+    fig.update_layout(
+        showlegend=False
+    )
+
+    return fig

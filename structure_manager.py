@@ -50,6 +50,7 @@ from bokeh.plotting import figure, show
 from scipy.interpolate import *
 from typing import List, Tuple
 from io import BytesIO
+import re
 
 def image_to_base64(image_path):
     with open(image_path, "rb") as img_file:
@@ -2087,3 +2088,55 @@ def handle_in_out_deviations(result):
             ('Out-of-plane deviation', f'{deviations["out_plane"]:.3f}')
         ])
     return output
+
+
+def extract_primary_value_v2(adp_value):
+    """
+    Extracts the primary value from an ADP entry, including negative values, ignoring the uncertainty.
+
+    :param adp_value: A string representing an ADP value, possibly with uncertainty.
+    :return: The primary value as a float.
+    """
+    match = re.match(r"([-0-9.]+)\((\d+)\)", adp_value)
+    return float(match.group(1)) if match else float(adp_value)
+
+
+def extract_Uij_from_cif(file_buffer):
+    """
+    Extracts U_ij values from a CIF file buffer (as used in Streamlit) and returns a Pandas DataFrame,
+    excluding the first six header lines, resetting the row indices, and removing uncertainty values.
+
+    :param file_buffer: File buffer of the uploaded CIF file.
+    :return: A Pandas DataFrame with columns for Atom_Label and U_ij values.
+    """
+    # Read lines from the file buffer
+    lines = [line.decode('utf-8') for line in file_buffer]
+
+    # Find the start of the U_ij section
+    start_index = -1
+    for i, line in enumerate(lines):
+        if '_atom_site_aniso_label' in line:
+            start_index = i + 1  # Starting from the line after the header
+            break
+
+    if start_index == -1:
+        raise ValueError("U_ij section not found in CIF file")
+
+    # Extract data from the U_ij section
+    data = []
+    for line in lines[start_index:]:
+        if line.strip() == '':  # Stop at an empty line, which indicates the end of the section
+            break
+        values = line.split()
+        # Extract and convert the ADP values, removing uncertainties and handling negative values
+        values[1:] = [extract_primary_value_v2(value) for value in values[1:]]
+        data.append(values)
+
+    # Create DataFrame
+    columns = ['Atom Label', 'U11', 'U22', 'U33', 'U23', 'U13', 'U12']
+    df = pd.DataFrame(data, columns=columns)
+
+    # Removing the first six rows and resetting the index
+    df = df.iloc[6:].reset_index(drop=True)
+
+    return df

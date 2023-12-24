@@ -366,8 +366,6 @@ def compute_min_distances_and_indices(u, atoms1, atoms2):
 
 
 def plot_distances(times, min_distances, atom1, atom2, standard_distance):
-    color_text = 'black'  # Black color
-    font_size = 16  # You can adjust the size based on your preference
     fig = go.Figure()
 
     for i in range(min_distances.shape[1]):
@@ -698,8 +696,6 @@ def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs):
     """
 
     fig = go.Figure()
-    color_text = 'black'  # Black color
-    font_size = 20  # You can adjust the size based on your preference
 
     for atom_pair in atom_pairs:
         atom_index1, atom_index2 = atom_pair
@@ -722,7 +718,7 @@ def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs):
             distances_ar.append(d[0][0])
 
         # Add a trace for each pair to the plot
-        trace_name = f'{symbol1}_{atom_index1} - {symbol2}_{atom_index2}'  # Updated trace name
+        trace_name = f'{symbol1}_{atom_index1} - {symbol2}_{atom_index2}'
         fig.add_trace(go.Scatter(x=times, y=distances_ar, mode='lines',
                                  name=trace_name))
 

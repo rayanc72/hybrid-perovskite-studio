@@ -282,6 +282,7 @@ with st.sidebar:
     distance_option = st.sidebar.checkbox("Calculate atomic distances", value=False)
     distortion_option = st.sidebar.checkbox("Calculate octahedral distortions", value=False)
     deviation_calculation_option = st.sidebar.checkbox("Calculate percentage deviation", value=False)
+    ADP_table_option = st.sidebar.checkbox("Anisotropic displacement parameters", value=False)
 
     st.divider()
 
@@ -791,6 +792,18 @@ if st.session_state.atoms is not None:
                     st.error(f"An error occurred when processing the selected space group: {e}")
                 except Exception as e:
                     st.error(f"An unexpected error occurred: {e}")
+
+    if ADP_table_option:
+        st.header("Extract ADP from CIF", divider='violet')
+
+        try:
+            uij_df = extract_Uij_from_cif(file_buffer)
+            uij_df_v = calculate_ellipsoid_volumes(uij_df, ignore_atoms=None)
+
+            st.dataframe(uij_df_v, hide_index=True, use_container_width=True)
+        except ValueError as e:
+            st.error(f"An error occurred when trying to extract the ADP values: {e}")
+
 
     # if create_cent_option:
     #     st.header("Create Idealized Structure")
@@ -1576,6 +1589,8 @@ def handle_distance_analysis(u):
                 # u = build_universe_from_dir('frames_dir', timestep=timestep)
                 st.write("Running minimum distance analysis...")
                 fig, dist_df = plot_and_return_min_distances(u, atom1, atom2, standard_distance)
+                with st.expander("Distance values"):
+                    st.dataframe(dist_df, hide_index=True, use_container_width=True)
                 fig_heatmap_png = generate_weighted_pair_probability_heatmap(dist_df)
                 fig_heatmap = generate_weighted_pair_probability_heatmap_plotly(dist_df)
 
@@ -1604,17 +1619,22 @@ def handle_distance_analysis(u):
                                             step=0.01)
 
         for i in range(num_pairs):
-            atom_index1 = int(st.number_input(f"Enter index of first atom for pair {i + 1}:"))
+            # User inputs the pair of atom indices as a comma-separated string
+            indices_input = st.text_input(f"Enter indices of atom pair {i + 1} (e.g., 1,2):", key=f"pair_{i}")
 
-            atom_index2 = int(st.number_input(f"Enter index of second atom for pair {i + 1}:"))
-            atom_pairs.append((atom_index1, atom_index2))
+            try:
+                atom_index1, atom_index2 = [int(index.strip()) for index in indices_input.split(',')]
+                atom_pairs.append((atom_index1, atom_index2))
+            except ValueError:
+                # Handle the case where the input format is incorrect
+                st.error("Please enter a valid pair of indices separated by a comma.")
         if st.button('Do individual tracking analysis'):
             try:
                 st.write("Running individual tracking analysis...")
                 fig = plot_atom_distances_over_time(u, standard_distance, *atom_pairs)
 
                 # Display the plot
-                st.plotly_chart(fig)
+                st.plotly_chart(fig, use_container_width=True)
 
 
             except Exception as e:

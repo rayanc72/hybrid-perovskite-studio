@@ -1575,197 +1575,107 @@ def handle_h_bond_analysis(u):
             st.write(f"Error: {str(e)}")
     pass
 
-def handle_distance_analysis(u):
-    distance_analysis_type = st.selectbox("Select Analysis Type", ("Overall statistics", "Individual tracking"))
-    if distance_analysis_type == "Overall statistics":
-        atom1 = st.text_input("Enter first atom for distance analysis")
-        atom2 = st.text_input("Enter second atom for distance analysis")
-        standard_distance = st.number_input("Enter a standard distance for comparison: ", min_value=0.0, max_value=10.0,
-                                            step=0.01)
-
-        if st.button('Do distance analysis'):
-            try:
-                # st.write("Building universe...")
-                # u = build_universe_from_dir('frames_dir', timestep=timestep)
-                st.write("Running minimum distance analysis...")
-                fig, dist_df = plot_and_return_min_distances(u, atom1, atom2, standard_distance)
-                with st.expander("Distance values"):
-                    st.dataframe(dist_df, hide_index=True, use_container_width=True)
-                fig_heatmap_png = generate_weighted_pair_probability_heatmap(dist_df)
-                fig_heatmap = generate_weighted_pair_probability_heatmap_plotly(dist_df)
-
-                # Use st.columns to display figures side by side
-                col1, col_space, col2 = st.columns([1, 0.4, 1])
-                with col1:
-                    st.write("Minimum Distances Plot:")
-                    st.plotly_chart(fig)
-                with col2:
-                    st.write("Weighted Pair Formation Probability Plot:")
-                    st.plotly_chart(fig_heatmap)
-                # Provide a download link for the PNG image below the heatmap
-                st.markdown(get_figure_image_download_link(fig_heatmap_png), unsafe_allow_html=True)
-
-
-            except Exception as e:
-                st.write(f"Error: {str(e)}")
-
-
-    elif distance_analysis_type == "Individual tracking":
-
-        atom_pairs = []
-
-        num_pairs = st.number_input("Enter the number of atom pairs for tracking:", min_value=1, max_value=10, step=1)
-        standard_distance = st.number_input("Enter a standard distance for comparison: ", min_value=0.0, max_value=10.0,
-                                            step=0.01)
-
-        for i in range(num_pairs):
-            # User inputs the pair of atom indices as a comma-separated string
-            indices_input = st.text_input(f"Enter indices of atom pair {i + 1} (e.g., 1,2):", key=f"pair_{i}")
-
-            try:
-                atom_index1, atom_index2 = [int(index.strip()) for index in indices_input.split(',')]
-                atom_pairs.append((atom_index1, atom_index2))
-            except ValueError:
-                # Handle the case where the input format is incorrect
-                st.error("Please enter a valid pair of indices separated by a comma.")
-        if st.button('Do individual tracking analysis'):
-            try:
-                st.write("Running individual tracking analysis...")
-                fig = plot_atom_distances_over_time(u, standard_distance, *atom_pairs)
-
-                # Display the plot
-                st.plotly_chart(fig, use_container_width=True)
-
-
-            except Exception as e:
-
-                st.write(f"Error: {str(e)}")
-
-    pass
 
 
 
-def handle_rdf_analysis(u):
-    rdf_analysis_type = st.selectbox("Select Analysis Type", ("Overall statistics", "Group tracking"))
-    if rdf_analysis_type == "Overall statistics":
-        atom1 = st.text_input("Enter first atom type for rdf analysis")
-        atom2 = st.text_input("Enter second atom type for rdf analysis")
-        bin_size = st.number_input("Enter bin size (optional):", value=75)
-        min_dist, max_dist = st.slider(
-            "Set cut-off range for distance",
-            min_value=0.0,
-            max_value=20.0,
-            value=(0.0, 15.0),  # Default values for min and max
-            step=0.1,
-        )
-
-        if st.button('Do rdf analysis'):
-            try:
-
-                st.spinner("Running rdf analysis...")
-                rdf_df = calculate_rdf_mda(u, atom1, atom2, bins=bin_size, range=(min_dist, max_dist), start=None, stop=None, step=None, verbose=False)
-                # st.dataframe(rdf_df)
-
-                # Create and display the plot after rdf_df is generated.
-                rdf_plot = plot_rdf(rdf_df)
-                st.plotly_chart(rdf_plot, use_container_width=True)
-
-                # Create and display the download button for the rdf_df data.
-                csv_data = rdf_df.to_csv(index=False).encode()
-                st.download_button("Download rdf data as CSV", csv_data, file_name="rdf_data.csv", mime="text/csv")
-
-
-            except Exception as e:
-                st.write(f"Error: {str(e)}")
 
 
 
-    elif rdf_analysis_type == "Group tracking":
+def handle_distortion_analysis(u):
+    # User input for atomic symbols
+    center_atom = st.text_input('Enter the symbol of the center atom (A):', value="Pb")
+    surrounding_atoms = st.text_input('Enter the symbol of the surrounding atoms (B):', value="I")
 
-        group_pairs = []
+    step = st.number_input('Enter the step value for skipping frames:', min_value=1, max_value=1000, value=100)
 
-        num_pairs = st.number_input("Enter the number of atom group pairs for tracking:", min_value=1, max_value=10, step=1)
+    min_time = 0.0
+    max_time = u.trajectory[-1].time
 
-        min_dist, max_dist = st.slider(
-            "Set cut-off range for distance",
-            min_value=0.0,
-            max_value=20.0,
-            value=(0.0, 15.0),  # Default values for min and max
-            step=0.1,
-        )
+    # Input for time window
+    ti_range = st.slider("Select the time range for analysis (ps):",
+                         min_value=min_time,
+                         max_value=max_time,
+                         value=(min_time, max_time),
+                         step=0.1)
 
-        for i in range(num_pairs):
-            # Get atom indices for the two atom groups using space-separated input
-            atom_indices_g1 = st.text_input(
-                f"Enter indices (space-separated) for atoms in pair {i + 1} group 1").split()
-            atom_indices_g2 = st.text_input(
-                f"Enter indices (space-separated) for atoms in pair {i + 1} group 2").split()
+    start_time = ti_range[0]
+    end_time = ti_range[1]
 
-            try:
-                # Convert indices from string to integer
-                atom_indices_g1 = [int(index) for index in atom_indices_g1]
-                atom_indices_g2 = [int(index) for index in atom_indices_g2]
-            except ValueError:
-                st.write("Please ensure you've entered only space-separated integers for atom indices.")
-                return
+    # Generate atom group with the atom_indices
+    atom_group = u.select_atoms(f'name {center_atom} or name {surrounding_atoms}')
 
-            # Create AtomGroup instances
+    # Add a button to trigger calculations
+    if st.button('Do Analysis'):
 
-            ag1 = u.atoms[atom_indices_g1]
+        progress_bar = st.progress(0,text="Calculating...")
 
-            ag2 = u.atoms[atom_indices_g2]
+        # Determine the frames to analyze based on step value
+        frame_indices = [ts.frame for ts in u.trajectory if start_time <= ts.time <= end_time]
+        frames_to_analyze = frame_indices[::step]
+        total_frames = len(frames_to_analyze)
+        frame_counter = 0
 
-            # Append atom group pairs to the list
+        # Initialize lists to store data for each DataFrame
+        results_df1 = []
+        bdv_lists = []
+        av_lists = []
 
-            group_pairs.append((ag1, ag2))
+        # Loop through the trajectory
+        for ts in u.trajectory:
+            if ts.frame in frames_to_analyze:
+                symbols = [atom.name for atom in atom_group]
+                positions = atom_group.positions
+                atoms = Atoms(symbols=symbols, positions=positions, pbc=True, cell=u.dimensions)
+                new_atoms, periodic_image_dict = filter_atoms_by_symbols_and_extend(atoms, center_atom, surrounding_atoms)
+                AB6_octahedra, AB_distances = identify_AB_groups(new_atoms, center_atom, surrounding_atoms, b=0.5, c=0.3)
 
-        if st.button('Do individual tracking analysis'):
+                result_angle = calculate_unique_ABA_angles(AB6_octahedra, new_atoms)
+                result_iop = calculate_in_out_planes(AB6_octahedra, new_atoms)
+                result_bdv = calculate_bond_distance_variance(AB6_octahedra, new_atoms)
+                result_av = calculate_angle_variance(AB6_octahedra, new_atoms)
 
-            try:
+                # Update progress bar
+                frame_counter += 1
+                progress = frame_counter / total_frames
+                progress_bar.progress(progress,text=f"{progress * 100}%")
 
-                st.write("Running individual tracking analysis...")
+                # Append data for DataFrame 1
+                for i, (angle, atoms) in enumerate(result_angle[0].items()):
+                    beta_value = result_angle[1][i]
+                    iop_data = result_iop[angle]
+                    results_df1.append({
+                        'Time': ts.time,
+                        'Atoms': atoms,
+                        'Angle': angle,
+                        'In-Plane': iop_data['in_plane'],
+                        'Out-Plane': iop_data['out_plane'],
+                        'Beta': beta_value
+                    })
 
-                rdf_data = site_specific_rdf(u, group_pairs, bins=75, range=(min_dist, max_dist), density=True)
+                    # Store bond distance and angle variance lists for later processing
+                    bdv_lists.append((ts.time, result_bdv))
+                    av_lists.append((ts.time, result_av))
+        # Finalize progress bar
+        progress_bar.empty()
 
-                rdf_dataframe = rdf_to_dataframe(rdf_data)
+        # Determine the maximum number of variances
+        max_bdv_len = max(len(bdv) for _, bdv in bdv_lists)
+        max_av_len = max(len(av) for _, av in av_lists)
 
-                # Create and display the plot after rdf_df is generated.
-                rdf_plot_v2 = plot_atom_pairs_rdf(rdf_dataframe)
-                st.plotly_chart(rdf_plot_v2, use_container_width=True)
+        # Create DataFrame 2 and DataFrame 3
+        results_df2 = [{'Time': time, **{f'Bond Distance Variance {i + 1}': bdv[i] if i < len(bdv) else None for i in
+                                         range(max_bdv_len)}} for time, bdv in bdv_lists]
+        results_df3 = [
+            {'Time': time, **{f'Angle Variance {i + 1}': av[i] if i < len(av) else None for i in range(max_av_len)}} for
+            time, av in av_lists]
 
-                # Create and display the download button for the rdf_df data.
-                csv_data = rdf_dataframe.to_csv(index=True).encode()
-                st.download_button("Download rdf data as CSV", csv_data, file_name="rdf_data.csv", mime="text/csv")
+        # Convert to DataFrames
+        df1 = pd.DataFrame(results_df1)
+        df2 = pd.DataFrame(results_df2)
+        df3 = pd.DataFrame(results_df3)
 
-
-            except Exception as e:
-
-                st.write(f"Error: {str(e)}")
-
-    pass
-
-
-def handle_distortion_analysis(u, n, A, B):
-    outputs = []
-    for idx, ts in enumerate(u.trajectory[::n]):
-        # logging.info(f"Processing frame {idx}")
-
-        # Convert to ASE Atoms object
-        atoms = Atoms(symbols=[atom.element for atom in u.atoms],
-                      positions=u.atoms.positions,
-                      cell=u.dimensions[:3],
-                      pbc=[bool(x) for x in u.dimensions[3:]])
-
-        # Call filter_atoms_by_symbols_and_extend
-        new_atoms, periodic_image_dict = filter_atoms_by_symbols_and_extend(atoms, A, B)
-        filtered_AB_groups = identify_AB_groups(new_atoms, A, B)
-        bond_distance_var = calculate_bond_distance_variance(filtered_AB_groups, new_atoms)
-
-        # Append the output to the results
-        outputs.append(bond_distance_var)
-    st.write(outputs)
-
-    return outputs
+        # Return the DataFrame
+        return df1, df2, df3
 
 def build_universe_and_analyze(timestep):
     st.write("Building universe...")
@@ -1809,9 +1719,28 @@ if MDanalysis_option:
             handle_distance_analysis(u)
 
         elif analysis_type == "Distortion Analysis":
-            n_image = st.number_input("Enter image interval", 100)
-            if n_image is not None:
-                handle_distortion_analysis(u, n=n_image, A="Pb", B="I")
+            try:
+                dist_df1, dist_df2, dist_df3 = handle_distortion_analysis(u)
+                if dist_df1 is not None:
+                    with st.expander("Download data"):
+                        st.dataframe(dist_df1, hide_index=True, use_container_width=True)
+                        st.dataframe(dist_df2, hide_index=True, use_container_width=True)
+                        st.dataframe(dist_df3, hide_index=True, use_container_width=True)
+
+                    f1, f2, f3, f4, f5 = create_probability_distribution_plots(dist_df1, dist_df2, dist_df3)
+
+                    # Create a 2x2 grid for plots
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.pyplot(f1)
+                        st.pyplot(f3)
+
+                    with col2:
+                        st.pyplot(f4)
+                        st.pyplot(f5)
+                        # st.pyplot(f2)
+            except Exception as e:
+                st.warning("Click on the analysis button")
 
         elif analysis_type == "Average Structure":
             start_time = st.number_input("Enter time (ps) to set first frame: ", min_value=0.00, max_value=100.0, step=0.0001)
@@ -1828,7 +1757,15 @@ if MDanalysis_option:
                 os.remove("Average_structure.in")
 
         elif analysis_type == "Pair Distribution Function":
-            handle_rdf_analysis(u)
+            min_time = 0.0
+            max_time = u.trajectory[-1].time
+
+            ti_range = st.slider("Select the time range for analysis (ps):",
+                                min_value=min_time,
+                                max_value=max_time,
+                                value=(min_time, max_time),
+                                step=0.1)
+            handle_rdf_analysis(u, ti_range)
 
         elif analysis_type == "Anisotropic Displacement Parameter":
             st.subheader("Analysis of Anisotropic Displacement Parameter")
@@ -1845,10 +1782,6 @@ if MDanalysis_option:
 
                 elp_vol_plot = plot_atom_volumes_violinplot(ADP_values_w_vol)
                 st.plotly_chart(elp_vol_plot, use_container_width=True)
-
-                # Create and display the download button for the rdf_df data.
-                csv_data = ADP_values_w_vol.to_csv(index=False).encode()
-                st.download_button("Download ADP data as CSV", csv_data, file_name="ADP_values.csv", mime="text/csv")
 
 
 if script_option:

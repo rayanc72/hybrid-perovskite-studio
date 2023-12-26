@@ -115,11 +115,11 @@ def write_modified_aims_file(atoms, file_name):
             f.write(f"atom {atom.position[0]} {atom.position[1]} {atom.position[2]} {modified_symbols[i]}\n")
 
 
-def detect_molecules(atoms, exceptions: List[Tuple[str, str]] = None):
+def detect_molecules(atoms, exceptions: List[Tuple[str, str]] = None, b=0):
     exceptions = exceptions if exceptions else []
 
     cov_radii = [covalent_radii[a.number] for a in atoms]
-    element_tolerance = [0.1 if a.symbol in ["C", "H", "N", "O", "S"] else 0.5 if a.symbol in ["Cl"] else 0.25 for a in atoms]
+    element_tolerance = [0.1 if a.symbol in ["C", "H", "N", "O", "S"] else 0.5 if a.symbol in ["Cl"] else (0.25+b) for a in atoms]
     cutoffs = [natural_cutoff + tolerance for natural_cutoff, tolerance in
                zip(natural_cutoffs(atoms), element_tolerance)]
     coords = atoms.get_positions()
@@ -679,7 +679,6 @@ def create_3d_scatter_plot(df, title, box_vectors):
 
     return fig
 
-from ase.geometry import get_distances
 from ase.geometry import wrap_positions
 
 
@@ -1526,9 +1525,9 @@ def filter_atoms_by_symbols_and_extend(atoms, A, B):
     return new_atoms, periodic_image_dict
 
 
-def identify_AB_groups(atoms, A: str, B: str):
+def identify_AB_groups(atoms, A: str, B: str, b=0, c=0):
     # Step 1: Detect Molecules
-    molecules = detect_molecules(atoms)
+    molecules = detect_molecules(atoms, b=b)
 
     # Initialize dictionaries
     AB_groups = {}
@@ -1551,7 +1550,7 @@ def identify_AB_groups(atoms, A: str, B: str):
         dists = get_distances(A_coords.reshape(1, 3), B_coords)[1][0]
 
         # Keep B_indices that are closer than 3.5 Angstrom to A
-        valid_B_indices_and_dists = [(B_indices[i], dists[i]) for i in np.where(dists < 3.5)[0]]
+        valid_B_indices_and_dists = [(B_indices[i], dists[i]) for i in np.where(dists < 3.5 + c)[0]]
 
         if len(valid_B_indices_and_dists) == 6:
             valid_B_indices = [idx for idx, _ in valid_B_indices_and_dists]

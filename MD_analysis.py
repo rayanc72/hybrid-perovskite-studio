@@ -265,13 +265,18 @@ def get_download_link_md(file_path, download_name):
         href = f'<a href="data:file/octet-stream;base64,{b64}" download="{download_name}">Download {download_name}</a>'
         return href
 
-
+from ase.io import read, write
 
 # Function to build Universe from directory of frames
 # Updated build_universe_from_dir function to handle subdirectories
 def build_universe_from_dir(directory, timestep):
     # Get a sorted list of all frame files in the directory
     frame_files = sorted(glob.glob(os.path.join(directory, '**', 'geometry*.in'), recursive=True))
+
+    for f in frame_files:
+        atoms_compare = read(f)
+        # Rewrite the file with the new positions
+        write(f, atoms_compare, format='aims')
 
     # If no frame files found, raise an exception
     if not frame_files:
@@ -303,7 +308,7 @@ def build_universe_from_dir(directory, timestep):
     # u.dimensions = unit_cell_dimensions
 
     transformation = nojump.NoJump()
-    u.trajectory.add_transformations(transformation)
+    u.trajectory.add_transformations(transformation)     # Useful for the hydrogens
 
     return u
 
@@ -682,20 +687,99 @@ def get_figure_image_download_link(fig, filename="heatmap.png", text="Download H
     return href
 
 
-def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs):
+# def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs, start_time=0):
+#     """
+#     Plots the distance between pairs of atoms over time.
+#
+#     Parameters:
+#     - u: MDAnalysis universe
+#     - y_value: The y-axis value for the horizontal dashed line (default 0)
+#     - *atom_pairs: Variable number of atom pairs as tuples (atom_index1, atom_index2)
+#
+#     Returns:
+#     - A Plotly Figure object representing the plot.
+#     """
+#
+#     fig = go.Figure()
+#
+#     for atom_pair in atom_pairs:
+#         atom_index1, atom_index2 = atom_pair
+#
+#         # Select the atoms based on their indices
+#         atom1 = u.atoms[atom_index1]
+#         atom2 = u.atoms[atom_index2]
+#
+#         # Retrieve the element symbols
+#         symbol1 = atom1.name
+#         symbol2 = atom2.name
+#
+#         # Compute the distances over time
+#         times = []
+#         distances_ar = []
+#         for ts in u.trajectory:
+#             if ts.time > start_time:
+#                 times.append(ts.time)
+#                 # take care of the periodic images!
+#                 d = distances.distance_array(atom1.position, atom2.position, box=list(u.dimensions))
+#                 distances_ar.append(d[0][0])
+#
+#         # Add a trace for each pair to the plot
+#         trace_name = f'{symbol1}_{atom_index1} - {symbol2}_{atom_index2}'
+#         fig.add_trace(go.Scatter(x=times, y=distances_ar, mode='lines',
+#                                  name=trace_name))
+#
+#     if standard_distance > 0:
+#         # Add shaded region below the standard_distance to 0 on y-axis
+#         fig.add_shape(
+#             go.layout.Shape(
+#                 type="rect",
+#                 xref="x",
+#                 yref="y",
+#                 x0=times[0],
+#                 x1=times[-1],
+#                 y0=0,
+#                 y1=standard_distance,
+#                 fillcolor="lightpink",
+#                 opacity=0.3,
+#                 layer="below"
+#             )
+#         )
+#
+#         # Add dashed line at standard_distance
+#         fig.add_shape(
+#             go.layout.Shape(
+#                 type="line",
+#                 xref="x",
+#                 yref="y",
+#                 x0=times[0],
+#                 x1=times[-1],
+#                 y0=standard_distance,
+#                 y1=standard_distance,
+#                 line=dict(dash="dash")
+#             )
+#         )
+#
+#     fig.update_layout(**generate_layout(title='Distances between Atom Pairs over Time', xaxis_title='Time [ps]', yaxis_title='Distance (Å)', font_size=16, color_text='black'))
+#
+#     return fig
+
+
+def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs, start_time=0, end_time=None):
     """
-    Plots the distance between pairs of atoms over time.
+    Plots the distance between pairs of atoms over time and returns a Plotly Figure object and a DataFrame.
 
     Parameters:
     - u: MDAnalysis universe
-    - y_value: The y-axis value for the horizontal dashed line (default 0)
+    - standard_distance: The y-axis value for the horizontal dashed line (default 0)
     - *atom_pairs: Variable number of atom pairs as tuples (atom_index1, atom_index2)
 
     Returns:
     - A Plotly Figure object representing the plot.
+    - A Pandas DataFrame with time and distance values for each atom pair.
     """
 
     fig = go.Figure()
+    data_list = []
 
     for atom_pair in atom_pairs:
         atom_index1, atom_index2 = atom_pair
@@ -708,19 +792,27 @@ def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs):
         symbol1 = atom1.name
         symbol2 = atom2.name
 
+        if end_time is None:
+            end_time = u.trajectory[-1].time
+        else:
+            end_time = end_time
+
+        # transformation = nojump.NoJump()
+        # u.trajectory.add_transformations(transformation)
+
         # Compute the distances over time
-        times = []
-        distances_ar = []
         for ts in u.trajectory:
-            times.append(ts.time)
-            # distances_ar.append(np.linalg.norm(atom1.position - atom2.position))
-            d = distances.distance_array(atom1.position, atom2.position, box=list(u.dimensions))
-            distances_ar.append(d[0][0])
+            if ts.time > start_time and ts.time < end_time:
+                d = distances.distance_array(atom1.position, atom2.position, box=list(u.dimensions))
+                # d = distances.distance_array(atom1.position, atom2.position)
+                data_list.append({'Time': ts.time,
+                                  f'{symbol1}_{atom_index1 + 1} - {symbol2}_{atom_index2 + 1}': d[0][0]})
 
         # Add a trace for each pair to the plot
-        trace_name = f'{symbol1}_{atom_index1} - {symbol2}_{atom_index2}'
-        fig.add_trace(go.Scatter(x=times, y=distances_ar, mode='lines',
-                                 name=trace_name))
+        trace_name = f'{symbol1}_{atom_index1 + 1} - {symbol2}_{atom_index2 + 1}'
+        fig.add_trace(go.Scatter(x=[data['Time'] for data in data_list if trace_name in data],
+                                 y=[data[trace_name] for data in data_list if trace_name in data],
+                                 mode='lines', name=trace_name))
 
     if standard_distance > 0:
         # Add shaded region below the standard_distance to 0 on y-axis
@@ -753,25 +845,65 @@ def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs):
             )
         )
 
-    # fig.update_layout(
-    #     title='Distances between Atom Pairs over Time',
-    #     xaxis_title='Time (ps)',
-    #     yaxis_title='Distance (Å)',
-    #     # autosize=False,
-    #     # width=800,
-    #     # height=500,
-    #     showlegend=True,  # Explicitly show the legend
-    #     legend_orientation="h",
-    #     legend_y=1,
-    #     legend_yanchor="bottom",
-    #     legend_x=0.5,
-    #     legend_xanchor="center",
-    #     xaxis=dict(title_font=dict(size=font_size, color=color_text),
-    #                tickfont=dict(size=font_size, color=color_text)),
-    #     yaxis=dict(title_font=dict(size=font_size, color=color_text),
-    #                tickfont=dict(size=font_size, color=color_text)) # Set text color and size
-    # )
     fig.update_layout(**generate_layout(title='Distances between Atom Pairs over Time', xaxis_title='Time [ps]', yaxis_title='Distance (Å)', font_size=16, color_text='black'))
+
+    # Create DataFrame
+    df = pd.DataFrame(data_list)
+    df = df.groupby('Time').first().reset_index()
+
+    return fig, df
+
+def plot_atom_distances_over_time_matplotlib(u, standard_distance=0, *atom_pairs, start_time=0):
+    """
+    Plots the distance between pairs of atoms over time using Matplotlib.
+
+    Parameters:
+    - u: MDAnalysis universe
+    - standard_distance: The y-axis value for the horizontal dashed line (default 0)
+    - *atom_pairs: Variable number of atom pairs as tuples (atom_index1, atom_index2)
+
+    Returns:
+    - A Matplotlib Figure object representing the plot.
+    """
+
+    fig, ax = plt.subplots()
+
+    for atom_pair in atom_pairs:
+        atom_index1, atom_index2 = atom_pair
+
+        # Select the atoms based on their indices
+        atom1 = u.atoms[atom_index1]
+        atom2 = u.atoms[atom_index2]
+
+        # Retrieve the element symbols
+        symbol1 = atom1.name
+        symbol2 = atom2.name
+
+        # Compute the distances over time
+        times = []
+        distances_ar = []
+        for ts in u.trajectory:
+            if ts.time > start_time:
+                times.append(ts.time)
+                d = distances.distance_array(atom1.position, atom2.position, box=list(u.dimensions))
+                distances_ar.append(d[0][0])
+
+        # Plot for each pair
+        trace_name = f'{symbol1}_{atom_index1} - {symbol2}_{atom_index2}'
+        ax.plot(times, distances_ar, label=trace_name)
+
+    if standard_distance > 0:
+        # Add shaded region below the standard_distance to 0 on y-axis
+        ax.fill_between(times, 0, standard_distance, color='lightpink', alpha=0.3)
+
+        # Add dashed line at standard_distance
+        ax.axhline(y=standard_distance, color='grey', linestyle='--')
+
+    # Setting the plot layout
+    ax.set_title('Distances between Atom Pairs over Time')
+    ax.set_xlabel('Time [ps]')
+    ax.set_ylabel('Distance (Å)')
+    ax.legend()
 
     return fig
 
@@ -813,7 +945,7 @@ def average_structure_to_cif(u, start_time, filename="average_structure.in"):
     return filename
 
 
-def calculate_rdf_mda(u, atom1, atom2, bins=75, range=(0, 15.0), start=None, stop=None, step=None, verbose=False):
+def calculate_rdf_mda(u, atom1, atom2, bins=75, range=(0, 15.0), time_range=None):
     """
     Calculate the radial distribution function (RDF) using MDAnalysis's built-in InterRDF method.
 
@@ -832,6 +964,13 @@ def calculate_rdf_mda(u, atom1, atom2, bins=75, range=(0, 15.0), start=None, sto
     - A Pandas DataFrame containing the RDF data
     """
 
+    start_time_ps = time_range[0]
+    end_time_ps = time_range[1]
+
+    # Calculate frame indices
+    start_frame = int(start_time_ps / u.trajectory.dt)
+    end_frame = int(end_time_ps / u.trajectory.dt)
+
     # Select atoms based on type
     atoms1 = select_atoms(u, atom1)
     atoms2 = select_atoms(u, atom2)
@@ -840,7 +979,7 @@ def calculate_rdf_mda(u, atom1, atom2, bins=75, range=(0, 15.0), start=None, sto
     rdf = InterRDF(atoms1, atoms2, nbins=bins, range=range)
 
     # Run RDF calculation
-    rdf.run(start=start, stop=stop, step=step, verbose=verbose)
+    rdf.run(start=start_frame, stop=end_frame)
 
     # Convert to DataFrame for convenient handling
     rdf_data = pd.DataFrame({
@@ -850,7 +989,7 @@ def calculate_rdf_mda(u, atom1, atom2, bins=75, range=(0, 15.0), start=None, sto
 
     return rdf_data
 
-def site_specific_rdf(u, ags, bins=75, range=(0.0, 15.0), density=True):
+def site_specific_rdf(u, ags, bins=75, range=(0.0, 15.0), density=True, time_range=None):
     """
     Plot the site-specific radial distribution function using MDAnalysis's InterRDF_s.
 
@@ -865,9 +1004,16 @@ def site_specific_rdf(u, ags, bins=75, range=(0.0, 15.0), density=True):
     - A matplotlib figure and axis objects
     """
 
+    start_time_ps = time_range[0]
+    end_time_ps = time_range[1]
+
+    # Calculate frame indices
+    start_frame = int(start_time_ps / u.trajectory.dt)
+    end_frame = int(end_time_ps / u.trajectory.dt)
+
     # Compute the site-specific RDF
     rdf_analysis = InterRDF_s(u, ags, nbins=bins, range=range, density=density)
-    rdf_analysis.run()
+    rdf_analysis.run(start=start_frame, stop=end_frame)
 
     return rdf_analysis
 
@@ -889,7 +1035,7 @@ def plot_rdf(rdf_df):
     return fig
 
 
-def rdf_to_dataframe(rdf):
+def rdf_to_dataframe(rdf, g_pairs=None):
     # Extracting bin values
     x_values = rdf.bins
 
@@ -898,28 +1044,48 @@ def rdf_to_dataframe(rdf):
 
     # Creating a dictionary with atom pairs as keys and their values as the 1D arrays
     data_dict = {}
-    for i, atom_combination in enumerate(flattened):
-        data_dict[f'Pair_{i+1}'] = atom_combination
+    flattened_index = 0
+    if g_pairs:
+        for ag1, ag2 in g_pairs:
+            for atom1 in ag1:
+                for atom2 in ag2:
+                    header = f'{atom1.name}_{atom1.index + 1}-{atom2.name}_{atom2.index + 1}'
+                    data_dict[header] = flattened[flattened_index]
+                    flattened_index += 1
+    else:
+        for i in range(len(flattened)):
+            data_dict[f'Pair_{i+1}'] = flattened[i]
 
     # Creating the DataFrame
     df = pd.DataFrame(data_dict, index=x_values)
+    df.reset_index(inplace=True)
+    df.rename(columns={'index': 'Distance (Å)'}, inplace=True)
 
     return df
 
 def plot_atom_pairs_rdf(df):
     fig = go.Figure()
 
-    # Iterating over columns in the dataframe to add them to the plot
-    for col in df.columns:
-        fig.add_trace(go.Scatter(x=df.index,
+    # Assuming the first column in df is 'Distance (Å)'
+    distance_col = df['Distance (Å)']
+
+    # Iterating over columns in the dataframe (excluding the distance column)
+    for col in df.columns[1:]:
+        fig.add_trace(go.Scatter(x=distance_col,
                                  y=df[col],
-                                 mode='lines',
+                                 mode='lines + markers',  # Set to markers for scatter plot
+                                 marker=dict(symbol='square'),  # Square markers
                                  name=col))
 
-    # # Setting the layout attributes
-
-    fig.update_layout(**generate_layout(title="Radial Distribution Function", xaxis_title='r (Å)',
-                                        yaxis_title='g(r)', font_size=16, color_text='black', l_orientation='v', l_yplace=0.5))
+    # Setting the layout attributes
+    # Update generate_layout function call as per your implementation details
+    fig.update_layout(**generate_layout(title="Radial Distribution Function",
+                                        xaxis_title='r (Å)',
+                                        yaxis_title='g(r)',
+                                        font_size=16,
+                                        color_text='black',
+                                        l_orientation='v',
+                                        l_yplace=0.5))
 
     return fig
 
@@ -1118,3 +1284,288 @@ def plot_atom_volumes_violinplot(adp_df):
     )
 
     return fig
+
+def handle_rdf_analysis(u, t_range=None):
+    rdf_analysis_type = st.selectbox("Select Analysis Type", ("Overall statistics", "Group tracking"))
+    if rdf_analysis_type == "Overall statistics":
+        atom1 = st.text_input("Enter first atom type for rdf analysis")
+        atom2 = st.text_input("Enter second atom type for rdf analysis")
+        bin_size = st.number_input("Enter bin size (optional):", value=75)
+
+
+        min_dist, max_dist = st.slider(
+            "Set cut-off range for distance",
+            min_value=0.0,
+            max_value=20.0,
+            value=(0.0, 15.0),  # Default values for min and max
+            step=0.1,
+        )
+
+        if st.button('Do rdf analysis'):
+            try:
+
+                st.spinner("Running rdf analysis...")
+                rdf_df = calculate_rdf_mda(u, atom1, atom2, bins=bin_size, range=(min_dist, max_dist), time_range=t_range)
+                # st.dataframe(rdf_df)
+
+                # Create and display the plot after rdf_df is generated.
+                rdf_plot = plot_rdf(rdf_df)
+                st.plotly_chart(rdf_plot, use_container_width=True)
+
+                # Create and display the download button for the rdf_df data.
+                csv_data = rdf_df.to_csv(index=False).encode()
+                st.download_button("Download rdf data as CSV", csv_data, file_name="rdf_data.csv", mime="text/csv")
+
+
+            except Exception as e:
+                st.write(f"Error: {str(e)}")
+
+
+
+    elif rdf_analysis_type == "Group tracking":
+
+        group_pairs = []
+
+        num_pairs = st.number_input("Enter the number of atom group pairs for tracking:", min_value=1, max_value=10, step=1)
+        bin_size_s = st.number_input("Enter bin size (optional):", value=75)
+
+        min_dist, max_dist = st.slider(
+            "Set cut-off range for distance",
+            min_value=0.0,
+            max_value=20.0,
+            value=(0.0, 15.0),  # Default values for min and max
+            step=0.1,
+        )
+
+        for i in range(num_pairs):
+            # Get atom indices for the two atom groups using space-separated input
+            atom_indices_g1 = st.text_input(
+                f"Enter indices (space-separated) for atoms in pair {i + 1} group 1").split()
+            atom_indices_g2 = st.text_input(
+                f"Enter indices (space-separated) for atoms in pair {i + 1} group 2").split()
+
+            try:
+                # Convert indices from string to integer
+                atom_indices_g1 = [(int(index) - 1) for index in atom_indices_g1]
+                atom_indices_g2 = [(int(index) - 1) for index in atom_indices_g2]
+            except ValueError:
+                st.write("Please ensure you've entered only space-separated integers for atom indices.")
+                return
+
+
+            # Create AtomGroup instances
+
+            ag1 = u.atoms[atom_indices_g1]
+
+            ag2 = u.atoms[atom_indices_g2]
+
+            # Append atom group pairs to the list
+
+            group_pairs.append((ag1, ag2))
+
+        if st.button('Do individual tracking analysis'):
+
+            try:
+
+                st.write("Running individual tracking analysis...")
+
+
+                rdf_data = site_specific_rdf(u, group_pairs, bins=bin_size_s, range=(min_dist, max_dist), density=True, time_range=t_range)
+
+                rdf_dataframe = rdf_to_dataframe(rdf_data, group_pairs)
+
+                with st.expander("Download RDF data"):
+                    st.dataframe(rdf_dataframe, use_container_width=True)
+
+                # Create and display the plot after rdf_df is generated.
+                rdf_plot_v2 = plot_atom_pairs_rdf(rdf_dataframe)
+                st.plotly_chart(rdf_plot_v2, use_container_width=True)
+
+
+            except Exception as e:
+
+                st.write(f"Error: {str(e)}")
+
+    pass
+
+def handle_distance_analysis(u):
+    distance_analysis_type = st.selectbox("Select Analysis Type", ("Overall statistics", "Individual tracking"))
+    if distance_analysis_type == "Overall statistics":
+        atom1 = st.text_input("Enter first atom for distance analysis")
+        atom2 = st.text_input("Enter second atom for distance analysis")
+        standard_distance = st.number_input("Enter a standard distance for comparison: ", min_value=0.0, max_value=10.0,
+                                            step=0.01)
+
+        if st.button('Do distance analysis'):
+            try:
+                # st.write("Building universe...")
+                # u = build_universe_from_dir('frames_dir', timestep=timestep)
+                st.write("Running minimum distance analysis...")
+                fig, dist_df = plot_and_return_min_distances(u, atom1, atom2, standard_distance)
+                with st.expander("Distance values"):
+                    st.dataframe(dist_df, hide_index=True, use_container_width=True)
+                fig_heatmap_png = generate_weighted_pair_probability_heatmap(dist_df)
+                fig_heatmap = generate_weighted_pair_probability_heatmap_plotly(dist_df)
+
+                # Use st.columns to display figures side by side
+                col1, col_space, col2 = st.columns([1, 0.4, 1])
+                with col1:
+                    st.write("Minimum Distances Plot:")
+                    st.plotly_chart(fig)
+                with col2:
+                    st.write("Weighted Pair Formation Probability Plot:")
+                    st.plotly_chart(fig_heatmap)
+                # Provide a download link for the PNG image below the heatmap
+                st.markdown(get_figure_image_download_link(fig_heatmap_png), unsafe_allow_html=True)
+
+
+            except Exception as e:
+                st.write(f"Error: {str(e)}")
+
+
+    elif distance_analysis_type == "Individual tracking":
+
+        atom_pairs = []
+
+        num_pairs = st.number_input("Enter the number of atom pairs for tracking:", min_value=1, max_value=10, step=1)
+        min_time = 0.0
+        max_time = u.trajectory[-1].time
+        time_range = st.slider("Select the time range for analysis (ps):",
+                                     min_value=min_time,
+                                     max_value=max_time,
+                                     value=(min_time, max_time),
+                                     step=0.1)
+        standard_distance = st.number_input("Enter a standard distance for comparison: ", min_value=0.0, max_value=10.0,
+                                            step=0.01)
+
+        for i in range(num_pairs):
+            # User inputs the pair of atom indices as a comma-separated string
+            indices_input = st.text_input(f"Enter indices of atom pair {i + 1} (e.g., 1,2):", key=f"pair_{i}")
+
+            try:
+                atom_index1, atom_index2 = [(int(index.strip()) - 1) for index in indices_input.split(',')]
+                atom_pairs.append((atom_index1, atom_index2))
+            except ValueError:
+                # Handle the case where the input format is incorrect
+                st.error("Please enter a valid pair of indices separated by a comma.")
+        if st.button('Do individual tracking analysis'):
+            try:
+                st.write("Running individual tracking analysis...")
+                # fig = plot_atom_distances_over_time_matplotlib(u, standard_distance, *atom_pairs,start_time= start_time_input)
+                fig, data_df= plot_atom_distances_over_time(u, standard_distance, *atom_pairs,
+                                                               start_time=time_range[0], end_time=time_range[1])
+
+                with st.expander("Download Data"):
+                    st.write("Hover mouse over the table to see the download button")
+                    st.dataframe(data_df, use_container_width=True, hide_index=True)
+
+                # Display the plot
+                st.plotly_chart(fig, use_container_width=True)
+                # st.pyplot(fig, use_container_width=True)
+
+
+            except Exception as e:
+
+                st.write(f"Error: {str(e)}")
+
+    pass
+
+def create_dist_analysis_plots(df1, df2, df3):
+    plots = []
+
+    # Plot 1: Time vs. 50-point moving average of Angle
+    fig1, ax1 = plt.subplots()
+    for atoms, group in df1.groupby('Atoms'):
+        # Calculate 50-point moving average
+        ma_angle = group['Angle'].rolling(window=50, min_periods=1).mean()
+        ax1.plot(group['Time'], ma_angle)
+    ax1.set_xlabel('Time')
+    ax1.set_ylabel('Angle (50-pt MA)')
+    ax1.set_title('Time vs. Angle (50-pt Moving Average)')
+    plots.append(fig1)
+
+    # Plot 2: Time vs. 50-point moving average of In-Plane and Out-Plane
+    fig2, ax2 = plt.subplots()
+    for atoms, group in df1.groupby('Atoms'):
+        # Calculate 50-point moving averages
+        ma_in_plane = group['In-Plane'].rolling(window=50, min_periods=1).mean()
+        ma_out_plane = group['Out-Plane'].rolling(window=50, min_periods=1).mean()
+
+        ax2.plot(group['Time'], ma_in_plane)
+        ax2.plot(group['Time'], ma_out_plane)
+    ax2.set_xlabel('Time')
+    ax2.set_ylabel('Plane Value (50-pt MA)')
+    ax2.set_title('Time vs. In-Plane and Out-Plane (50-pt Moving Average)')
+    plots.append(fig2)
+
+    # Plot 3: Time vs. Bond Distance Variance (using df2)
+    fig3, ax3 = plt.subplots()
+    for col in df2.columns:
+        if col != 'Time':
+            ax3.plot(df2['Time'], df2[col])
+    ax3.set_xlabel('Time')
+    ax3.set_ylabel('Bond Distance Variance')
+    ax3.set_title('Time vs. Bond Distance Variance')
+    plots.append(fig3)
+
+    # Plot 4: Time vs. Angle Variance (using df3)
+    fig4, ax4 = plt.subplots()
+    for col in df3.columns:
+        if col != 'Time':
+            ax4.plot(df3['Time'], df3[col])
+    ax4.set_xlabel('Time')
+    ax4.set_ylabel('Angle Variance')
+    ax4.set_title('Time vs. Angle Variance')
+    plots.append(fig4)
+
+    return plots
+
+
+def create_probability_distribution_plots(df1, df2, df3):
+    plots = []
+
+    # Plot for Angle Distribution
+    fig_angle, ax_angle = plt.subplots()
+    ax_angle.hist(df1['Angle'], bins=100, density=True, alpha=0.6, color='g')
+    ax_angle.set_title('Probability Distribution of Angle')
+    ax_angle.set_xlabel('Angle')
+    ax_angle.set_ylabel('Probability Density')
+    plots.append(fig_angle)
+
+    # Plot for Beta Distribution
+    fig_beta, ax_beta = plt.subplots()
+    ax_beta.hist(df1['Beta'], bins=100, density=True, alpha=0.6, color='g')
+    ax_beta.set_title('Probability Distribution of Beta')
+    ax_beta.set_xlabel('Beta')
+    ax_beta.set_ylabel('Probability Density')
+    plots.append(fig_beta)
+
+    # Plot for In-Plane and Out-Plane Distribution
+    fig_plane, ax_plane = plt.subplots()
+    ax_plane.hist(df1['In-Plane'], bins=100, density=True, alpha=0.6, color='r', label='In-Plane')
+    ax_plane.hist(df1['Out-Plane'], bins=100, density=True, alpha=0.6, color='b', label='Out-Plane')
+    ax_plane.set_title('Probability Distribution of In-Plane and Out-Plane')
+    ax_plane.set_xlabel('Plane Value')
+    ax_plane.set_ylabel('Probability Density')
+    ax_plane.legend()
+    plots.append(fig_plane)
+
+    # Plot for Bond Distance Variance Distribution
+    fig_bdv, ax_bdv = plt.subplots()
+    melted_bdv = pd.melt(df2, id_vars=['Time'], value_vars=df2.columns[1:])
+    ax_bdv.hist(melted_bdv['value'].dropna(), bins=30, density=True, alpha=0.6, color='y')
+    ax_bdv.set_title('Probability Distribution of Bond Distance Variance')
+    ax_bdv.set_xlabel('Bond Distance Variance')
+    ax_bdv.set_ylabel('Probability Density')
+    plots.append(fig_bdv)
+
+    # Plot for Angle Variance Distribution
+    fig_av, ax_av = plt.subplots()
+    melted_av = pd.melt(df3, id_vars=['Time'], value_vars=df3.columns[1:])
+    ax_av.hist(melted_av['value'].dropna(), bins=30, density=True, alpha=0.6, color='c')
+    ax_av.set_title('Probability Distribution of Angle Variance')
+    ax_av.set_xlabel('Angle Variance')
+    ax_av.set_ylabel('Probability Density')
+    plots.append(fig_av)
+
+    return plots

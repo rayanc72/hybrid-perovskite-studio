@@ -75,17 +75,17 @@ def read_structure_file(fileobj, file_format='aims'):
     os.unlink(temp_file.name)  # Remove the temporary file
     return atoms
 
-def initialize_structure(uploaded_data, file_format, file_name, exceptions=None):
+def initialize_structure(uploaded_data, file_format, file_name, exceptions=None,b_p=0):
     name_base = os.path.splitext(file_name)[0]
 
     atoms = read_structure_file(uploaded_data, file_format=file_format)
 
     print_space_group(atoms)
-    molecules = detect_molecules(atoms, exceptions=exceptions)
+    molecules = detect_molecules(atoms, exceptions=exceptions, b=b_p)
     modified_symbols = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(atoms)]
     write_modified_aims_file(atoms, name_base + '_labelled.in')
-    modified_atoms = atoms.copy()
-    output_suffix = ""
+    # modified_atoms = atoms.copy()
+    # output_suffix = ""
     return atoms, molecules, modified_symbols
 
 def initialize_structure_v2(uploaded_data, file_format):
@@ -1510,19 +1510,18 @@ def filter_atoms_by_symbols_and_extend(atoms, A, B):
     new_atoms = Atoms(symbols=new_symbols, positions=new_positions, cell=atoms.cell, pbc=atoms.pbc)
 
     # Create a supercell
-    new_atoms = new_atoms * (3, 3, 3)  # Extending from -1.5 to 1.5 in all directions
+    new_atoms_ext = new_atoms * (3, 3, 3)  # Extending from -1.5 to 1.5 in all directions
 
     # Convert to Cartesian coordinates if not already
-    new_atoms.set_positions(new_atoms.get_positions(wrap=True))
+    new_atoms_ext.set_positions(new_atoms_ext.get_positions(wrap=True))
 
     # Create a dictionary to track new atom indices from periodic images
-    periodic_image_dict = {}
-    n_original_atoms = len(new_symbols)
-    for idx, _ in enumerate(new_atoms):
-        if idx >= n_original_atoms:
-            periodic_image_dict[idx] = idx - n_original_atoms  # Mapping new index to corresponding original index
+    periodic_image_dict = {index: [] for index in range(len(new_atoms))}
+    for super_index, super_atom in enumerate(new_atoms_ext):
+        original_index = super_index % len(new_atoms)
+        periodic_image_dict[original_index].append(super_index)  # Mapping new index to corresponding original index
 
-    return new_atoms, periodic_image_dict
+    return new_atoms_ext, periodic_image_dict
 
 
 def identify_AB_groups(atoms, A: str, B: str, b=0, c=0):
@@ -2067,12 +2066,44 @@ def extract_structure_file_path(zip_data):
                     tmp_file.write(source_file.read())
                 return tmp_file.name  # Return the path to the temporary file
         return None
-def handle_bridging_angles(result):
-    angle, beta = result
-    return [
-        ('Bridging angle(s)', str(list(angle.keys())[0:]).strip('[]')),
-        ('Beta', str(beta).strip('[]'))
-    ]
+def handle_bridging_angles(result, atom_dict):
+    """
+    Processes angle entries, replaces supercell atom indices with original ones, and
+    formats the output for a DataFrame with merged Atoms and Bridging angles in one row.
+
+    Args:
+    - result (tuple): A tuple with a dictionary of angles and a list of beta values.
+    - atom_dict (dict): A dictionary mapping original atom indices to their images in the supercell.
+
+    Returns:
+    - list: A list of tuples, each tuple representing a row in the DataFrame.
+    """
+    angles, betas = result
+    output_data = []
+
+    # Function to map supercell indices to original atom indices
+    def map_indices_to_original(indices):
+        original_indices = []
+        for index in indices:
+            for key, values in atom_dict.items():
+                if index in values:
+                    original_indices.append(key)
+                    break
+        return original_indices
+
+    # Merging Atoms and Bridging angles data
+    merged_data = []
+    for angle_value, atom_indices in angles.items():
+        original_atom_indices = map_indices_to_original(atom_indices)
+        formatted_atoms = ', '.join(map(str, original_atom_indices))
+        merged_data.append(f"{angle_value}({formatted_atoms})")
+    output_data.append(('Bridging angle (atom indices)', ', '.join(merged_data)))
+
+    # Beta data
+    beta_data = ', '.join([str(beta) for beta in betas])
+    output_data.append(('Beta', beta_data))
+
+    return output_data
 
 def handle_in_out_deviations(result):
     output = []

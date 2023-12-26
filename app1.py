@@ -224,11 +224,21 @@ if file_buffer is not None:
         file_format = get_file_format(file_name)
 
         if file_buffer is not None:
+            # with st.expander ("Modify bonding rules"):
+            #     st.write('''
+            #     Ensure the connectivities in "See detected molecules" look okay!\n
+            #     If you see isolated inorganic framework that you think should be a layer or a chain, increase the bond distance limit.
+            #                                              ''')
+            #     b_param = st.number_input("Enter value (Å) for relaxing the bond distance limit:", value=0.00)
+            #     st.write("If you see two atoms that should not be bonded (e.g., strong organic-inorganic interaction, type the atom names below")
+            #     exception_list = st.text_input('Enter a comma-separated list of atom names:', 'I, F')
+            #     exception_atom_list = [atom_name.strip() for atom_name in  exception_list.split(',')]
             if 'atoms' not in st.session_state or st.session_state.file_name != file_name:
                 try:
+
                     file_format = get_file_format(file_buffer.name)
                     atoms, molecules, modified_symbols = initialize_structure(file_buffer, file_format=file_format,
-                                                                              file_name=file_buffer.name, exceptions=[("F", "I")])
+                                                                              file_name=file_buffer.name, exceptions=[("F", "I")],b_p=0)
                     st.session_state.atoms = copy.deepcopy(atoms)
                     st.session_state.molecules = molecules
                     st.session_state.modified_symbols = modified_symbols
@@ -1047,7 +1057,7 @@ if st.session_state.atoms is not None:
                 for func_name, func in distortion_mapping.items():
                     result = func(AB6_octahedra, super_atoms)
                     if func_name == 'Bridging angle(s)':
-                        output_data.extend(handle_bridging_angles(result))
+                        output_data.extend(handle_bridging_angles(result, periodic_image_dict))
                     elif func_name == 'In and out deviations':
                         output_data.extend(handle_in_out_deviations(result))
                     else:
@@ -1055,7 +1065,7 @@ if st.session_state.atoms is not None:
             else:
                 result = distortion_mapping[distortion_type](AB6_octahedra, super_atoms)
                 if distortion_type == 'Bridging angle(s)':
-                    output_data.extend(handle_bridging_angles(result))
+                    output_data.extend(handle_bridging_angles(result, periodic_image_dict))
                 elif distortion_type == 'In and out deviations':
                     output_data.extend(handle_in_out_deviations(result))
                 else:
@@ -1603,7 +1613,6 @@ def handle_distortion_analysis(u):
 
     # Generate atom group with the atom_indices
     atom_group = u.select_atoms(f'name {center_atom} or name {surrounding_atoms}')
-
     # Add a button to trigger calculations
     if st.button('Do Analysis'):
 
@@ -1671,11 +1680,12 @@ def handle_distortion_analysis(u):
 
         # Convert to DataFrames
         df1 = pd.DataFrame(results_df1)
+        df1_mod = replace_indices_with_original(periodic_image_dict, df1)
         df2 = pd.DataFrame(results_df2).drop_duplicates(subset=['Time']).reset_index(drop=True)
         df3 = pd.DataFrame(results_df3).drop_duplicates(subset=['Time']).reset_index(drop=True)
 
         # Return the DataFrame
-        return df1, df2, df3
+        return df1_mod, df2, df3
 
 def build_universe_and_analyze(timestep):
     st.write("Building universe...")
@@ -1727,8 +1737,14 @@ if MDanalysis_option:
                         st.dataframe(dist_df2, hide_index=True, use_container_width=True)
                         st.dataframe(dist_df3, hide_index=True, use_container_width=True)
 
-                    f1, f2, f3, f4 = create_violin_plots_plotly(dist_df1, dist_df2, dist_df3)
-                    f5, f6, f7, f8 = create_probability_distribution_plots_plotly(dist_df1, dist_df2, dist_df3, bin_size=200)
+                    # Generate plots
+                    f1, f2, f3, f4 = create_violin_plots_plotly(dist_df1,
+                                                                dist_df2,
+                                                                dist_df3)
+                    f5, f6, f7, f8 = create_probability_distribution_plots_plotly(dist_df1,
+                                                                                  dist_df2,
+                                                                                  dist_df3,
+                                                                                  bin_size=30)
 
                     # Create a 2x2 grid for plots
                     col1, col2 = st.columns(2)

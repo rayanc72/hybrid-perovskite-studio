@@ -1637,7 +1637,7 @@ def handle_distortion_analysis(u):
                 # Update progress bar
                 frame_counter += 1
                 progress = frame_counter / total_frames
-                progress_bar.progress(progress,text=f"{progress * 100}%")
+                progress_bar.progress(progress,text=f"{int(progress * 100)} % completed")
 
                 # Append data for DataFrame 1
                 for i, (angle, atoms) in enumerate(result_angle[0].items()):
@@ -1671,8 +1671,8 @@ def handle_distortion_analysis(u):
 
         # Convert to DataFrames
         df1 = pd.DataFrame(results_df1)
-        df2 = pd.DataFrame(results_df2)
-        df3 = pd.DataFrame(results_df3)
+        df2 = pd.DataFrame(results_df2).drop_duplicates(subset=['Time']).reset_index(drop=True)
+        df3 = pd.DataFrame(results_df3).drop_duplicates(subset=['Time']).reset_index(drop=True)
 
         # Return the DataFrame
         return df1, df2, df3
@@ -1727,18 +1727,26 @@ if MDanalysis_option:
                         st.dataframe(dist_df2, hide_index=True, use_container_width=True)
                         st.dataframe(dist_df3, hide_index=True, use_container_width=True)
 
-                    f1, f2, f3, f4, f5 = create_probability_distribution_plots(dist_df1, dist_df2, dist_df3)
+                    f1, f2, f3, f4 = create_violin_plots_plotly(dist_df1, dist_df2, dist_df3)
+                    f5, f6, f7, f8 = create_probability_distribution_plots_plotly(dist_df1, dist_df2, dist_df3, bin_size=200)
 
                     # Create a 2x2 grid for plots
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.pyplot(f1)
-                        st.pyplot(f3)
+                        # st.pyplot(f1)
+                        # st.pyplot(f3)
+                        st.plotly_chart(f1)
+                        st.plotly_chart(f2)
+                        st.plotly_chart(f3)
+                        st.plotly_chart(f4)
 
                     with col2:
-                        st.pyplot(f4)
-                        st.pyplot(f5)
-                        # st.pyplot(f2)
+                        st.plotly_chart(f5)
+                        st.plotly_chart(f6)
+                        st.plotly_chart(f7)
+                        st.plotly_chart(f8)
+
+
             except Exception as e:
                 st.warning("Click on the analysis button")
 

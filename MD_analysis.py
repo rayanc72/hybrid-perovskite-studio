@@ -1569,3 +1569,85 @@ def create_probability_distribution_plots(df1, df2, df3):
     plots.append(fig_av)
 
     return plots
+
+def create_probability_distribution_plots_plotly(df1, df2, df3, bin_size=30):
+    plots = []
+
+    # Define colors for the plots
+    colors = {
+        'Angle': 'blue',
+        'In-Plane': 'red',
+        'Out-Plane': 'green',
+        'Bond Distance Variance': 'orange',
+        'Angle Variance': 'purple'
+    }
+
+    # Plot for Angle Distribution
+    fig_angle = go.Figure(data=[go.Histogram(x=df1['Angle'], nbinsx=bin_size, marker_color=colors['Angle'])])
+    fig_angle.update_layout(title='Probability Distribution of Angle',
+                            xaxis_title='Angle',
+                            yaxis_title='Probability Density')
+    plots.append(fig_angle)
+
+    # Plot for In-Plane and Out-Plane Distribution
+    fig_plane = go.Figure()
+    fig_plane.add_trace(go.Histogram(x=df1['In-Plane'], nbinsx=bin_size, name='In-Plane', marker_color=colors['In-Plane']))
+    fig_plane.add_trace(go.Histogram(x=df1['Out-Plane'], nbinsx=bin_size, name='Out-Plane', marker_color=colors['Out-Plane']))
+    fig_plane.update_layout(title='Probability Distribution of In-Plane and Out-Plane',
+                            xaxis_title='Plane Value',
+                            yaxis_title='Probability Density',
+                            barmode='overlay')
+    fig_plane.update_traces(opacity=0.6)
+    plots.append(fig_plane)
+
+    # Plot for Bond Distance Variance Distribution
+    fig_bdv = go.Figure()
+    melted_bdv = pd.melt(df2, id_vars=['Time'], value_vars=df2.columns[1:])
+    fig_bdv.add_trace(go.Histogram(x=melted_bdv['value'].dropna(), nbinsx=bin_size, marker_color=colors['Bond Distance Variance']))
+    fig_bdv.update_layout(title='Probability Distribution of Bond Distance Variance',
+                          xaxis_title='Bond Distance Variance',
+                          yaxis_title='Probability Density')
+    plots.append(fig_bdv)
+
+    # Plot for Angle Variance Distribution
+    fig_av = go.Figure()
+    melted_av = pd.melt(df3, id_vars=['Time'], value_vars=df3.columns[1:])
+    fig_av.add_trace(go.Histogram(x=melted_av['value'].dropna(), nbinsx=bin_size, marker_color=colors['Angle Variance']))
+    fig_av.update_layout(title='Probability Distribution of Angle Variance',
+                         xaxis_title='Angle Variance',
+                         yaxis_title='Probability Density')
+    plots.append(fig_av)
+
+    return plots
+
+def create_violin_plots_plotly(df1, df2, df3):
+    plots = []
+
+    # Violin Plot for Angle Distribution
+    fig_angle = go.Figure()
+    fig_angle.add_trace(go.Violin(y=df1['Angle'], box_visible=True, line_color='black', fillcolor='blue', opacity=0.8))
+    fig_angle.update_layout(title='Angle', yaxis_title='Angle (degree)')
+    plots.append(fig_angle)
+
+    # Violin Plot for In-Plane and Out-Plane Distribution
+    fig_plane = go.Figure()
+    fig_plane.add_trace(go.Violin(y=df1['In-Plane'], name='In-Plane', box_visible=True, line_color='black', fillcolor='red', opacity=0.8))
+    fig_plane.add_trace(go.Violin(y=df1['Out-Plane'], name='Out-Plane', box_visible=True, line_color='black', fillcolor='green', opacity=0.8))
+    fig_plane.update_layout(title='In-Plane and Out-Plane Deviations', yaxis_title='Deviation (degree)')
+    plots.append(fig_plane)
+
+    # Violin Plot for Bond Distance Variance Distribution
+    fig_bdv = go.Figure()
+    melted_bdv = pd.melt(df2, id_vars=['Time'], value_vars=df2.columns[1:])
+    fig_bdv.add_trace(go.Violin(y=melted_bdv['value'].dropna(), name='Bond Distance Variance', box_visible=True, line_color='black', fillcolor='orange', opacity=0.8))
+    fig_bdv.update_layout(title='Bond Distance Variance', yaxis_title='Bond Distance Variance')
+    plots.append(fig_bdv)
+
+    # Violin Plot for Angle Variance Distribution
+    fig_av = go.Figure()
+    melted_av = pd.melt(df3, id_vars=['Time'], value_vars=df3.columns[1:])
+    fig_av.add_trace(go.Violin(y=melted_av['value'].dropna(), name='Angle Variance', box_visible=True, line_color='black', fillcolor='purple', opacity=0.8))
+    fig_av.update_layout(title='Angle Variance', yaxis_title='Angle Variance')
+    plots.append(fig_av)
+
+    return plots

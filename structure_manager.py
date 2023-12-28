@@ -1698,11 +1698,14 @@ def volume_octahedron_del(input_list):
 
 
 
-def calculate_bond_distance_variance(AB_groups, atoms_obj):
-    distance_variances = []
+def calculate_bond_distance_variance(AB_groups, atoms_obj, atom_dict):
+    unique_distance_variance_with_idx = {}
+    atom_name = []
 
     for A, B_list in AB_groups.items():
         pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        atom_name.append(atoms_obj[A].symbol)
 
         # Extract positions for B atoms
         B_positions = [atoms_obj[B].position.tolist() for B in B_list]
@@ -1716,20 +1719,31 @@ def calculate_bond_distance_variance(AB_groups, atoms_obj):
         # Calculate ideal distance d0
         d0 = (a / np.sqrt(2))
 
-        # debug: is the distance correct?
-        # distances = [np.linalg.norm(pos_A - atoms_obj[B].position) for B in B_list]
-        # print(distances)
-
         distance_squares = [(np.linalg.norm(pos_A - atoms_obj[B].position) / d0) ** 2 for B in B_list]
-        # print(distance_squares)
 
-        # Calculate the distance variance and round to 3 decimal places
         distance_variance = sum(distance_squares) / 6.0
+        rounded_variance = round(distance_variance, 6)
 
-        distance_variances.append(distance_variance)
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
 
-    # Only return unique values, rounded to 4 decimal places
-    return list(set([round(x, 6) for x in distance_variances]))
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        variance_list.append(f"{variance} ({atom_name[0]}{original_idx + 1})")               # add 1 to match with VESTA
+
+    return variance_list
 
 
 import itertools
@@ -1741,11 +1755,14 @@ def calculate_angle(P, A, B):
     theta_deg = np.degrees(theta_rad)
     return theta_deg
 
-def calculate_angle_variance(AB_groups, atoms_obj):
-    angle_variances = {}
+def calculate_angle_variance(AB_groups, atoms_obj, atom_dict):
+    unique_variances_with_idx = {}
+    atom_name = []
 
     for A, B_list in AB_groups.items():
         pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        atom_name.append(atoms_obj[A].symbol)
         angle_squares = []
 
         # Generate all B-A-B combinations
@@ -1779,12 +1796,30 @@ def calculate_angle_variance(AB_groups, atoms_obj):
         angle_variance = sum(angle_squares) / 11.0
         rounded_variance = round(angle_variance, 3)
 
-        angle_variances[A] = rounded_variance
-    unique_angle_variances = list(set(angle_variances.values()))
+        # Check if the variance already exists
+        if rounded_variance not in unique_variances_with_idx or idx_A < unique_variances_with_idx[rounded_variance]:
+            unique_variances_with_idx[rounded_variance] = idx_A
 
-    return unique_angle_variances
+    mapped_variances_with_original_idx = {}
 
-def calculate_unique_ABA_angles(AB_groups, atoms_obj):
+    for variance, supercell_idx in unique_variances_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        variance_list.append(f"{variance} ({atom_name[0]}{original_idx + 1})")                      # add 1 to match with VESTA
+
+
+    return variance_list
+
+def calculate_unique_ABA_angles(AB_groups, atoms_obj, atom_dict=None):
     ABA_groups = detect_ABA_groups(AB_groups)
     # Dictionary to store angles for each ABA group
     ABA_angles = {}
@@ -1961,7 +1996,7 @@ def calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj):
 
     return in_out_plane_angles
 
-def calculate_in_out_planes(AB_groups, atoms_obj):
+def calculate_in_out_planes(AB_groups, atoms_obj, atom_dict=None):
     unique_angles_dict, _ = calculate_unique_ABA_angles(AB_groups, atoms_obj)
     in_planes = find_in_planes(atoms_obj, unique_angles_dict)
     perp_planes = find_perpendicular_planes(in_planes, atoms_obj)

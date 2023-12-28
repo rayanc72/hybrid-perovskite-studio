@@ -1033,46 +1033,57 @@ if st.session_state.atoms is not None:
              'all')
         )
 
+        with st.expander ("Optional parameters"):
+            # Experimental
+            b_parameter = st.number_input("Relax the bond distance limit (useful for chloride-based systems):",
+                                          value=0.00)
+            c_paramter = st.number_input("Relax the octahedron distortion limit (useful for highly distorted systems):",
+                                         value=0.00)
+
         # Button for confirmation
         if st.button('Calculate'):
-            super_atoms, periodic_image_dict = filter_atoms_by_symbols_and_extend(modified_atoms, center_atom,
-                                                                                  surrounding_atoms)
-            AB6_octahedra, AB_distances = identify_AB_groups(super_atoms, center_atom, surrounding_atoms)
-            unq_AB_distances = filter_unique_distances(AB_distances)
-            octahedral_distances = find_matching_distances(modified_atoms, center_atom, surrounding_atoms,
-                                                           unq_AB_distances)
+            try:
+                super_atoms, periodic_image_dict = filter_atoms_by_symbols_and_extend(modified_atoms, center_atom,
+                                                                                      surrounding_atoms)
+                AB6_octahedra, AB_distances = identify_AB_groups(super_atoms, center_atom, surrounding_atoms, b=b_parameter, c=c_paramter)
+                unq_AB_distances = filter_unique_distances(AB_distances)
+                octahedral_distances = find_matching_distances(modified_atoms, center_atom, surrounding_atoms,
+                                                               unq_AB_distances)
 
-            st.markdown(f'**Distance of {center_atom} - {surrounding_atoms} bonds in octahedra**')
-            st.dataframe(octahedral_distances, use_container_width=True, hide_index=True)
+                st.markdown(f'**Distance of {center_atom} - {surrounding_atoms} bonds in octahedra**')
+                st.dataframe(octahedral_distances, use_container_width=True, hide_index=True)
 
-            distortion_mapping = {
-                'Bond distance variance': calculate_bond_distance_variance,
-                'Angle variance': calculate_angle_variance,
-                'Bridging angle(s)': calculate_unique_ABA_angles,
-                'In and out deviations': calculate_in_out_planes,
-            }
+                distortion_mapping = {
+                    'Bond distance variance': calculate_bond_distance_variance,
+                    'Angle variance': calculate_angle_variance,
+                    'Bridging angle(s)': calculate_unique_ABA_angles,
+                    'In and out deviations': calculate_in_out_planes,
+                }
 
-            output_data = []
-            if distortion_type == 'all':
-                for func_name, func in distortion_mapping.items():
-                    result = func(AB6_octahedra, super_atoms)
-                    if func_name == 'Bridging angle(s)':
+                output_data = []
+                if distortion_type == 'all':
+                    for func_name, func in distortion_mapping.items():
+                        result = func(AB6_octahedra, super_atoms, periodic_image_dict)
+                        if func_name == 'Bridging angle(s)':
+                            output_data.extend(handle_bridging_angles(result, periodic_image_dict))
+                        elif func_name == 'In and out deviations':
+                            output_data.extend(handle_in_out_deviations(result))
+                        else:
+                            output_data.append((func_name, ', '.join(result)))
+                else:
+                    result = distortion_mapping[distortion_type](AB6_octahedra, super_atoms, periodic_image_dict)
+                    if distortion_type == 'Bridging angle(s)':
                         output_data.extend(handle_bridging_angles(result, periodic_image_dict))
-                    elif func_name == 'In and out deviations':
+                    elif distortion_type == 'In and out deviations':
                         output_data.extend(handle_in_out_deviations(result))
                     else:
-                        output_data.append((func_name, str(result).strip('[]')))
-            else:
-                result = distortion_mapping[distortion_type](AB6_octahedra, super_atoms)
-                if distortion_type == 'Bridging angle(s)':
-                    output_data.extend(handle_bridging_angles(result, periodic_image_dict))
-                elif distortion_type == 'In and out deviations':
-                    output_data.extend(handle_in_out_deviations(result))
-                else:
-                    output_data.append((distortion_type, str(result).strip('[]')))
+                        output_data.append((distortion_type, ', '.join(result)))
 
-            df = pd.DataFrame(output_data, columns=['Distortion Parameter', 'Value'])
-            st.dataframe(df, use_container_width=True, hide_index=True)
+                df = pd.DataFrame(output_data, columns=['Distortion Parameter', 'Value'])
+                st.dataframe(df, use_container_width=True, hide_index=True)
+            except Exception as e:
+                st.error(e)
+                st.write ('If you see an error message '"['A_index'] not found in axis"', try increasing the bond distance limit (e.g., to 0.5) and the octahedron distortion limit (e.g., to 0.3) in the Optional parameters box.')
 
 if interpolate_option:
     st.header("Interpolate Structures", divider='violet')
@@ -1640,8 +1651,8 @@ def handle_distortion_analysis(u):
 
                 result_angle = calculate_unique_ABA_angles(AB6_octahedra, new_atoms)
                 result_iop = calculate_in_out_planes(AB6_octahedra, new_atoms)
-                result_bdv = calculate_bond_distance_variance(AB6_octahedra, new_atoms)
-                result_av = calculate_angle_variance(AB6_octahedra, new_atoms)
+                result_bdv = calculate_bond_distance_variance(AB6_octahedra, new_atoms, periodic_image_dict)
+                result_av = calculate_angle_variance(AB6_octahedra, new_atoms, periodic_image_dict)
 
                 # Update progress bar
                 frame_counter += 1
@@ -1668,21 +1679,23 @@ def handle_distortion_analysis(u):
         progress_bar.empty()
 
         # Determine the maximum number of variances
-        max_bdv_len = max(len(bdv) for _, bdv in bdv_lists)
-        max_av_len = max(len(av) for _, av in av_lists)
+        # max_bdv_len = max(len(bdv) for _, bdv in bdv_lists)
+        # max_av_len = max(len(av) for _, av in av_lists)
 
         # Create DataFrame 2 and DataFrame 3
-        results_df2 = [{'Time': time, **{f'Bond Distance Variance {i + 1}': bdv[i] if i < len(bdv) else None for i in
-                                         range(max_bdv_len)}} for time, bdv in bdv_lists]
-        results_df3 = [
-            {'Time': time, **{f'Angle Variance {i + 1}': av[i] if i < len(av) else None for i in range(max_av_len)}} for
-            time, av in av_lists]
+        # results_df2 = [{'Time': time, **{f'Bond Distance Variance {i + 1}': bdv[i] if i < len(bdv) else None for i in
+        #                                  range(max_bdv_len)}} for time, bdv in bdv_lists
+
+
+        # results_df3 = [
+        #     {'Time': time, **{f'Angle Variance {i + 1}': av[i] if i < len(av) else None for i in range(max_av_len)}} for
+        #     time, av in av_lists]
 
         # Convert to DataFrames
         df1 = pd.DataFrame(results_df1)
         df1_mod = replace_indices_with_original(periodic_image_dict, df1)
-        df2 = pd.DataFrame(results_df2).drop_duplicates(subset=['Time']).reset_index(drop=True)
-        df3 = pd.DataFrame(results_df3).drop_duplicates(subset=['Time']).reset_index(drop=True)
+        df2 = create_variance_dataframe(bdv_lists)
+        df3 = create_variance_dataframe(av_lists)
 
         # Return the DataFrame
         return df1_mod, df2, df3
@@ -1733,8 +1746,11 @@ if MDanalysis_option:
                 dist_df1, dist_df2, dist_df3 = handle_distortion_analysis(u)
                 if dist_df1 is not None:
                     with st.expander("Download data"):
+                        st.subheader("Bridging Angles and Deviations")
                         st.dataframe(dist_df1, hide_index=True, use_container_width=True)
+                        st.subheader("Bond Distance Variance")
                         st.dataframe(dist_df2, hide_index=True, use_container_width=True)
+                        st.subheader("Angle Variance")
                         st.dataframe(dist_df3, hide_index=True, use_container_width=True)
 
                     # Generate plots
@@ -1763,8 +1779,12 @@ if MDanalysis_option:
                         st.plotly_chart(f8)
 
 
+            except TypeError:
+                pass
+
             except Exception as e:
-                st.warning("Click on the analysis button")
+                # st.warning("Click on the analysis button")
+                st.error(e)
 
         elif analysis_type == "Average Structure":
             start_time = st.number_input("Enter time (ps) to set first frame: ", min_value=0.00, max_value=100.0, step=0.0001)

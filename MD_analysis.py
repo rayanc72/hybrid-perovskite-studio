@@ -1651,3 +1651,63 @@ def create_violin_plots_plotly(df1, df2, df3):
     plots.append(fig_av)
 
     return plots
+
+
+def replace_indices_with_original(atom_dict, df):
+    """
+    Replaces indices in the DataFrame from supercell indices to original atom indices,
+    retaining all values including duplicates.
+
+    Args:
+    - atom_dict (dict): A dictionary mapping original atom indices to their images in the supercell.
+    - df (pd.DataFrame): A pandas DataFrame with a column "Atoms" containing lists of supercell atom indices.
+
+    Returns:
+    - pd.DataFrame: The DataFrame with updated "Atoms" column where supercell indices are replaced with original ones.
+    """
+
+    # Function to map supercell indices to original atom indices, retaining duplicates
+    def map_indices_to_original(indices):
+        original_indices = []
+        for index in indices:
+            for key, values in atom_dict.items():
+                if index in values:
+                    original_indices.append(key)
+                    break
+        return original_indices
+
+    # Update the DataFrame
+    df['Atoms'] = df['Atoms'].apply(map_indices_to_original)
+
+    return df
+
+
+def parse_variance_and_index(bdv_item):
+    variance, index = bdv_item.split(' ')
+    return index.strip('()'), float(variance)
+
+
+def create_variance_dataframe(bdv_lists):
+    # Function to parse variance and atom index
+    def parse_variance_and_index(bdv_item):
+        variance, index = bdv_item.split(' ')
+        return index.strip('()'), float(variance)
+
+    # Extract all unique indices across all time steps
+    all_indices = set()
+    for _, bdv in bdv_lists:
+        indices = [parse_variance_and_index(item)[0] for item in bdv]
+        all_indices.update(indices)
+
+    # Create a list of dictionaries for DataFrame
+    results_df2 = []
+    for time, bdv in bdv_lists:
+        parsed_data = {'Time': time}  # Initialize with 'Time' as the first key
+        parsed_data.update({index: None for index in all_indices})  # Add all indices with None values
+        for item in bdv:
+            index, variance = parse_variance_and_index(item)
+            parsed_data[index] = variance
+        results_df2.append(parsed_data)
+
+    # Convert to DataFrame and handle duplicates
+    return pd.DataFrame(results_df2).drop_duplicates(subset=['Time']).reset_index(drop=True)

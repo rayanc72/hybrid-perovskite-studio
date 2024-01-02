@@ -2135,8 +2135,9 @@ def handle_bridging_angles(result, atom_dict):
     output_data.append(('Bridging angle (atom indices)', ', '.join(merged_data)))
 
     # Beta data
-    beta_data = ', '.join([str(beta) for beta in betas])
+    beta_data = ', '.join([str(beta) for beta in (betas if isinstance(betas, list) else [betas])])
     output_data.append(('Beta', beta_data))
+
 
     return output_data
 

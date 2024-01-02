@@ -1607,8 +1607,8 @@ def find_matching_distances(atoms, A, B, unique_filtered):
         B_symbol = atoms[B_index].symbol
         distance = row['Distance']
 
-        Atom1 = f"{A_symbol}{A_index}"
-        Atom2 = f"{B_symbol}{B_index}"
+        Atom1 = f"{A_symbol}{A_index + 1}"
+        Atom2 = f"{B_symbol}{B_index + 1}"
 
         # Check for uniqueness of the distance
         if distance not in unique_distances.keys() or A_index < unique_distances[distance]['A_index']:
@@ -2136,7 +2136,7 @@ def handle_bridging_angles(result, atom_dict):
 
     # Beta data
     beta_data = ', '.join([str(beta) for beta in (betas if isinstance(betas, list) else [betas])])
-    output_data.append(('Beta', beta_data))
+    output_data.append(('Angle difference', beta_data))
 
 
     return output_data

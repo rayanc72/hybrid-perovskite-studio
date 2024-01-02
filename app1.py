@@ -47,49 +47,49 @@ with col3:
     twitter_link()
 
 
-from yaml.loader import SafeLoader
-with open('./login_info.yaml') as file:
-    config = yaml.load(file, Loader=SafeLoader)
-
-
-
-authenticator = stauth.Authenticate(
-    config['credentials'],
-    config['cookie']['name'],
-    config['cookie']['key'],
-    config['cookie']['expiry_days'],
-    config['preauthorized']
-)
-
-name, authentication_status, username = authenticator.login('Login', 'sidebar')
-
-
-
-if st.session_state["authentication_status"]:
-    authenticator.logout('Logout', 'sidebar', key='unique_key')
-    st.write(f'Welcome, *{st.session_state["name"]}*')
-elif st.session_state["authentication_status"] is False:
-    st.error('Username/password is incorrect')
-    with st.expander("Register"):
-        try:
-            if authenticator.register_user('Register user', preauthorization=False):
-                st.success('User registered successfully')
-                with open('./login_info.yaml', 'w') as file:
-                    yaml.dump(config, file, default_flow_style=False)
-        except Exception as e:
-            st.error(e)
-    st.stop()
-elif st.session_state["authentication_status"] is None:
-    st.warning('Expand sidebar to login')
-    with st.expander("Register"):
-        try:
-            if authenticator.register_user('Register user', preauthorization=False):
-                st.success('User registered successfully')
-                with open('./login_info.yaml', 'w') as file:
-                    yaml.dump(config, file, default_flow_style=False)
-        except Exception as e:
-            st.error(e)
-    st.stop()
+# from yaml.loader import SafeLoader
+# with open('./login_info.yaml') as file:
+#     config = yaml.load(file, Loader=SafeLoader)
+#
+#
+#
+# authenticator = stauth.Authenticate(
+#     config['credentials'],
+#     config['cookie']['name'],
+#     config['cookie']['key'],
+#     config['cookie']['expiry_days'],
+#     config['preauthorized']
+# )
+#
+# name, authentication_status, username = authenticator.login('Login', 'sidebar')
+#
+#
+#
+# if st.session_state["authentication_status"]:
+#     authenticator.logout('Logout', 'sidebar', key='unique_key')
+#     st.write(f'Welcome, *{st.session_state["name"]}*')
+# elif st.session_state["authentication_status"] is False:
+#     st.error('Username/password is incorrect')
+#     with st.expander("Register"):
+#         try:
+#             if authenticator.register_user('Register user', preauthorization=False):
+#                 st.success('User registered successfully')
+#                 with open('./login_info.yaml', 'w') as file:
+#                     yaml.dump(config, file, default_flow_style=False)
+#         except Exception as e:
+#             st.error(e)
+#     st.stop()
+# elif st.session_state["authentication_status"] is None:
+#     st.warning('Expand sidebar to login')
+#     with st.expander("Register"):
+#         try:
+#             if authenticator.register_user('Register user', preauthorization=False):
+#                 st.success('User registered successfully')
+#                 with open('./login_info.yaml', 'w') as file:
+#                     yaml.dump(config, file, default_flow_style=False)
+#         except Exception as e:
+#             st.error(e)
+#     st.stop()
 
 
 st.divider()

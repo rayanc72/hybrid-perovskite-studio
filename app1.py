@@ -38,7 +38,7 @@ def email_link():
 
 st.set_page_config(page_title="hPAME", layout="wide")
 
-st.title("hybrid :red[Perovskite Analysis and Modelling Engine]")
+st.title("hybrid :red[Perovskite Analysis and Modeling Engine]")
 
 col1, col2, col3 = st.columns([30,0.5,0.5])
 with col2:
@@ -321,7 +321,7 @@ with st.sidebar:
 
     st.sidebar.header("Dynamics Analysis")
     MD_option = st.sidebar.checkbox("Analyze AIMS MD output", value=False)
-    MDanalysis_option = st.sidebar.checkbox("Distance analysis with MDA", value=False)
+    MDanalysis_option = st.sidebar.checkbox("Trajectory analysis", value=False)
 
     st.divider()
 

@@ -212,8 +212,6 @@ from natsort import natsorted
 def run_perl_script(input_files):
     perl_script_path = './create_geometry_zip.pl'
     joined_file_name = 'joined_file.out'
-    # second_perl_script_path = './create_xyz_movie.pl'
-    # output_file_name = 'create_xyz_movie_output'
 
     # Create a new file by joining all input files in natural order
     input_files = natsorted(input_files, key=lambda x: x.name)
@@ -240,16 +238,16 @@ def run_perl_script(input_files):
     process = subprocess.Popen(['perl', perl_script_path, joined_file_name], stdout=subprocess.PIPE,
                                stderr=subprocess.STDOUT)
 
-    # Prepare markdown display
-    markdown_display = st.empty()
-    markdown_output = ""
-
-    # Stream output to Streamlit as it's generated
-    for line in iter(process.stdout.readline, b''):
-        # Append to markdown_output string
-        markdown_output += line.decode().replace(" ", "\n") + "\n"
-        # Update markdown display
-        markdown_display.markdown(f'<div style="height:200px; text-align: center; width:50%; overflow:auto; background-color:#333333; color:#FFFFFF; border-radius:10px; padding: 0px;"><pre>{markdown_output}</pre></div>', unsafe_allow_html=True)
+    # # Prepare markdown display
+    # markdown_display = st.empty()
+    # markdown_output = ""
+    #
+    # # Stream output to Streamlit as it's generated
+    # for line in iter(process.stdout.readline, b''):
+    #     # Append to markdown_output string
+    #     markdown_output += line.decode().replace(" ", "\n") + "\n"
+    #     # Update markdown display
+    #     markdown_display.markdown(f'<div style="height:200px; text-align: center; width:50%; overflow:auto; background-color:#333333; color:#FFFFFF; border-radius:10px; padding: 0px;"><pre>{markdown_output}</pre></div>', unsafe_allow_html=True)
 
     # Ensure all output has been read after the subprocess stops
     process.communicate()

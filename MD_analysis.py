@@ -1670,7 +1670,7 @@ def replace_indices_with_original(atom_dict, df):
         for index in indices:
             for key, values in atom_dict.items():
                 if index in values:
-                    original_indices.append(key)
+                    original_indices.append(key + 1)
                     break
         return original_indices
 

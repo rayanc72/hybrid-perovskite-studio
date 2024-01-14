@@ -1087,7 +1087,8 @@ if st.session_state.atoms is not None:
                 st.write ('''
                 If you see an error message "['A_index'] not found in axis", try increasing the bond distance limit (e.g., to 0.5) and the octahedron distortion limit (e.g., to 0.3) in the Optional parameters box.  
                           or  
-                          Is this a double perovskite structure (e.g., (AE2T)2AgBiI8)? If so, input the second A atom label in the Optional parameters box.''')
+                          Is this a double perovskite structure (e.g., (AE2T)2AgBiI8)? If so, input the second A atom label in the Optional parameters box.
+                          ''')
 
 
 if interpolate_option:
@@ -1609,6 +1610,15 @@ def handle_distortion_analysis(u):
     center_atom = st.text_input('Enter the symbol of the center atom (A):', value="Pb")
     surrounding_atoms = st.text_input('Enter the symbol of the surrounding atoms (B):', value="I")
 
+    with st.expander("Optional parameters"):
+        # Experimental
+        center_atom_2 = st.text_input(
+            'Enter the symbol of a second center atom, if available (useful for double perovskites):', value=None)
+        b_parameter = st.number_input("Relax the bond distance limit (useful for chloride-based systems):",
+                                      value=0.50)
+        c_paramter = st.number_input("Relax the octahedron distortion limit:",
+                                     value=0.30)
+
     step = st.number_input('Enter the step value for skipping frames:', min_value=1, max_value=1000, value=100)
 
     min_time = 0.0
@@ -1648,13 +1658,13 @@ def handle_distortion_analysis(u):
                 symbols = [atom.name for atom in atom_group]
                 positions = atom_group.positions
                 atoms = Atoms(symbols=symbols, positions=positions, pbc=True, cell=u.dimensions)
-                new_atoms, periodic_image_dict = filter_atoms_by_symbols_and_extend(atoms, center_atom, surrounding_atoms)
-                AB6_octahedra, AB_distances = identify_AB_groups(new_atoms, center_atom, surrounding_atoms, b=0.5, c=0.3)
+                new_atoms, periodic_image_dict, A2_indices = filter_atoms_by_symbols_and_extend(atoms, center_atom, surrounding_atoms, A2=center_atom_2)
+                AB6_octahedra, AB_distances = identify_AB_groups(new_atoms, center_atom, surrounding_atoms, b=b_parameter, c=c_paramter)
 
                 result_angle = calculate_unique_ABA_angles(AB6_octahedra, new_atoms)
                 result_iop = calculate_in_out_planes(AB6_octahedra, new_atoms)
-                result_bdv = calculate_bond_distance_variance(AB6_octahedra, new_atoms, periodic_image_dict)
-                result_av = calculate_angle_variance(AB6_octahedra, new_atoms, periodic_image_dict)
+                result_bdv = calculate_bond_distance_variance(AB6_octahedra, new_atoms, periodic_image_dict,A2_indices=A2_indices, A2_symbol=center_atom_2)
+                result_av = calculate_angle_variance(AB6_octahedra, new_atoms, periodic_image_dict,A2_indices=A2_indices, A2_symbol=center_atom_2)
 
                 # Update progress bar
                 frame_counter += 1

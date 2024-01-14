@@ -1499,7 +1499,18 @@ def find_local_indices(molecule, selected_global_indices):
     return [molecule.index(global_idx) for global_idx in selected_global_indices]
 
 
-def filter_atoms_by_symbols_and_extend(atoms, A, B):
+def filter_atoms_by_symbols_and_extend(atoms, A, B, A2=None):
+    A2_indices = []
+
+    # If A2 is provided, change labels of A2 atoms to A and record A2 indices
+    if A2 is not None:
+        all_symbols = atoms.get_chemical_symbols()
+        for idx, sym in enumerate(all_symbols):
+            if sym == A2:
+                A2_indices.append(idx)
+                all_symbols[idx] = A
+        atoms.set_chemical_symbols(all_symbols)
+
     # Filter out A and B atoms
     all_symbols = atoms.get_chemical_symbols()
     all_positions = atoms.get_positions()
@@ -1521,7 +1532,7 @@ def filter_atoms_by_symbols_and_extend(atoms, A, B):
         original_index = super_index % len(new_atoms)
         periodic_image_dict[original_index].append(super_index)  # Mapping new index to corresponding original index
 
-    return new_atoms_ext, periodic_image_dict
+    return new_atoms_ext, periodic_image_dict, A2_indices
 
 
 def identify_AB_groups(atoms, A: str, B: str, b=0, c=0):
@@ -1577,7 +1588,7 @@ def filter_unique_distances(AB_distance_groups):
     return unique_filtered
 
 
-def find_matching_distances(atoms, A, B, unique_filtered):
+def find_matching_distances(atoms, A, B, unique_filtered, A2_indices=None, A2_symbol=None):
     data = []
 
     A_indices = [i for i, atom in enumerate(atoms) if atom.symbol == A]
@@ -1585,36 +1596,31 @@ def find_matching_distances(atoms, A, B, unique_filtered):
 
     for A_index in A_indices:
         for B_index in B_indices:
-            # Using ASE's get_distance method with Minimum Image Convention (mic=True)
             dist = atoms.get_distance(A_index, B_index, mic=True)
-            rounded_dist = round(dist, 4)  # Rounding to four decimal points
+            rounded_dist = round(dist, 4)
 
             data.append([A_index, B_index, rounded_dist])
 
-    # Creating a DataFrame to make filtering easier
     df = pd.DataFrame(data, columns=['A_index', 'B_index', 'Distance'])
 
-    # Finding the distances that match with unique_filtered distances
     matching_rows = df[df['Distance'].isin(unique_filtered.keys())]
-    # print(matching_rows)
 
-    output_data = []
     unique_distances = {}
     for _, row in matching_rows.iterrows():
         A_index = int(row['A_index'])
         B_index = int(row['B_index'])
-        A_symbol = atoms[A_index].symbol
-        B_symbol = atoms[B_index].symbol
         distance = row['Distance']
 
-        Atom1 = f"{A_symbol}{A_index + 1}"
+        # Check if A_index is in A2_indices and update symbol if needed
+        current_A_symbol = A2_symbol if A2_indices is not None and A_index in A2_indices else A
+        B_symbol = atoms[B_index].symbol
+
+        Atom1 = f"{current_A_symbol}{A_index + 1}"
         Atom2 = f"{B_symbol}{B_index + 1}"
 
-        # Check for uniqueness of the distance
         if distance not in unique_distances.keys() or A_index < unique_distances[distance]['A_index']:
             unique_distances[distance] = {'A_index': A_index, 'Atom1': Atom1, 'Atom2': Atom2, 'Distance': distance}
 
-    # Sort by A_index and create DataFrame
     sorted_data = sorted(unique_distances.values(), key=lambda x: x['A_index'])
     output_df = pd.DataFrame(sorted_data).drop(columns=['A_index'])
 
@@ -1698,14 +1704,15 @@ def volume_octahedron_del(input_list):
 
 
 
-def calculate_bond_distance_variance(AB_groups, atoms_obj, atom_dict):
+def calculate_bond_distance_variance(AB_groups, atoms_obj, atom_dict, A2_indices=None, A2_symbol=None):
     unique_distance_variance_with_idx = {}
     atom_name = []
 
     for A, B_list in AB_groups.items():
         pos_A = atoms_obj[A].position
         idx_A = atoms_obj[A].index
-        atom_name.append(atoms_obj[A].symbol)
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
 
         # Extract positions for B atoms
         B_positions = [atoms_obj[B].position.tolist() for B in B_list]
@@ -1741,7 +1748,9 @@ def calculate_bond_distance_variance(AB_groups, atoms_obj, atom_dict):
 
     variance_list = []
     for variance, original_idx in mapped_variances_with_original_idx.items():
-        variance_list.append(f"{variance} ({atom_name[0]}{original_idx + 1})")               # add 1 to match with VESTA
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
 
     return variance_list
 
@@ -1755,14 +1764,15 @@ def calculate_angle(P, A, B):
     theta_deg = np.degrees(theta_rad)
     return theta_deg
 
-def calculate_angle_variance(AB_groups, atoms_obj, atom_dict):
+def calculate_angle_variance(AB_groups, atoms_obj, atom_dict, A2_indices=None, A2_symbol=None):
     unique_variances_with_idx = {}
     atom_name = []
 
     for A, B_list in AB_groups.items():
         pos_A = atoms_obj[A].position
         idx_A = atoms_obj[A].index
-        atom_name.append(atoms_obj[A].symbol)
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
         angle_squares = []
 
         # Generate all B-A-B combinations
@@ -1814,12 +1824,13 @@ def calculate_angle_variance(AB_groups, atoms_obj, atom_dict):
 
     variance_list = []
     for variance, original_idx in mapped_variances_with_original_idx.items():
-        variance_list.append(f"{variance} ({atom_name[0]}{original_idx + 1})")                      # add 1 to match with VESTA
-
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
 
     return variance_list
 
-def calculate_unique_ABA_angles(AB_groups, atoms_obj, atom_dict=None):
+def calculate_unique_ABA_angles(AB_groups, atoms_obj, atom_dict=None,A2_indices=None, A2_symbol=None):
     ABA_groups = detect_ABA_groups(AB_groups)
     # Dictionary to store angles for each ABA group
     ABA_angles = {}
@@ -1996,7 +2007,7 @@ def calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj):
 
     return in_out_plane_angles
 
-def calculate_in_out_planes(AB_groups, atoms_obj, atom_dict=None):
+def calculate_in_out_planes(AB_groups, atoms_obj, atom_dict=None,A2_indices=None, A2_symbol=None):
     unique_angles_dict, _ = calculate_unique_ABA_angles(AB_groups, atoms_obj)
     in_planes = find_in_planes(atoms_obj, unique_angles_dict)
     perp_planes = find_perpendicular_planes(in_planes, atoms_obj)

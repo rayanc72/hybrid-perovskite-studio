@@ -291,7 +291,7 @@ def parse_band_out_files(uploaded_files, energyshift=None):
 def plot_bands(ax, bands_all_files, xvals=None, plot_color='blue'):
     for file_id, bands in enumerate(bands_all_files):
         for band_id, band in enumerate(bands):
-            ax.plot(xvals[file_id], band, color=plot_color, lw=1)
+            ax.plot(xvals[file_id], band, color=plot_color, lw=2)
     ax.axhline(0, color='k', linestyle = '--', lw=1).set_dashes([5,5])
     # Clear the default x-tick labels
     ax.set_xticks([])
@@ -326,7 +326,7 @@ def prepare_plot_data(filename, state):
     return k_points, spins, energy
 
 
-def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=cc.cm.CET_L18, alpha=0.05):
+def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=cc.cm.CET_L18, alpha=0.0):
     shifted_energy = energy - energy_shift
 
     # Normalize shifted energy values to a range of 0 to 1
@@ -351,39 +351,41 @@ def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=
 
 def plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale):
     norm = plt.Normalize(color_component.min(), color_component.max())
-    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm)
+    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm, alpha=1, width=0.003)
     plt.colorbar(quivers, ax=ax).set_label(f'$<\sigma_{spin_direction}>$ component')
 
 def plot_spin_quivers(filename, state, spin_direction, shift_energy, scale, axis_limits=None):
     fig, ax = plt.subplots(figsize=(8, 6))
     plt.rcParams["font.family"] = "Arial"
     plt.rcParams.update({'font.size': 18})
+    plt.rcParams['axes.linewidth'] = 1.5
+    plt.rcParams['axes.labelweight'] = "normal"
 
     k_points, spins, energy = prepare_plot_data(filename, state)
 
     if spin_direction == 'z':
         kx, ky = k_points[:, 0], k_points[:, 1]
         spin_x, spin_y, color_component = spins[:, 0], spins[:, 1], spins[:, 2]
-        ax_label_x, ax_label_y = "-X$\Gamma$X ($// \\vec{b}$) ($\AA^{-1}$)", "-Y$\Gamma$Y ($// \\vec{c}$) ($\AA^{-1}$)"
+        ax_label_x, ax_label_y = "-X$\Gamma$X ($// \\vec{a}$) ($\AA^{-1}$)", "-Y$\Gamma$Y ($// \\vec{b}$) ($\AA^{-1}$)"
     elif spin_direction == 'x':
         ky, kz = k_points[:, 1], k_points[:, 2]
         spin_y, spin_z, color_component = spins[:, 1], spins[:, 2], spins[:, 0]
         kx, spin_x = kz, spin_z
-        ax_label_x, ax_label_y = "-Y$\Gamma$Y ($// \\vec{c}$) ($\AA^{-1}$)", "-Z$\Gamma$Z ($// \\vec{a}$) ($\AA^{-1}$)"
+        ax_label_x, ax_label_y = "-Z$\Gamma$Z ($// \\vec{c}$) ($\AA^{-1}$)", "-Y$\Gamma$Y ($// \\vec{b}$) ($\AA^{-1}$)"
     elif spin_direction == 'y':
         kx, kz = k_points[:, 0], k_points[:, 2]
         spin_x, spin_z, color_component = spins[:, 0], spins[:, 2], spins[:, 1]
         ky, spin_y = kz, spin_z
-        ax_label_x, ax_label_y = "-X$\Gamma$X ($// \\vec{b}$) ($\AA^{-1}$)", "-Z$\Gamma$Z ($// \\vec{a}$) ($\AA^{-1}$)"
+        ax_label_x, ax_label_y = "-X$\Gamma$X ($// \\vec{a}$) ($\AA^{-1}$)", "-Z$\Gamma$Z ($// \\vec{c}$) ($\AA^{-1}$)"
     else:
         raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
 
     plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale=scale)
 
-    try:
-        plot_energy_contours(ax, kx, ky, energy, shift_energy)
-    except Exception as e:
-        st.error(f"An error occurred while plotting the energy contours: {e}")
+    # try:
+    #     plot_energy_contours(ax, kx, ky, energy, shift_energy)
+    # except Exception as e:
+    #     st.error(f"An error occurred while plotting the energy contours: {e}")
 
     ax.set_xlabel(ax_label_x)
     ax.set_ylabel(ax_label_y)
@@ -561,7 +563,7 @@ def set_custom_labels(ax, all_data, apply_scaling, n_data_sets):
         label_color = 'black'
         # Set the x-axis labels based on the first dataset
         ax.set_xticks(band_len_tot)
-        ax.set_xticklabels(k_label_reduce, color=label_color)
+        ax.set_xticklabels(k_label_reduce, color=label_color, fontsize=20)
 
 def get_energy_edges(uploaded_files):
     for uploaded_file in uploaded_files:

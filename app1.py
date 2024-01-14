@@ -1029,12 +1029,13 @@ if st.session_state.atoms is not None:
         # User input for type of distortion(s)
         distortion_type = st.selectbox(
             'Select the type of distortion to calculate:',
-            ('Bond distance variance', 'Angle variance', 'Bridging angle(s)', 'In and out deviations', 'Beta parameter',
+            ('Bond distance variance', 'Angle variance', 'Bridging angle(s)', 'In and out deviations',
              'all')
         )
 
         with st.expander ("Optional parameters"):
             # Experimental
+            center_atom_2 = st.text_input('Enter the symbol of a second center atom, if available (useful for double perovskites):', value=None)
             b_parameter = st.number_input("Relax the bond distance limit (useful for chloride-based systems):",
                                           value=0.00)
             c_paramter = st.number_input("Relax the octahedron distortion limit (useful for highly distorted systems):",
@@ -1043,12 +1044,12 @@ if st.session_state.atoms is not None:
         # Button for confirmation
         if st.button('Calculate'):
             try:
-                super_atoms, periodic_image_dict = filter_atoms_by_symbols_and_extend(modified_atoms, center_atom,
-                                                                                      surrounding_atoms)
+                super_atoms, periodic_image_dict, A2_indices = filter_atoms_by_symbols_and_extend(modified_atoms, A=center_atom,
+                                                                                      B=surrounding_atoms, A2=center_atom_2)
                 AB6_octahedra, AB_distances = identify_AB_groups(super_atoms, center_atom, surrounding_atoms, b=b_parameter, c=c_paramter)
                 unq_AB_distances = filter_unique_distances(AB_distances)
                 octahedral_distances = find_matching_distances(modified_atoms, center_atom, surrounding_atoms,
-                                                               unq_AB_distances)
+                                                               unq_AB_distances, A2_indices=A2_indices, A2_symbol=center_atom_2)
 
                 st.markdown(f'**Distance of {center_atom} - {surrounding_atoms} bonds in octahedra**')
                 st.dataframe(octahedral_distances, use_container_width=True, hide_index=True)
@@ -1063,7 +1064,7 @@ if st.session_state.atoms is not None:
                 output_data = []
                 if distortion_type == 'all':
                     for func_name, func in distortion_mapping.items():
-                        result = func(AB6_octahedra, super_atoms, periodic_image_dict)
+                        result = func(AB6_octahedra, super_atoms, periodic_image_dict, A2_indices=A2_indices, A2_symbol=center_atom_2)
                         if func_name == 'Bridging angle(s)':
                             output_data.extend(handle_bridging_angles(result, periodic_image_dict))
                         elif func_name == 'In and out deviations':
@@ -1071,7 +1072,7 @@ if st.session_state.atoms is not None:
                         else:
                             output_data.append((func_name, ', '.join(result)))
                 else:
-                    result = distortion_mapping[distortion_type](AB6_octahedra, super_atoms, periodic_image_dict)
+                    result = distortion_mapping[distortion_type](AB6_octahedra, super_atoms, periodic_image_dict,A2_indices=A2_indices, A2_symbol=center_atom_2)
                     if distortion_type == 'Bridging angle(s)':
                         output_data.extend(handle_bridging_angles(result, periodic_image_dict))
                     elif distortion_type == 'In and out deviations':
@@ -1083,7 +1084,11 @@ if st.session_state.atoms is not None:
                 st.dataframe(df, use_container_width=True, hide_index=True)
             except Exception as e:
                 st.error(e)
-                st.write ('If you see an error message '"['A_index'] not found in axis"', try increasing the bond distance limit (e.g., to 0.5) and the octahedron distortion limit (e.g., to 0.3) in the Optional parameters box.')
+                st.write ('''
+                If you see an error message "['A_index'] not found in axis", try increasing the bond distance limit (e.g., to 0.5) and the octahedron distortion limit (e.g., to 0.3) in the Optional parameters box.  
+                          or  
+                          Is this a double perovskite structure (e.g., (AE2T)2AgBiI8)? If so, input the second A atom label in the Optional parameters box.''')
+
 
 if interpolate_option:
     st.header("Interpolate Structures", divider='violet')
@@ -1380,7 +1385,7 @@ if plot_bs_option:
             # Set up the plot with custom configurations
             fig, ax = plt.subplots(figsize=(16, 12))
             plt.rcParams["font.family"] = "Arial"
-            plt.rcParams.update({'font.size': 28})
+            plt.rcParams.update({'font.size': 24})
             for spine in ['bottom', 'left', 'top', 'right']:
                 ax.spines[spine].set_linewidth(2)
 
@@ -1396,7 +1401,7 @@ if plot_bs_option:
             set_custom_labels(ax, all_data, apply_scaling, num_data_sets)
 
             # Finalize and show the plot
-            plt.ylabel('Energy (eV)')
+            plt.ylabel('E - E_f (eV)')
             plt.axis([0, max([abs(i) for data in all_data for i in data[1][-1]]), ymin, ymax])
             st.pyplot(fig)
     else:
@@ -1599,9 +1604,6 @@ def handle_h_bond_analysis(u):
 
 
 
-
-
-
 def handle_distortion_analysis(u):
     # User input for atomic symbols
     center_atom = st.text_input('Enter the symbol of the center atom (A):', value="Pb")
@@ -1677,19 +1679,6 @@ def handle_distortion_analysis(u):
                     av_lists.append((ts.time, result_av))
         # Finalize progress bar
         progress_bar.empty()
-
-        # Determine the maximum number of variances
-        # max_bdv_len = max(len(bdv) for _, bdv in bdv_lists)
-        # max_av_len = max(len(av) for _, av in av_lists)
-
-        # Create DataFrame 2 and DataFrame 3
-        # results_df2 = [{'Time': time, **{f'Bond Distance Variance {i + 1}': bdv[i] if i < len(bdv) else None for i in
-        #                                  range(max_bdv_len)}} for time, bdv in bdv_lists
-
-
-        # results_df3 = [
-        #     {'Time': time, **{f'Angle Variance {i + 1}': av[i] if i < len(av) else None for i in range(max_av_len)}} for
-        #     time, av in av_lists]
 
         # Convert to DataFrames
         df1 = pd.DataFrame(results_df1)

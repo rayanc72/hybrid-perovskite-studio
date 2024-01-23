@@ -619,22 +619,25 @@ def create_absorption_graphs(energy, all_data, exponent_y=False):
                            legend=subplot_layout['legend'])
 
     # Overlaid plots
-    overlaid_figs = {}
-    kinds_present = set("Gaussian" if "Gaussian" in file else "Lorentzian" for file in all_data.columns)
+    overlaid_fig = go.Figure()
+    for file, y in all_data.items():
+        overlaid_fig.add_trace(go.Scatter(x=energy, y=y, name=file, mode='lines'))
 
-    for kind in kinds_present:
-        fig = go.Figure()
-        for file, y in all_data.items():
-            if kind in file:
-                fig.add_trace(go.Scatter(x=energy, y=y, name=file, mode='lines'))
+    overlaid_layout = generate_layout_elec("Overlaid Plot", "Energy (eV)", "α", font_size=16)
 
-        overlaid_layout = generate_layout_elec(f"Overlaid Plot - {kind}", "Energy (eV)", "α", font_size=16)
-        fig.update_layout(overlaid_layout)
-        fig.update_yaxes(type=yaxis_type, exponentformat='e' if exponent_y else None)
+    # Update legend position to be outside the plot area
+    overlaid_layout['legend'] = {
+        'orientation': 'h',  # Horizontal orientation
+        'yanchor': "bottom",
+        'y': 1.02,  # Position the legend just above the plot
+        'xanchor': "right",
+        'x': 1
+    }
 
-        overlaid_figs[kind] = fig
+    overlaid_fig.update_layout(overlaid_layout)
+    overlaid_fig.update_yaxes(type=yaxis_type, exponentformat='e' if exponent_y else None)
 
-    return grid_fig, overlaid_figs
+    return grid_fig, overlaid_fig
 
 def generate_layout_elec(title, xaxis_title, yaxis_title, font_size=16, color_text='black', l_orientation = 'h', l_yplace=0.1):
     """Generate a layout dictionary based on the given parameters."""

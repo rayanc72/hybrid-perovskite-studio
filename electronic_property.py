@@ -19,6 +19,7 @@ import streamlit_bokeh_events as bokeh_events
 from bokeh.models import Span
 import re
 import colorcet as cc
+from plotly.subplots import make_subplots
 
 
 def plot_pdos_streamlit(dos_data, shift, plot_range):
@@ -326,7 +327,7 @@ def prepare_plot_data(filename, state):
     return k_points, spins, energy
 
 
-def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=cc.cm.CET_L18, alpha=0.0):
+def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=cc.cm.CET_L18, alpha=1):
     shifted_energy = energy - energy_shift
 
     # Normalize shifted energy values to a range of 0 to 1
@@ -574,3 +575,91 @@ def get_energy_edges(uploaded_files):
 
     # Return an empty DataFrame if no matching file is found
     return pd.DataFrame()
+
+def create_dataframe_from_absorption_out_files(uploaded_files):
+    all_data = pd.DataFrame()
+    for file in uploaded_files:
+        # Assuming file-like object can be read directly
+        data = pd.read_csv(file, delimiter='\t', header=None, skiprows=4)
+        data_split = data[0].str.split(expand=True)
+        data_split = data_split.apply(pd.to_numeric)
+        all_data[file.name] = data_split[1]
+    return data_split[0], all_data
+
+
+def create_absorption_graphs(energy, all_data):
+    # Grid plot
+    n_rows = len(all_data.columns) // 3 + (len(all_data.columns) % 3 > 0)
+    grid_fig = make_subplots(rows=n_rows, cols=3, subplot_titles=all_data.columns)
+
+    for i, (file, y) in enumerate(all_data.items()):
+        row, col = i // 3 + 1, i % 3 + 1
+        grid_fig.add_trace(go.Scatter(x=energy, y=y, name=file, mode='lines', showlegend=False), row=row, col=col)
+
+        # Extracting the identifier (xx, yy, zz) from the file name
+        identifier = file.split('_')[-2]
+        yaxis_label = f'α_{identifier}{identifier}'
+
+        subplot_layout = generate_layout_elec("", "Energy (eV)", yaxis_label, font_size=16)
+        grid_fig.update_xaxes(subplot_layout['xaxis'], row=row, col=col)
+        grid_fig.update_yaxes(subplot_layout['yaxis'], row=row, col=col)
+        # grid_fig.update_yaxes(type='log', exponentformat='e', row=row, col=col)
+
+    # General update to the grid_fig
+    grid_fig.update_layout(title=subplot_layout['title'], legend=subplot_layout['legend'])
+
+    # Overlaid plots
+    overlaid_figs = {}
+    kinds_present = set("Gaussian" if "Gaussian" in file else "Lorentzian" for file in all_data.columns)
+
+    for kind in kinds_present:
+        fig = go.Figure()
+        for file, y in all_data.items():
+            if kind in file:
+                fig.add_trace(go.Scatter(x=energy, y=y, name=file, mode='lines'))
+
+        overlaid_layout = generate_layout_elec(f"Overlaid Plot - {kind}", "Energy (eV)", "α", font_size=16)
+        fig.update_layout(overlaid_layout)
+        # fig.update_yaxes(type='log', exponentformat='e')
+
+        overlaid_figs[kind] = fig
+
+    return grid_fig, overlaid_figs
+
+def generate_layout_elec(title, xaxis_title, yaxis_title, font_size=16, color_text='black', l_orientation = 'h', l_yplace=0.1):
+    """Generate a layout dictionary based on the given parameters."""
+    layout = {
+        'title': {'text': title, 'font': {'size': font_size, 'color': color_text}},
+        'width': 800,
+        'height': 600,
+        'xaxis': {
+            'title': xaxis_title,
+            'title_font': {'size': font_size + 6, 'color': color_text},
+            'tickfont': {'size': font_size + 4, 'color': color_text},
+            'showgrid': True,
+            'griddash': "solid",
+            'mirror': False,
+            'ticks': 'outside',
+            'showline': True,
+            'linewidth': 2
+        },
+        'yaxis': {
+            'title': yaxis_title,
+            'title_font': {'size': font_size + 6, 'color': color_text},
+            'tickfont': {'size': font_size + 4, 'color': color_text},
+            'linewidth': 2,
+            'showgrid': True,
+            'griddash': "solid",
+            # 'mirror': True,
+            'ticks': 'outside',
+            'showline': True,
+        },
+        'legend': {
+            'orientation': l_orientation,
+            'yanchor': "bottom",
+            'y': l_yplace,
+            'xanchor': "right",
+            'x': 1
+        }
+    }
+    return layout

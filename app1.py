@@ -1496,10 +1496,11 @@ if plot_absorption_option:
     st.header("Plot absorption spectra", divider='violet')
 
     uploaded_abs_files = st.file_uploader("Upload absorption output files", type=['out'], accept_multiple_files=True)
+    exponent_y_user = st.checkbox('y-axis logarithmic?')
 
     if uploaded_abs_files:
         energy, data = create_dataframe_from_absorption_out_files(uploaded_abs_files)
-        grid_fig, overlaid_figs = create_absorption_graphs(energy, data)
+        grid_fig, overlaid_figs = create_absorption_graphs(energy, data, exponent_y_user)
         # Display plots in Streamlit
         st.plotly_chart(grid_fig, use_container_width=True)
         for fig in overlaid_figs.values():

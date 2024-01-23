@@ -587,10 +587,16 @@ def create_dataframe_from_absorption_out_files(uploaded_files):
     return data_split[0], all_data
 
 
-def create_absorption_graphs(energy, all_data):
-    # Grid plot
+def create_absorption_graphs(energy, all_data, exponent_y=False):
+    # Grid plot configuration
+    plot_height_per_row = 400  # Height for each row
+    plot_width = 1200  # Total width of the grid
     n_rows = len(all_data.columns) // 3 + (len(all_data.columns) % 3 > 0)
-    grid_fig = make_subplots(rows=n_rows, cols=3, subplot_titles=all_data.columns)
+    total_height = plot_height_per_row * n_rows
+    vertical_spacing = 0.4 / n_rows  # Space between rows
+
+    grid_fig = make_subplots(rows=n_rows, cols=3, subplot_titles=all_data.columns,
+                             vertical_spacing=vertical_spacing)
 
     for i, (file, y) in enumerate(all_data.items()):
         row, col = i // 3 + 1, i % 3 + 1
@@ -603,10 +609,14 @@ def create_absorption_graphs(energy, all_data):
         subplot_layout = generate_layout_elec("", "Energy (eV)", yaxis_label, font_size=16)
         grid_fig.update_xaxes(subplot_layout['xaxis'], row=row, col=col)
         grid_fig.update_yaxes(subplot_layout['yaxis'], row=row, col=col)
-        # grid_fig.update_yaxes(type='log', exponentformat='e', row=row, col=col)
 
-    # General update to the grid_fig
-    grid_fig.update_layout(title=subplot_layout['title'], legend=subplot_layout['legend'])
+        # Set y-axis type based on exponent_y
+        yaxis_type = 'log' if exponent_y else 'linear'
+        grid_fig.update_yaxes(type=yaxis_type, exponentformat='e' if exponent_y else None, row=row, col=col)
+
+    # Update overall layout of the grid figure
+    grid_fig.update_layout(height=total_height, width=plot_width, title=subplot_layout['title'],
+                           legend=subplot_layout['legend'])
 
     # Overlaid plots
     overlaid_figs = {}
@@ -620,7 +630,7 @@ def create_absorption_graphs(energy, all_data):
 
         overlaid_layout = generate_layout_elec(f"Overlaid Plot - {kind}", "Energy (eV)", "α", font_size=16)
         fig.update_layout(overlaid_layout)
-        # fig.update_yaxes(type='log', exponentformat='e')
+        fig.update_yaxes(type=yaxis_type, exponentformat='e' if exponent_y else None)
 
         overlaid_figs[kind] = fig
 

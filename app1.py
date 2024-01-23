@@ -1500,11 +1500,11 @@ if plot_absorption_option:
 
     if uploaded_abs_files:
         energy, data = create_dataframe_from_absorption_out_files(uploaded_abs_files)
-        grid_fig, overlaid_figs = create_absorption_graphs(energy, data, exponent_y_user)
+        grid_fig, overlaid_fig = create_absorption_graphs(energy, data, exponent_y_user)
         # Display plots in Streamlit
         st.plotly_chart(grid_fig, use_container_width=True)
-        for fig in overlaid_figs.values():
-            st.plotly_chart(fig, use_container_width=True)
+
+        st.plotly_chart(overlaid_fig, use_container_width=True)
 
 
 

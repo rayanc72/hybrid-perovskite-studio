@@ -315,6 +315,7 @@ with st.sidebar:
     plot_pdos_option = st.sidebar.checkbox("Plot partial density of states (PDOS)", value=False)
     plot_bs_option = st.sidebar.checkbox("Plot bandstructure", value=False)
     plot_spin_option = st.sidebar.checkbox("Plot spin texture", value=False)
+    plot_absorption_option = st.sidebar.checkbox("Plot absorption spectra", value=False)
     # plot_mul_bs_option = st.sidebar.checkbox("Plot Mulliken Bandstructure", value=False)
 
     st.divider()
@@ -1489,6 +1490,22 @@ if plot_spin_option:
                             st.error(f"An error occurred while plotting: {e}")
             else:
                 st.error("Entered states are out of the available range.")
+
+
+if plot_absorption_option:
+    st.header("Plot absorption spectra", divider='violet')
+
+    uploaded_abs_files = st.file_uploader("Upload absorption output files", type=['out'], accept_multiple_files=True)
+
+    if uploaded_abs_files:
+        energy, data = create_dataframe_from_absorption_out_files(uploaded_abs_files)
+        grid_fig, overlaid_figs = create_absorption_graphs(energy, data)
+        # Display plots in Streamlit
+        st.plotly_chart(grid_fig, use_container_width=True)
+        for fig in overlaid_figs.values():
+            st.plotly_chart(fig, use_container_width=True)
+
+
 
 if deviation_calculation_option:
     st.header("Calculate deviation", divider='violet')

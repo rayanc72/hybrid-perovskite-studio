@@ -17,6 +17,9 @@ import streamlit_authenticator as stauth
 # from streamlit_ketcher import st_ketcher
 from streamlit_extras.mention import mention
 from streamlit_extras.jupyterlite import jupyterlite
+import matplotlib as mpl
+mpl.rcParams['pdf.fonttype'] = 42
+mpl.rcParams['ps.fonttype'] = 42
 
 import yaml
 def twitter_link():
@@ -315,6 +318,8 @@ with st.sidebar:
     plot_pdos_option = st.sidebar.checkbox("Plot partial density of states (PDOS)", value=False)
     plot_bs_option = st.sidebar.checkbox("Plot bandstructure", value=False)
     plot_spin_option = st.sidebar.checkbox("Plot spin texture", value=False)
+    plot_spin_v2_option = st.sidebar.checkbox("Plot 3D spin texture", value=False)
+
     plot_absorption_option = st.sidebar.checkbox("Plot absorption spectra", value=False)
     # plot_mul_bs_option = st.sidebar.checkbox("Plot Mulliken Bandstructure", value=False)
 
@@ -1057,6 +1062,8 @@ if st.session_state.atoms is not None:
 
                 distortion_mapping = {
                     'Bond distance variance': calculate_bond_distance_variance,
+                    'Bond distance varience simplified (x 1e-05)' : calculate_bond_distance_variance_v2,
+                    'Metal off-centering' : calculate_off_centering,
                     'Angle variance': calculate_angle_variance,
                     'Bridging angle(s)': calculate_unique_ABA_angles,
                     'In and out deviations': calculate_in_out_planes,
@@ -1352,9 +1359,21 @@ if plot_pdos_option:
 
             # Check if Total DOS data is provided
             if 'Total' in dos_data:
+                energy_values = dos_data['Total'][:, 0]
+                total_dos = dos_data['Total'][:, 1]
+
+                # Create a DataFrame with the energy column
+                df = pd.DataFrame({'Energy': energy_values, 'Total DOS': total_dos})
+
+                # Add each element's DOS to the DataFrame
+                for element, data in dos_data.items():
+                    if element != 'Total':  # Assuming you don't want to include the Total's DOS again
+                        df[element] = data[:, 1]  # Add the second column (DOS values) of each element
+
+                st.dataframe(pd.DataFrame(df), hide_index=True, use_container_width=True)
                 # Call the plot_pdos_streamlit function and display the plot
                 fig = plot_pdos_streamlit(dos_data, st.session_state.shift, plot_range)
-                st.plotly_chart(fig)
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.error("Total DOS file (KS_DOS_total.dat) not found in the uploaded files.")
         # else:
@@ -1406,6 +1425,19 @@ if plot_bs_option:
             plt.ylabel('E - E_f (eV)')
             plt.axis([0, max([abs(i) for data in all_data for i in data[1][-1]]), ymin, ymax])
             st.pyplot(fig)
+
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', transparent=True)
+            buf.seek(0)
+
+            st.download_button(
+                label="Download plot as png",
+                data=buf,
+                file_name=f"band_structure.png",
+                mime="application/png"
+            )
+
+
     else:
         st.warning("Please upload files before plotting.")
 
@@ -1479,10 +1511,21 @@ if plot_spin_option:
                         try:
                             fig = plot_spin_quivers(uploaded_file, state, spin_direction, shift_e, scale=scale_param, axis_limits= [x_min, x_max, y_min, y_max])
 
+                            buf = io.BytesIO()
+                            fig.savefig(buf, format='pdf', transparent=True)
+                            buf.seek(0)
+
                             # Display plot in the grid
                             with cols[col_index % 2]:
                                 st.markdown(f"### State {state}")
                                 st.pyplot(fig)
+
+                                st.download_button(
+                                    label="Download plot as PDF",
+                                    data=buf,
+                                    file_name=f"plot_state_{state}.pdf",
+                                    mime="application/pdf"
+                                )
 
                             col_index += 1
 
@@ -1850,7 +1893,96 @@ if script_option:
     st.text("This feature uses JupyterLite and runs the script entirely on your browser. At this time, this enviroment does not have access to any previously uploaded file.")
     jupyterlite(900, 1600)
 
+import mpld3
+import streamlit.components.v1 as components
 
+if plot_spin_v2_option:
+    st.header("Plot Spin Texture", divider='violet')
+
+    st.text(f'''
+            Upload the spin_texture.dat file. 
+            Optionally, if you provide the "aims.out" file, the app will display other relevant information (e.g., band edges).
+            ''')
+
+    # File uploader
+    uploaded_file = st.file_uploader("Upload spin_texture.dat", type=['dat'], accept_multiple_files=False)
+
+    # File uploader for .out file
+    uploaded_out_file = st.file_uploader("Upload .out file from spin texture calculation (optional)", type=['out'], accept_multiple_files=False)
+
+    if uploaded_out_file is not None:
+        uploaded_out_file.seek(0)  # Reset file pointer
+        out_df = parse_out_file(uploaded_out_file)
+        st.dataframe(out_df, hide_index=True, use_container_width=True)
+
+    if uploaded_file is not None:
+        # Get the range of available states
+        min_state, max_state = get_state_range(uploaded_file)
+
+        # Display the range of available states
+        st.markdown(f"Range of available states for spin texture plot: {min_state} to {max_state}")
+
+        # Input for states
+        state_input = st.text_input("Enter states (separated by commas, max 8):")
+
+        # Input for energy shift
+        shift_e = st.number_input("Enter the energy shift:")
+
+        #Input for spin direction
+        spin_direction = st.selectbox("Spin direction", ['x', 'y', 'z'])
+
+        # Scale for the arrows
+        scale_param = st.number_input("Scale parameter for the spin arrows (optional)", value=15)
+
+        # Axis range for the texture
+        axis_limits = st.text_input("Enter axis limits (xmin, xmax, ymin, ymax):", "")
+        # Initialize limits to None
+        if axis_limits.strip():
+            try:
+                values = axis_limits.split(',')
+                # Ensure there are exactly 4 values or fill missing ones with None
+                x_min, x_max, y_min, y_max = [float(v.strip()) if v.strip() else None for v in values] + [None] * (
+                            4 - len(values))
+            except ValueError:
+                st.error("Please enter the limits in the correct format: xmin, xmax, ymin, ymax")
+        else:
+            # Default to None if no input is provided
+            x_min, x_max, y_min, y_max = [None] * 4
+
+        # Process the input states
+        if state_input:
+            states = [int(s.strip()) for s in state_input.split(',') if s.strip().isdigit()]
+            states = states[:8]  # Limit to maximum 8 states
+
+            if all(min_state <= state <= max_state for state in states):
+                if st.button("Plot spin texture"):
+
+                    uploaded_file.seek(0)
+                    try:
+                        fig = plot_spin_quivers_3D(uploaded_file, states, spin_direction)
+                        # fig_html = mpld3.fig_to_html(fig)
+
+
+
+
+                        buf = io.BytesIO()
+                        fig.savefig(buf, format='pdf', transparent=True)
+                        buf.seek(0)
+
+                        st.markdown(f"### State {states}")
+                        st.pyplot(fig, use_container_width=True)
+
+                        st.download_button(
+                            label="Download plot as PDF",
+                            data=buf,
+                            file_name=f"plot_state_{states}.pdf",
+                            mime="application/pdf"
+                        )
+
+                    except Exception as e:
+                        st.error(f"An error occurred while plotting: {e}")
+            else:
+                st.error("Entered states are out of the available range.")
 
 
 

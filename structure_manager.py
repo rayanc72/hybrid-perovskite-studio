@@ -1988,7 +1988,279 @@ def calculate_unique_ABA_angles(AB_groups, atoms_obj, atom_dict=None,A2_indices=
     return unique_angles_dict, beta_param
 
 
-def find_in_planes(atoms_obj, unique_angles_dict):
+def find_bonded_b_atoms(AB_groups):
+    # Create a reverse lookup dictionary to map B atoms to A atoms they are bonded with
+    B_to_A_map = {}
+    for A, Bs in AB_groups.items():
+        for B in Bs:
+            if B in B_to_A_map:
+                B_to_A_map[B].append(A)
+            else:
+                B_to_A_map[B] = [A]
+
+    # Create the result dictionary where each key is A atom index, and values are a list of four B atom indices
+    result = {}
+
+    # Loop through each A atom
+    for A, Bs in AB_groups.items():
+        bonded_Bs = []
+
+        # Check each B atom to see if it is bonded to four different A atoms (other than the original A)
+        for B in Bs:
+            if B in B_to_A_map and len(B_to_A_map[B]) >= 2:  # Ensure B is bonded to at least one more A
+                other_As = [other_A for other_A in B_to_A_map[B] if other_A != A]
+                if len(other_As) >= 1:  # Check if there are at least one other A atoms bonded to B
+                    bonded_Bs.append(B)
+            if len(bonded_Bs) == 4:  # We need exactly four such B atoms
+                break
+
+        if len(bonded_Bs) == 4:
+            result[A] = bonded_Bs
+
+    return result
+
+
+
+def calculate_layer_planes(AB_groups, atoms_obj):
+    layers = detect_molecules(atoms_obj)
+    # Initialize a dictionary to store the plane normal vectors by layer index
+
+    layer_planes = {}
+
+    # Create a mapping from atom index to layer index
+    atom_to_layer = {}
+    for layer_index, layer_atoms in enumerate(layers):
+        for atom in layer_atoms:
+            atom_to_layer[atom] = layer_index
+
+    # Group A atoms by their layer using the mapping
+    layer_to_A_atoms = {}
+    for A in AB_groups.keys():
+        if A in atom_to_layer:  # Ensure the A atom is in the layer list
+            layer = atom_to_layer[A]
+            if layer in layer_to_A_atoms:
+                layer_to_A_atoms[layer].append(A)
+            else:
+                layer_to_A_atoms[layer] = [A]
+
+    # Calculate the average plane for each layer of A atoms
+    for layer, A_atoms in layer_to_A_atoms.items():
+        A_positions = np.array([atoms_obj[A].position for A in A_atoms])
+        centroid = np.mean(A_positions, axis=0)
+        cov_matrix = np.cov((A_positions - centroid).T)
+        eigenvalues, eigenvectors = np.linalg.eig(cov_matrix)
+        normal_vector = eigenvectors[:, np.argmin(eigenvalues)]
+        layer_planes[layer] = normal_vector.tolist()
+
+    return layer_planes
+
+
+def calculate_mc_2D(AB_groups, atoms_obj, atom_dict=None,A2_indices=None, A2_symbol=None):
+
+    AB_eq = find_bonded_b_atoms(AB_groups)
+
+    unique_distance_variance_with_idx = {}
+    atom_name = []
+
+    for A, B_list in AB_eq.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+
+        # Extract positions for B atoms
+        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
+
+        # calculate center of mass (com) of B-atoms
+        com_B = calculate_centroid(B_positions)
+
+        # calculate distance of A from the com of B
+        x1, y1, z1 = pos_A
+        x2, y2, z2 = com_B
+
+        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
+        rounded_variance = round(off_centering_var, 6)
+
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[
+            rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+
+
+def project_point_to_plane(point, normal_vector, point_on_plane):
+    # Convert inputs to numpy arrays if they aren't already
+    point = np.array(point)
+    normal_vector = np.array(normal_vector)
+    point_on_plane = np.array(point_on_plane)
+
+    # Calculate the vector from point_on_plane to point
+    vector = point - point_on_plane
+
+    # Project vector onto normal vector
+    distance_from_plane = np.dot(vector, normal_vector)
+    projection = point - distance_from_plane * normal_vector
+
+    return projection
+
+def find_closest_plane_and_calculate_distance(layer_planes, point_M, point_X):
+    # Initialize minimum distance with a large number
+    min_distance = float('inf')
+    closest_plane_normal = None
+    point_on_plane = None
+
+    # Calculate the closest plane to point_M
+    for layer, normal_vector in layer_planes.items():
+        # Arbitrarily use the first A atom's position in this layer as a point on the plane
+        # Assuming the first A atom's index is available
+        first_atom_index = layer_planes[layer][0]
+        A_position = np.array(layer_planes[layer])
+        centroid = np.mean(A_position, axis=0)
+
+        # Project point_M to this plane
+        projected_point_M = project_point_to_plane(point_M, normal_vector, centroid)
+        distance =  np.linalg.norm(projected_point_M -  point_M)
+
+        # Update closest plane if this one is closer
+        if distance < min_distance:
+            min_distance = distance
+            closest_plane_normal = normal_vector
+            point_on_plane = centroid
+
+    # Project both point_M and point_X onto the closest plane
+    projected_M = project_point_to_plane(point_M, closest_plane_normal, point_on_plane)
+    projected_X = project_point_to_plane(point_X, closest_plane_normal, point_on_plane)
+
+
+    return projected_X, projected_M
+
+
+def calculate_mc_2D_proj(AB_groups, atoms_obj, atom_dict=None,A2_indices=None, A2_symbol=None):
+
+    AB_eq = find_bonded_b_atoms(AB_groups)
+
+    unique_distance_variance_with_idx = {}
+    atom_name = []
+    layer_planes = calculate_layer_planes(AB_groups, atoms_obj)
+
+    for A, B_list in AB_eq.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+
+        # Extract positions for B atoms
+        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
+
+        # calculate center of mass (com) of B-atoms
+        com_B = calculate_centroid(B_positions)
+
+        # calculate distance of A from the com of B
+        proj_A, proj_X = find_closest_plane_and_calculate_distance(layer_planes, pos_A, com_B)
+        x1, y1, z1 = proj_A
+        x2, y2, z2 = proj_X
+
+        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
+        rounded_variance = round(off_centering_var, 6)
+
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[
+            rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+
+def calculate_off_centering_proj(AB_groups, atoms_obj, atom_dict, A2_indices=None, A2_symbol=None):
+    unique_distance_variance_with_idx = {}
+    atom_name = []
+    layer_planes = calculate_layer_planes(AB_groups, atoms_obj)
+
+    for A, B_list in AB_groups.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+
+        # Extract positions for B atoms
+        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
+
+        # calculate center of mass (com) of B-atoms
+        com_B = calculate_centroid(B_positions)
+
+        # calculate distance of A from the com of B
+        proj_A, proj_X = find_closest_plane_and_calculate_distance(layer_planes, pos_A, com_B)
+        x1, y1, z1 = proj_A
+        x2, y2, z2 = proj_X
+
+        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
+        rounded_variance = round(off_centering_var, 6)
+
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+
+
+def find_in_planes(atoms_obj, unique_angles_dict, AB_groups):
     in_planes = {}
 
     first_entry = next(iter(unique_angles_dict.values()))
@@ -2126,7 +2398,7 @@ def calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj):
 
 def calculate_in_out_planes(AB_groups, atoms_obj, atom_dict=None,A2_indices=None, A2_symbol=None):
     unique_angles_dict, _ = calculate_unique_ABA_angles(AB_groups, atoms_obj)
-    in_planes = find_in_planes(atoms_obj, unique_angles_dict)
+    in_planes = find_in_planes(atoms_obj, unique_angles_dict, AB_groups)
     perp_planes = find_perpendicular_planes(in_planes, atoms_obj)
     plane_components = calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj)
 

@@ -1035,8 +1035,8 @@ if st.session_state.atoms is not None:
         # User input for type of distortion(s)
         distortion_type = st.selectbox(
             'Select the type of distortion to calculate:',
-            ('Bond distance variance', 'Angle variance', 'Bridging angle(s)', 'In and out deviations',
-             'all')
+            ('all','Bond distance variance', 'Angle variance', 'Bridging angle(s)', 'In and out deviations'
+             )
         )
 
         with st.expander ("Optional parameters"):
@@ -1064,6 +1064,9 @@ if st.session_state.atoms is not None:
                     'Bond distance variance': calculate_bond_distance_variance,
                     'Bond distance varience simplified (x 1e-05)' : calculate_bond_distance_variance_v2,
                     'Metal off-centering' : calculate_off_centering,
+                    '2D projected Metal off-Centering' : calculate_off_centering_proj,
+                    '2D Metal off-centering': calculate_mc_2D,
+                    '2D projected 2D off-Centering': calculate_mc_2D_proj,
                     'Angle variance': calculate_angle_variance,
                     'Bridging angle(s)': calculate_unique_ABA_angles,
                     'In and out deviations': calculate_in_out_planes,

@@ -327,7 +327,7 @@ def prepare_plot_data(filename, state):
     return k_points, spins, energy
 
 
-def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=cc.cm.CET_L18, alpha=1):
+def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=cc.cm.CET_L18, alpha=0.1):
     shifted_energy = energy - energy_shift
 
     # Normalize shifted energy values to a range of 0 to 1
@@ -352,7 +352,7 @@ def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=
 
 def plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale):
     norm = plt.Normalize(color_component.min(), color_component.max())
-    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm, alpha=1, width=0.003)
+    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm, alpha=1, width=0.001)
     plt.colorbar(quivers, ax=ax).set_label(f'$<\sigma_{spin_direction}>$ component')
 
 def plot_spin_quivers(filename, state, spin_direction, shift_energy, scale, axis_limits=None):
@@ -466,10 +466,14 @@ def parse_out_file(out_file):
     return df
 
 
+from scan_CBM import Input, Band
+
 def get_file_uploads(num_data_sets, default_colors):
     uploaded_files = []
     colors = []
     energyshifts = []
+    all_band_data_VBM = []
+    all_band_data_CBM = []
 
     for i in range(num_data_sets):
         st.text(f"Upload files for data set {i + 1}:")
@@ -477,13 +481,45 @@ def get_file_uploads(num_data_sets, default_colors):
                                  key=f"uploader{i + 1}")
         color = st.text_input(f"Color for data set {i + 1} (optional):",
                               value=default_colors[i % len(default_colors)], key=f"color{i + 1}")
-        energyshift = st.number_input('Enter shift value:', value=0.000, min_value=-30.000, max_value=30.000, key=i)
+        # energyshift = st.number_input('Enter shift value:', value=0.000, min_value=-30.000, max_value=30.000, key=i)
+
         if files:
-            edges = get_energy_edges(files)
-            st.dataframe(edges, use_container_width=True, hide_index=True)
+            current_band = Band()
+            # Filter files based on your criteria
+            filtered_files = [file for file in files if file.name.startswith('band') and file.name.endswith('.out')]
+            for file in filtered_files:
+                # Use the .getvalue() method if the content needs to be read as bytes
+                content = file.getvalue()  # Reading the content of the file directly
+                current_band.get_band(content)  # Assuming this method is adapted to handle data directly
+                VBM_info=current_band.print_VBM()
+                CBM_info=current_band.print_CBM()
+                all_band_data_VBM.append(VBM_info)
+                all_band_data_CBM.append(CBM_info)
+
+            if all_band_data_VBM:
+                max_energy_band = max(all_band_data_VBM, key=lambda x: x["Energy"])
+            if all_band_data_CBM:
+                min_energy_band = min(all_band_data_CBM, key=lambda x: x["Energy"])
+
+                # Create two columns for VBM and CBM information
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("### VBM Information (shifted 0 eV)")
+                st.markdown(f"- **State:** {max_energy_band['State']}")
+                st.markdown(f"- **Coordinate:** {max_energy_band['Coordinate']}")
+                st.markdown(f"- **Energy:** {max_energy_band['Energy']} eV")
+
+            with col2:
+                st.markdown("### CBM Information (just FYI ...)")
+                st.markdown(f"- **State:** {min_energy_band['State']}")
+                st.markdown(f"- **Coordinate:** {min_energy_band['Coordinate']}")
+                st.markdown(f"- **Energy:** {min_energy_band['Energy']} eV")
+
+            st.markdown(f" The band gap is {min_energy_band['Energy'] - max_energy_band['Energy']} eV")
+
             uploaded_files.append(files)
             colors.append(color)
-            energyshifts.append(energyshift)
+            energyshifts.append(max_energy_band['Energy'] if all_band_data_VBM else 0)
 
     return uploaded_files, colors, energyshifts
 
@@ -564,7 +600,10 @@ def set_custom_labels(ax, all_data, apply_scaling, n_data_sets):
         label_color = 'black'
         # Set the x-axis labels based on the first dataset
         ax.set_xticks(band_len_tot)
-        ax.set_xticklabels(k_label_reduce, color=label_color, fontsize=20)
+        k_label_reduce = [label.replace('Gamma', 'Γ').replace('G', 'Γ') for label in k_label_reduce]
+        ax.set_xticklabels(k_label_reduce, color=label_color, fontsize=26, rotation= 0)
+        for tick in ax.xaxis.get_major_ticks()[3:4]:
+            tick.set_pad(30)
 
 def get_energy_edges(uploaded_files):
     for uploaded_file in uploaded_files:
@@ -676,3 +715,105 @@ def generate_layout_elec(title, xaxis_title, yaxis_title, font_size=16, color_te
         }
     }
     return layout
+
+
+def plot_multiple_energy_surfaces_with_spins(data_sets, view_init=None, alpha=0.1, gridsize=50,
+                                             constant=0.01):
+    """
+    Plots multiple 3D surface plots of energy levels on the kx-ky plane, with 3D spins represented as arrows, for multiple sets of data.
+
+    Parameters:
+    - data_sets: A list of data sets, where each set is [kx, ky, energy, sigma_x, sigma_y, sigma_z].
+    - color: String representing the color of the surface plot.
+    - view_init: Tuple of (elev, azim) to set the view angle of the 3D plot.
+    - alpha: Opacity of the surface plot.
+    - gridsize: The size of the grid to interpolate onto for smoothing.
+    - constant: A small constant value added to the magnitude calculation to visualize zero magnitude spins.
+    - linewidths: The thickness of the arrows in the quiver plot.
+    """
+    # Create a new figure and add a 3D subplot
+    colors = cycle(['grey', 'orchid'])
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    for data_set in data_sets:
+        kx, ky, energy, sigma_x, sigma_y, sigma_z = data_set
+        surface_color = next(colors)
+
+        # Normalize spin vectors with a small constant to handle zero magnitude vectors
+        magnitudes = np.sqrt(sigma_x ** 2 + sigma_y ** 2 + sigma_z ** 2) + constant
+        sigma_x_normalized = sigma_x / magnitudes
+        sigma_y_normalized = sigma_y / magnitudes
+        sigma_z_normalized = sigma_z / magnitudes
+
+        # Create a colormap based on the z component of the spin
+        norm = Normalize(vmin=-1, vmax=1)
+        cmap = plt.get_cmap('coolwarm')
+        mappable = ScalarMappable(norm=norm, cmap=cmap)
+        spin_colors = mappable.to_rgba(sigma_z_normalized)
+
+        # Interpolate energy data onto the grid
+        xi = np.linspace(min(kx), max(kx), gridsize)
+        yi = np.linspace(min(ky), max(ky), gridsize)
+        Xi, Yi = np.meshgrid(xi, yi)
+        Zi = griddata((kx, ky), energy, (Xi, Yi), method='cubic')
+
+        # Plot the surface
+        ax.plot_surface(Xi, Yi, Zi, color=surface_color, edgecolor='none', alpha=alpha)
+
+        # Calculate the energy (Z) at each spin's (kx, ky) position
+        spin_z = griddata((kx, ky), energy, (kx, ky), method='nearest')
+
+        # Plot the normalized spins as 3D arrows, coloring based on z component
+        for i in range(len(kx)):
+            ax.quiver(kx[i], ky[i], spin_z[i], sigma_x_normalized[i], sigma_y_normalized[i], sigma_z_normalized[i],
+                      color=spin_colors[i], pivot='middle', length=0.2, arrow_length_ratio=0.1, normalize=False,
+                      linewidth=1, alpha=1)
+
+    # Optionally set the view angle
+    if view_init:
+        ax.view_init(elev=view_init[0], azim=view_init[1])
+
+    # Set labels for the axes
+    ax.set_xlabel('kx')
+    ax.set_ylabel('ky')
+    ax.set_zlabel('Energy')
+
+    # Add colorbar for the spins' z component
+    # cbar = fig.colorbar(mappable, shrink=0.1, aspect=5, pad=0.1)
+    # cbar.set_label('Spin Direction (z component)')
+
+    return fig
+from itertools import cycle
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
+from mpl_toolkits.mplot3d import Axes3D
+import math
+from scipy.interpolate import griddata
+
+def plot_spin_quivers_3D(filename_spin, states, spin_direction):
+    plt.rcParams["font.family"] = "Arial"
+    plt.rcParams.update({'font.size': 18})
+
+    data_sets = []
+
+    for state in states:
+        k_points, spins, energy = prepare_plot_data(filename_spin, state)
+        kx, ky, kz = k_points[:, 0], k_points[:, 1], k_points[:, 2]
+        sigma_x, sigma_y, sigma_z = spins[:, 0], spins[:, 1], spins[:, 2]
+
+
+        if spin_direction == 'z':
+            data_set = [kx, ky, energy, sigma_x, sigma_y, sigma_z]
+            data_sets.append(data_set)
+        elif spin_direction == 'x':
+            data_set = [kz, ky,energy, sigma_z, sigma_y, sigma_x]
+            data_sets.append(data_set)
+        elif spin_direction == 'y':
+            data_set = [kx, kz, energy, sigma_x, sigma_z, sigma_y]
+            data_sets.append(data_set)
+        else:
+            raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
+
+    return plot_multiple_energy_surfaces_with_spins(data_sets, view_init=[18,0])

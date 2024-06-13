@@ -43,11 +43,11 @@ st.set_page_config(page_title="hPAME", layout="wide")
 
 st.title("hybrid :red[Perovskite Analysis and Modeling Engine]")
 
-col1, col2, col3 = st.columns([30,0.5,0.5])
-with col2:
-    email_link()
-with col3:
-    twitter_link()
+# col1, col2, col3 = st.columns([30,0.5,0.5])
+# with col2:
+#     email_link()
+# with col3:
+#     twitter_link()
 
 
 # from yaml.loader import SafeLoader
@@ -100,9 +100,9 @@ st.latex(r'''\rm Download\; a\;  structure\;  file\;  from\;  HybriD^3:''')
 with st.expander("Expand for options"):
 
     col1, col2, col3 = st.columns([3,0.5,3])
-    with col2:
-        # st.image(image_db, use_column_width=True)
-        st_lottie("https://lottie.host/90f085a3-e3b9-440d-83ab-ddec87f2b5d6/e904WGCrzS.json")
+    # with col2:
+    #     # st.image(image_db, use_column_width=True)
+    #     st_lottie("https://lottie.host/90f085a3-e3b9-440d-83ab-ddec87f2b5d6/e904WGCrzS.json")
 
 
 
@@ -1075,7 +1075,7 @@ if st.session_state.atoms is not None:
                 output_data = []
                 if distortion_type == 'all':
                     for func_name, func in distortion_mapping.items():
-                        result = func(AB6_octahedra, super_atoms, periodic_image_dict, A2_indices=A2_indices, A2_symbol=center_atom_2)
+                        result = func(AB6_octahedra, super_atoms, periodic_image_dict, b=b_parameter, A2_indices=A2_indices, A2_symbol=center_atom_2)
                         if func_name == 'Bridging angle(s)':
                             output_data.extend(handle_bridging_angles(result, periodic_image_dict))
                         elif func_name == 'In and out deviations':
@@ -1388,7 +1388,7 @@ if plot_bs_option:
     # Configuration for the number of datasets and default settings
     num_data_sets = st.number_input("How many plot data sets do you want to provide?",
                                     min_value=1, max_value=10, value=1)
-    default_colors = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'orange', 'purple', 'brown']
+    default_colors = ['crimson', 'blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'orange', 'purple', 'brown']
 
     # Get file uploads and user preferences
     uploaded_files_list, user_defined_colors, user_defined_eshifts = get_file_uploads(num_data_sets, default_colors)
@@ -1425,8 +1425,11 @@ if plot_bs_option:
             set_custom_labels(ax, all_data, apply_scaling, num_data_sets)
 
             # Finalize and show the plot
-            plt.ylabel('E - E_f (eV)')
+            # rcParams["text. usetex"](default: True)
+            # plt.ylabel(r'$E - E_{{f}}$ (eV)')
+            plt.ylabel('Energy (eV)')
             plt.axis([0, max([abs(i) for data in all_data for i in data[1][-1]]), ymin, ymax])
+            plt.tight_layout()
             st.pyplot(fig)
 
             buf = io.BytesIO()

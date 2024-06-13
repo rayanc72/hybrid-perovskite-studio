@@ -4,6 +4,7 @@ import numpy as np
 from os.path import join, isfile
 from os import listdir
 import sys
+import streamlit as st
 
 class Input(object):
 
@@ -101,9 +102,9 @@ class Band(object):
         self.sampling = sampling
         self.coordinate = coordinate
 
-    def get_band(self, filename):
-        with open(filename, 'r') as fin:
-            data = fin.readlines()
+    def get_band(self, data):
+        # with open(filename, 'r') as fin:
+        #     data = fin.readlines()
         self.sampling = len(data)
         for grid in range(self.sampling):
             item = data[grid].split()
@@ -114,20 +115,51 @@ class Band(object):
                 except KeyError:
                     self.eigenvalues[i] = [float(item[2 * i + 3])]
 
+    def get_band(self, data):
+        # Convert bytes data to string if necessary
+        if isinstance(data, bytes):
+            data = data.decode('utf-8')
+
+        # Split the data into lines
+        data = data.splitlines()
+
+        self.sampling = len(data)
+        self.coordinate = []  # Ensure coordinate is initialized
+        self.eigenvalues = {}  # Ensure eigenvalues is initialized
+
+        for grid in range(self.sampling):
+            item = data[grid].split()
+            self.coordinate.append([float(k) for k in item[1:4]])
+            for i in range(1, int((len(item) - 4) / 2 + 1)):
+                eigenvalue_index = 2 * i + 3
+                if eigenvalue_index < len(item):
+                    try:
+                        self.eigenvalues[i].append(float(item[eigenvalue_index]))
+                    except KeyError:
+                        self.eigenvalues[i] = [float(item[eigenvalue_index])]
+
     def print_VBM(self, line=0.00):
+        results=[]
         for state in self.eigenvalues:
             if(max(self.eigenvalues[state + 1]) > line):
                 break
         max_energy = max(self.eigenvalues[state])
         VBM_list = [x for x in range(len(self.eigenvalues[state]))
                     if (self.eigenvalues[state][x] == max_energy)]
-        print("VBM energy: " + str(max_energy) + " eV")
-        print("Current state: " + str(state))
         for i in range(len(VBM_list)):
-            print("Coordinate: " + str(self.coordinate[VBM_list[i]]) + "  " +
-                  "Energy: " + str(max_energy) + " eV")
+            results.append({
+                "State": state,
+                "Coordinate": self.coordinate[VBM_list[i]],
+                "Energy": max_energy
+            })
+
+        return max(results, key=lambda x: x["Energy"]) if results else None
+    #         return("State: " + str(state) + "Coordinate: " + str(self.coordinate[VBM_list[i]]) + "  " +
+    #               "Energy: " + str(max_energy) + " eV")
+    #
 
     def print_CBM(self, line=0.00):
+        results=[]
         for state in self.eigenvalues:
             if(max(self.eigenvalues[state + 1]) > line):
                 break
@@ -135,11 +167,17 @@ class Band(object):
         min_energy = min(self.eigenvalues[state])
         CBM_list = [x for x in range(len(self.eigenvalues[state]))
                     if (self.eigenvalues[state][x] == min_energy)]
-        print("CBM energy: " + str(min_energy) + " eV")
-        print("Current state: " + str(state))
+        # print("CBM energy: " + str(min_energy) + " eV")
+        # print("Current state: " + str(state))
         for i in range(len(CBM_list)):
-            print("Coordinate: " + str(self.coordinate[CBM_list[i]]) + "  " +
-                  "Energy: " + str(min_energy) + " eV")
+            results.append({
+                "State": state,
+                "Coordinate": self.coordinate[CBM_list[i]],
+                "Energy": min_energy
+            })
+            # return("Coordinate: " + str(self.coordinate[CBM_list[i]]) + "  " +
+            #       "Energy: " + str(min_energy) + " eV")
+        return min(results, key=lambda x: x["Energy"]) if results else None
 
     def find_VBM_state(self, line=0.01):
         for state in self.eigenvalues:
@@ -151,7 +189,7 @@ class Band(object):
         VBM_state = self.find_VBM_state(line)
         print(" ")
         print(VBM_state)
-        return(max(self.eigenvalues[VBM_state]))
+        return(max(self.eigenvalues[VBM_state]), VBM_state)
 
 
 if(__name__ == "__main__"):
@@ -167,7 +205,7 @@ if(__name__ == "__main__"):
                  and ('mlk' not in f)]
     bandfiles.sort()
     for f in bandfiles:
-        print(f)
+        st.write(f)
         current_band.get_band(f)
     print(len(current_band.coordinate))
     current_band.print_VBM(line=myLine)

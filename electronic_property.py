@@ -352,10 +352,10 @@ def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=
 
 def plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale):
     norm = plt.Normalize(color_component.min(), color_component.max())
-    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm, alpha=1, width=0.001)
+    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm, alpha=1, width=0.004)
     plt.colorbar(quivers, ax=ax).set_label(f'$<\sigma_{spin_direction}>$ component')
 
-def plot_spin_quivers(filename, state, spin_direction, shift_energy, scale, axis_limits=None):
+def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scale, axis_limits=None):
     fig, ax = plt.subplots(figsize=(8, 6))
     plt.rcParams["font.family"] = "Arial"
     plt.rcParams.update({'font.size': 18})
@@ -364,32 +364,53 @@ def plot_spin_quivers(filename, state, spin_direction, shift_energy, scale, axis
 
     k_points, spins, energy = prepare_plot_data(filename, state)
 
-    if spin_direction == 'z':
-        kx, ky = k_points[:, 0], k_points[:, 1]
-        spin_x, spin_y, color_component = spins[:, 0], spins[:, 1], spins[:, 2]
-        ax_label_x, ax_label_y = "-X$\Gamma$X ($// \\vec{a}$) ($\AA^{-1}$)", "-Y$\Gamma$Y ($// \\vec{b}$) ($\AA^{-1}$)"
-    elif spin_direction == 'x':
-        ky, kz = k_points[:, 1], k_points[:, 2]
-        spin_y, spin_z, color_component = spins[:, 1], spins[:, 2], spins[:, 0]
-        kx, spin_x = kz, spin_z
-        ax_label_x, ax_label_y = "-Z$\Gamma$Z ($// \\vec{c}$) ($\AA^{-1}$)", "-Y$\Gamma$Y ($// \\vec{b}$) ($\AA^{-1}$)"
-    elif spin_direction == 'y':
-        kx, kz = k_points[:, 0], k_points[:, 2]
-        spin_x, spin_z, color_component = spins[:, 0], spins[:, 2], spins[:, 1]
-        ky, spin_y = kz, spin_z
-        ax_label_x, ax_label_y = "-X$\Gamma$X ($// \\vec{a}$) ($\AA^{-1}$)", "-Z$\Gamma$Z ($// \\vec{c}$) ($\AA^{-1}$)"
-    else:
-        raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
 
-    plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale=scale)
+    if plane == 'xy':
+        k1, k2 = k_points[:, 0], k_points[:, 1]
+        ax_label_1, ax_label_2 = "kx ($// \\vec{a}$) ($\AA^{-1}$)", "ky ($// \\vec{b}$) ($\AA^{-1}$)"
+        if spin_direction == 'z':
+            spin_1, spin_2, color_component = spins[:, 0], spins[:, 1], spins[:, 2]
+        elif spin_direction == 'x':
+            spin_1, spin_2, color_component = spins[:, 0], spins[:, 1], spins[:, 0]
+        elif spin_direction == 'y':
+            spin_1, spin_2, color_component = spins[:, 0], spins[:, 1], spins[:, 1]
+        else:
+            raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
+    elif plane == 'yz':
+        k1, k2 = k_points[:, 1], k_points[:, 2]
+        ax_label_1, ax_label_2 = "ky ($// \\vec{b}$) ($\AA^{-1}$)", "kz ($// \\vec{c}$) ($\AA^{-1}$)"
+        if spin_direction == 'z':
+            spin_1, spin_2, color_component = spins[:, 1], spins[:, 2], spins[:, 2]
+        elif spin_direction == 'x':
+            spin_1, spin_2, color_component = spins[:, 1], spins[:, 2], spins[:, 0]
+        elif spin_direction == 'y':
+            spin_1, spin_2, color_component = spins[:, 1], spins[:, 2], spins[:, 1]
+        else:
+            raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
+    elif plane == 'xz':
+        k1, k2 = k_points[:, 0], k_points[:, 2]
+        ax_label_1, ax_label_2 = "kx ($// \\vec{a}$) ($\AA^{-1}$)", "kz ($// \\vec{c}$) ($\AA^{-1}$)"
+        if spin_direction == 'z':
+            spin_1, spin_2, color_component = spins[:, 0], spins[:, 2], spins[:, 2]
+        elif spin_direction == 'x':
+            spin_1, spin_2, color_component = spins[:, 0], spins[:, 2], spins[:, 0]
+        elif spin_direction == 'y':
+            spin_1, spin_2, color_component = spins[:, 0], spins[:, 2], spins[:, 1]
+        else:
+            raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
+    else:
+        raise ValueError("Invalid plane. Choose 'xy', 'yz', or 'xz'.")
+
+
+    plot_quivers(ax, k1, k2, spin_1, spin_2, color_component, spin_direction, scale=scale)
 
     # try:
     #     plot_energy_contours(ax, kx, ky, energy, shift_energy)
     # except Exception as e:
     #     st.error(f"An error occurred while plotting the energy contours: {e}")
 
-    ax.set_xlabel(ax_label_x)
-    ax.set_ylabel(ax_label_y)
+    ax.set_xlabel(ax_label_1)
+    ax.set_ylabel(ax_label_2)
 
     if axis_limits:
         ax.axis(axis_limits)
@@ -469,6 +490,14 @@ def parse_out_file(out_file):
 from scan_CBM import Input, Band
 
 def get_file_uploads(num_data_sets, default_colors):
+
+    if "file_uploader_key" not in st.session_state:
+        st.session_state["file_uploader_key"] = 0
+
+    if "uploaded_files" not in st.session_state:
+        st.session_state["uploaded_files"] = []
+
+
     uploaded_files = []
     colors = []
     energyshifts = []
@@ -478,12 +507,13 @@ def get_file_uploads(num_data_sets, default_colors):
     for i in range(num_data_sets):
         st.text(f"Upload files for data set {i + 1}:")
         files = st.file_uploader(f"Data set {i + 1} files", type=['in', 'out'], accept_multiple_files=True,
-                                 key=f"uploader{i + 1}")
+                                 key=st.session_state["file_uploader_key"])
         color = st.text_input(f"Color for data set {i + 1} (optional):",
                               value=default_colors[i % len(default_colors)], key=f"color{i + 1}")
         # energyshift = st.number_input('Enter shift value:', value=0.000, min_value=-30.000, max_value=30.000, key=i)
 
         if files:
+            st.session_state["uploaded_files"] = files
             current_band = Band()
             # Filter files based on your criteria
             filtered_files = [file for file in files if file.name.startswith('band') and file.name.endswith('.out')]

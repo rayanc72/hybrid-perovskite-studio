@@ -1403,6 +1403,9 @@ if plot_bs_option:
     # Button to trigger the plotting
     plot_button = st.button("Plot")
 
+    # Button to remove files
+    remove_button = st.button("Clear files")
+
     if uploaded_files_list:
         if plot_button:
 
@@ -1443,6 +1446,11 @@ if plot_bs_option:
                 mime="application/png"
             )
 
+        if remove_button:
+            st.session_state["file_uploader_key"] += 1
+            st.experimental_rerun()
+
+
 
     else:
         st.warning("Please upload files before plotting.")
@@ -1478,6 +1486,9 @@ if plot_spin_option:
 
         # Input for energy shift
         shift_e = st.number_input("Enter the energy shift:")
+
+        # Input for k-plane
+        k_plane = st.selectbox("k-plane for texture", ['xy', 'yz', 'xz'])
 
         #Input for spin direction
         spin_direction = st.selectbox("Spin direction", ['x', 'y', 'z'])
@@ -1515,7 +1526,7 @@ if plot_spin_option:
                     for state in states:
                         uploaded_file.seek(0)
                         try:
-                            fig = plot_spin_quivers(uploaded_file, state, spin_direction, shift_e, scale=scale_param, axis_limits= [x_min, x_max, y_min, y_max])
+                            fig = plot_spin_quivers(uploaded_file, state, spin_direction, k_plane, shift_e, scale=scale_param, axis_limits= [x_min, x_max, y_min, y_max])
 
                             buf = io.BytesIO()
                             fig.savefig(buf, format='pdf', transparent=True)

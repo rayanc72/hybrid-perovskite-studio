@@ -219,7 +219,7 @@ def process_control_file(uploaded_file, rlatvec):
 
     for line in uploaded_file:
         line = line.decode('utf-8')  # Decoding for binary files
-        if line.strip().startswith('output band'):
+        if line.strip().startswith('output band') or line.strip().startswith('output                             band'):
             words = line.strip().split()
             kpoint.append([float(i) for i in words[2:8]])
             n_sample = int(words[-3])
@@ -300,8 +300,12 @@ def plot_bands(ax, bands_all_files, xvals=None, plot_color='blue'):
 
 def get_state_range(uploaded_file):
     df = pd.read_csv(uploaded_file, delim_whitespace=True, comment='#', header=None)
-    column_names = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z']
-    df.columns = column_names
+    column_names_new = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z','rel_kx', 'rel_ky', 'rel_kz']
+    column_names_old = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z']
+    try:
+        df.columns = column_names_new
+    except:
+        df.columns = column_names_old
     states = df['State'].unique()
     return states.min(), states.max()
 
@@ -310,8 +314,13 @@ def filter_state_data(uploaded_file, target_state):
     # Read the file directly from the file-like object
     df = pd.read_csv(uploaded_file, delim_whitespace=True, comment='#', header=None)
     uploaded_file.seek(0)  # Reset the file pointer to the beginning after reading
-    column_names = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z']
-    df.columns = column_names
+    column_names_new = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z', 'rel_kx',
+                        'rel_ky', 'rel_kz']
+    column_names_old = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z']
+    try:
+        df.columns = column_names_new
+    except:
+        df.columns = column_names_old
     filtered_df = df[df['State'] == target_state].copy()
     filtered_df = filtered_df.drop('State', axis=1)
     filtered_df.reset_index(drop=True, inplace=True)
@@ -352,7 +361,7 @@ def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=
 
 def plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale):
     norm = plt.Normalize(color_component.min(), color_component.max())
-    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm, alpha=1, width=0.004)
+    quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm, alpha=1, width=0.005, headlength=4.0, headwidth=3.0, headaxislength=3.0)
     plt.colorbar(quivers, ax=ax).set_label(f'$<\sigma_{spin_direction}>$ component')
 
 def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scale, axis_limits=None):
@@ -366,8 +375,8 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
 
 
     if plane == 'xy':
-        k1, k2 = k_points[:, 0], k_points[:, 1]
-        ax_label_1, ax_label_2 = "kx ($// \\vec{a}$) ($\AA^{-1}$)", "ky ($// \\vec{b}$) ($\AA^{-1}$)"
+        k1, k2 = k_points[:, 0]*10, k_points[:, 1]*10
+        ax_label_1, ax_label_2 = "kx ($// \\vec{a}$) ($nm^{-1}$)", "ky ($// \\vec{b}$) ($nm^{-1}$)"
         if spin_direction == 'z':
             spin_1, spin_2, color_component = spins[:, 0], spins[:, 1], spins[:, 2]
         elif spin_direction == 'x':
@@ -377,8 +386,8 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
         else:
             raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
     elif plane == 'yz':
-        k1, k2 = k_points[:, 1], k_points[:, 2]
-        ax_label_1, ax_label_2 = "ky ($// \\vec{b}$) ($\AA^{-1}$)", "kz ($// \\vec{c}$) ($\AA^{-1}$)"
+        k1, k2 = k_points[:, 1]*10, k_points[:, 2]*10
+        ax_label_1, ax_label_2 = "ky ($// \\vec{b}$) ($nm^{-1}$)", "kz ($// \\vec{c}$) ($nm^{-1}$)"
         if spin_direction == 'z':
             spin_1, spin_2, color_component = spins[:, 1], spins[:, 2], spins[:, 2]
         elif spin_direction == 'x':
@@ -388,8 +397,8 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
         else:
             raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
     elif plane == 'xz':
-        k1, k2 = k_points[:, 0], k_points[:, 2]
-        ax_label_1, ax_label_2 = "kx ($// \\vec{a}$) ($\AA^{-1}$)", "kz ($// \\vec{c}$) ($\AA^{-1}$)"
+        k1, k2 = k_points[:, 0]*10, k_points[:, 2]*10
+        ax_label_1, ax_label_2 = "kx ($// \\vec{a}$) ($nm^{-1}$)", "kz ($// \\vec{c}$) ($nm^{-1}$)"
         if spin_direction == 'z':
             spin_1, spin_2, color_component = spins[:, 0], spins[:, 2], spins[:, 2]
         elif spin_direction == 'x':
@@ -634,6 +643,10 @@ def set_custom_labels(ax, all_data, apply_scaling, n_data_sets):
         ax.set_xticklabels(k_label_reduce, color=label_color, fontsize=26, rotation= 0)
         for tick in ax.xaxis.get_major_ticks()[3:4]:
             tick.set_pad(30)
+        # for tick in ax.xaxis.get_major_ticks()[7:8]:
+        #     tick.set_pad(30)
+        # for tick in ax.xaxis.get_major_ticks()[9:10]:
+        #     tick.set_pad(30)
 
 def get_energy_edges(uploaded_files):
     for uploaded_file in uploaded_files:

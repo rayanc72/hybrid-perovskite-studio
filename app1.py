@@ -3,6 +3,7 @@ from structure_manager import *
 import plotly.express as px
 from molecule_builder import *
 from electronic_property import *
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from contextlib import redirect_stdout
 from MD_analysis import *
 import streamlit as st
@@ -95,110 +96,114 @@ st.title("hybrid :red[Perovskite Analysis and Modeling Engine]")
 #     st.stop()
 
 
-st.divider()
-st.latex(r'''\rm Download\; a\;  structure\;  file\;  from\;  HybriD^3:''')
-with st.expander("Expand for options"):
-
-    col1, col2, col3 = st.columns([3,0.5,3])
-    # with col2:
-    #     # st.image(image_db, use_column_width=True)
-    #     st_lottie("https://lottie.host/90f085a3-e3b9-440d-83ab-ddec87f2b5d6/e904WGCrzS.json")
+# st.divider()
+# st.latex(r'''\rm Download\; a\;  structure\;  file\;  from\;  HybriD^3:''')
+# with st.expander("Expand for options"):
+#
+#     col1, col2, col3 = st.columns([3,0.5,3])
 
 
-
-    conn = st.connection("1107_dump", type="sql", autocommit=True)
-    systems = conn.query("select * from materials_system")
-
-    # Taking user input for the search string, system ID, and dataset ID
-    user_input = st.text_input("Enter search string (e.g., BA2PbI4):")
-    system_id = st.text_input("Enter system ID:")
-    dataset_id = st.text_input("Enter dataset ID:")
-
-    structure_file_path = None
-
-    # Handling the logic based on the provided input
-    if dataset_id:  # If dataset ID is provided, it takes precedence
-        try:
-            zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
-            response = requests.get(zip_url, stream=True)
-            response.raise_for_status()
-
-            # Writing the zip file to a temporary location and allowing the user to download
-            zip_data = response.content
-            file_content, file_extension = extract_structure_file(zip_data)
-            if file_content:
-                # Use st.download_button to allow the user to download the file
-                st.download_button(
-                    label=f"Download {dataset_id}{file_extension}",
-                    data=file_content,
-                    file_name=f"{dataset_id}{file_extension}",
-                    mime=f"text/{file_extension[1:]}"  # assuming mime type to be text/in or text/cif
-                )
-
-
-        except requests.exceptions.RequestException as err:
-            st.write(f"Error fetching dataset: {err}")
-
-
-    elif system_id:  # Next priority is system ID
-
-        try:
-
-            matched_df = systems[systems['id'] == int(system_id)][['id', 'compound_name', 'formula']]
-
-            if not matched_df.empty:
-
-                st.write(f"Information for ID '{system_id}':")
-
-                st.dataframe(matched_df, hide_index=True, use_container_width=True)
-
-                dataset_results = fetch_materials_datasets(conn, int(system_id))
-
-                # Safely format the list of integers for the SQL query
-
-                ref_ids = dataset_results['reference_id'].tolist()
-
-                ref_ids_string = ','.join(
-                    map(str, ref_ids))  # Converts each id to a string and then joins them with commas
-
-                # Formulate the SQL query with the ref_ids_string
-
-                reference_query = f"SELECT `id`,`title`, `year`, `doi_isbn` FROM materials_reference WHERE `id` IN ({ref_ids_string})"
-
-                reference_data = conn.query(reference_query)
-
-                # Convert the result to a DataFrame
-
-                reference_df = pd.DataFrame(reference_data, columns=['id', 'title', 'year', 'doi_isbn'])
-                reference_df.rename(columns={'id': 'reference_id'}, inplace=True)
-
-
-                # Merge the dataframes on 'reference_id'
-
-                merged_results = pd.merge(dataset_results, reference_df, on='reference_id',
-                                          how='left')
-
-                # After the merge, the DataFrame 'merged_results' will contain columns from both 'dataset_results' and 'reference_df'
-
-                # If the column names are not as expected, adjust the line below accordingly:
-
-                st.write("Associated structure datasets with DOIs:")
-
-                st.dataframe(merged_results[['id', 'space_group', 'title', 'year', 'doi_isbn']], hide_index=True,
-                             use_container_width=True)
-
-            else:
-
-                st.write(f"No results found for ID '{system_id}'.")
-
-        except ValueError:
-
-            st.write("Please enter a valid ID.")
-    elif user_input:  # Only check for search string if ID is not provided
-        matched_ids = search_database(systems, user_input)
-        matched_df = systems[systems['id'].isin(matched_ids)][['id', 'compound_name', 'formula']]
-        st.write(f"Information for matched IDs with '{user_input}':")
-        st.dataframe(matched_df, hide_index=True, use_container_width=True)
+    # conn = st.connection("1107_dump", type="sql", autocommit=True) ## Updated database on 08/28/2024
+    # systems = conn.query("select * from materials_system")
+    #
+    # # Taking user input for the search string, system ID, and dataset ID
+    # user_input = st.text_input("Enter search string (e.g., BA2PbI4):")
+    # system_id = st.text_input("Enter system ID:")
+    # dataset_id = st.text_input("Enter dataset ID:")
+    #
+    # structure_file_path = None
+    #
+    # if dataset_id:  # If dataset ID is provided, it takes precedence
+    #     try:
+    #         zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
+    #         response = requests.get(zip_url, stream=True)
+    #         response.raise_for_status()
+    #
+    #         # Writing the zip file to a temporary location and allowing the user to download
+    #         zip_data = response.content
+    #         file_content, file_extension = extract_structure_file(zip_data)
+    #         if file_content:
+    #             # Use st.download_button to allow the user to download the file
+    #             st.download_button(
+    #                 label=f"Download {dataset_id}{file_extension}",
+    #                 data=file_content,
+    #                 file_name=f"{dataset_id}{file_extension}",
+    #                 mime=f"text/{file_extension[1:]}"  # assuming mime type to be text/in or text/cif
+    #             )
+    #
+    #
+    #     except requests.exceptions.RequestException as err:
+    #         st.write(f"Error fetching dataset: {err}")
+    #
+    #
+    # elif system_id:  # Next priority is system ID
+    #
+    #     try:
+    #
+    #         matched_df = systems[systems['id'] == int(system_id)][['id', 'compound_name', 'formula']]
+    #
+    #         if not matched_df.empty:
+    #
+    #             st.write(f"Information for ID '{system_id}':")
+    #
+    #             st.dataframe(matched_df, hide_index=True, use_container_width=True)
+    #
+    #             dataset_results = fetch_materials_datasets(conn, int(system_id))
+    #
+    #             # Safely format the list of integers for the SQL query
+    #
+    #             ref_ids = dataset_results['reference_id'].tolist()
+    #
+    #             ref_ids_string = ','.join(
+    #                 map(str, ref_ids))  # Converts each id to a string and then joins them with commas
+    #
+    #             # Formulate the SQL query with the ref_ids_string
+    #
+    #             reference_query = f"SELECT `id`,`title`, `year`, `doi_isbn` FROM materials_reference WHERE `id` IN ({ref_ids_string})"
+    #
+    #             reference_data = conn.query(reference_query)
+    #
+    #             # Convert the result to a DataFrame
+    #
+    #             reference_df = pd.DataFrame(reference_data, columns=['id', 'title', 'year', 'doi_isbn'])
+    #             reference_df.rename(columns={'id': 'reference_id'}, inplace=True)
+    #
+    #
+    #             # Merge the dataframes on 'reference_id'
+    #
+    #             merged_results = pd.merge(dataset_results, reference_df, on='reference_id',
+    #                                       how='left')
+    #
+    #
+    #             st.write("Associated structure datasets with DOIs:")
+    #
+    #             st.dataframe(merged_results[['id', 'space_group', 'title', 'year', 'doi_isbn']], hide_index=True,
+    #                          use_container_width=True)
+    #
+    #         else:
+    #
+    #             st.write(f"No results found for ID '{system_id}'.")
+    #
+    #     except ValueError:
+    #
+    #         st.write("Please enter a valid ID.")
+    # elif user_input:  # Only check for search string if ID is not provided
+    #     matched_ids = search_database(systems, user_input)
+    #     matched_df = systems[systems['id'].isin(matched_ids)][['id', 'compound_name', 'formula']]
+    #
+    #     # Initiate a column in matched_df "Structure exists" with values "No"
+    #     matched_df['Structure exists'] = 'No'
+    #
+    #     # for each id in matched_df run fetch_materials_datasets to get results. If result is not empty, update the "Structure exists" value to "Yes"
+    #     for index, row in matched_df.iterrows():
+    #         # Fetch materials datasets using the provided ID and check if any data exists
+    #         result = fetch_materials_datasets(conn, row['id'])
+    #         # If the result is not empty, update the "Structure exists" column for this row to "Yes"
+    #         if not result.empty:
+    #             matched_df.at[index, 'Structure exists'] = 'Yes'
+    #
+    #     st.write(f"Information for matched IDs with '{user_input}':")
+    #     st.dataframe(matched_df, hide_index=True, use_container_width=True)
 
 
 
@@ -292,6 +297,7 @@ with st.sidebar:
     symmetry_option = st.sidebar.checkbox("Symmetrize structure", value=False)
     com_option = st.sidebar.checkbox("Find center of mass", value=False)
     dm_option = st.sidebar.checkbox("Calculate dipole moment", value=False)
+    polarization_option = st.sidebar.checkbox("Calculate polarization direction", value=False)
     distance_option = st.sidebar.checkbox("Calculate atomic distances", value=False)
     distortion_option = st.sidebar.checkbox("Calculate octahedral distortions", value=False)
     deviation_calculation_option = st.sidebar.checkbox("Calculate percentage deviation", value=False)
@@ -333,6 +339,7 @@ with st.sidebar:
 
     st.sidebar.header("Experimental")
     script_option=st.sidebar.checkbox("Run your own script", value=False)
+    xy_plot_option=st.sidebar.checkbox("Simple XY plot", value=False)
 
 
 
@@ -820,6 +827,36 @@ if st.session_state.atoms is not None:
         except ValueError as e:
             st.error(f"An error occurred when trying to extract the ADP values: {e}")
 
+
+    if polarization_option:
+        st.header("Calculated Polarization direction", divider='violet')
+        pymatgen_structure = generate_symmetrized_structure(modified_atoms, 0.001,5.0)
+        analyzer = SpacegroupAnalyzer(pymatgen_structure)
+        structure = analyzer.get_conventional_standard_structure()
+        pos_atoms, neg_atoms = [["Pb"], ["I"]]
+
+        # Extract fractional positions
+        pos_coords = np.array([site.frac_coords for site in structure if site.species_string in pos_atoms])
+        neg_coords = np.array([site.frac_coords for site in structure if site.species_string in neg_atoms])
+
+        if len(pos_coords) == 0 or len(neg_coords) == 0:
+            raise ValueError("Specified charged atoms not found in the structure.")
+
+        L = structure.lattice.matrix
+
+        # get cartesian coordinates
+        pos_cart = pos_coords @ L
+        neg_cart = neg_coords @ L
+
+        dipole_cart = ((pos_cart.mean(axis=0))*2) - neg_cart.mean(axis=0)
+
+        # convert that vector back to fractional
+        dipole_frac = np.linalg.solve(L.T, dipole_cart)
+
+
+        miller_direction = normalize_fractional_direction(dipole_frac)
+
+        st.write(miller_direction)
 
     # if create_cent_option:
     #     st.header("Create Idealized Structure")
@@ -1642,7 +1679,7 @@ if MD_option:
             # Remove the files after they have been downloaded
             os.remove(zip_file)
             os.remove(spt_file)
-            os.remove("joined_file.out")
+            # os.remove("joined_file.out")
             # os.remove(movie_file)
 
 
@@ -1795,7 +1832,7 @@ previous_file_buffer = None
 
 if MDanalysis_option:
     st.header("Analysis on MD Trajectory", divider='violet')
-    timestep = st.number_input("Enter timestep in fs (dt)", min_value=0.0, max_value=5.0, step=0.1)
+    timestep = st.number_input("Enter timestep in fs (dt)", min_value=0.0, max_value=50.0, step=0.1)
     file_buffer_md = st.file_uploader("Upload zipped directory", type=["zip"], key="file_buffer_zip")
 
 
@@ -2000,6 +2037,152 @@ if plot_spin_v2_option:
                         st.error(f"An error occurred while plotting: {e}")
             else:
                 st.error("Entered states are out of the available range.")
+
+
+from matplotlib.ticker import MultipleLocator
+
+
+def format_subscripts(text):
+    """Convert any _X to $_{X}$ (e.g., A_2BC_4 → A$_{2}$BC$_{4}$)"""
+    return re.sub(r'_(\w)', r'$_{\1}$', text)
+
+# def convert_underscores_to_subscripts(text):
+#     return re.sub(r'_(\w)', r'$_{\1}$', text)
+
+
+if xy_plot_option:
+    st.header("XY Plot Generator")
+
+    uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
+
+    if uploaded_file is not None:
+        try:
+            df = pd.read_csv(uploaded_file)
+            st.success("File uploaded successfully.")
+            st.dataframe(df.head())
+
+            columns = df.columns.tolist()
+
+            with st.expander("🗂 Dataset Configuration"):
+                num_datasets = st.number_input("Number of Datasets to Plot", min_value=1, max_value=10, value=1)
+                shared_x = st.checkbox("All datasets share the same X-axis", value=True)
+
+            dataset_info = []
+            for i in range(num_datasets):
+                with st.expander(f"📊 Dataset {i + 1}"):
+                    if shared_x or i == 0:
+                        x_col = st.selectbox(f"X-axis column", columns, key=f"x{i}")
+                    else:
+                        x_col = st.selectbox(f"X-axis column for Dataset {i + 1}", columns, key=f"x{i}")
+                    y_col = st.selectbox(f"Y-axis column for Dataset {i + 1}", columns, key=f"y{i}")
+                    label = st.text_input(f"Label for Dataset {i + 1} (use _ for subscript)", value=f"Data_{i + 1}",
+                                          key=f"label{i}")
+
+                    color = st.color_picker(f"Color for Dataset {i + 1}",
+                                            value=["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"][i % 5],
+                                            key=f"color{i}")
+                    marker = st.selectbox(f"Marker for Dataset {i + 1}", ["None", "o", "s", "D", "^", "x", "*"],
+                                          index=1, key=f"marker{i}")
+                    linestyle = st.selectbox(f"Line Style for Dataset {i + 1}",
+                                             ["solid", "dashed", "dashdot", "dotted"], index=0, key=f"linestyle{i}")
+
+                    dataset_info.append({
+                        "x": x_col,
+                        "y": y_col,
+                        "label": format_subscripts(label),
+                        "color": color,
+                        "marker": None if marker == "None" else marker,
+                        "linestyle": linestyle
+                    })
+
+            with st.expander("🧾 Labels and Title"):
+                x_label = st.text_input("X-axis Label (use _ for subscript)", value=dataset_info[0]["x"])
+                y_label = st.text_input("Y-axis Label (use _ for subscript)", value="Y")
+                plot_title_raw = st.text_input("Plot Title (use _ for subscript)", value="My_Plot")
+
+            with st.expander("📐 Axis Range and Ticks"):
+                x_min = st.number_input("X min", value=float(df[dataset_info[0]["x"]].min()))
+                x_max = st.number_input("X max", value=float(df[dataset_info[0]["x"]].max()))
+                x_tick_gap = st.number_input("X-axis Tick Interval", min_value=0.0, value=1.0, step=0.1)
+
+                y_min = st.number_input("Y min", value=float(df[dataset_info[0]["y"]].min()))
+                y_max = st.number_input("Y max", value=float(df[dataset_info[0]["y"]].max()))
+                y_tick_gap = st.number_input("Y-axis Tick Interval", min_value=0.0, value=1.0, step=0.1)
+
+            with st.expander("🖋️ Text Customization"):
+                font_options = ["sans-serif", "serif", "monospace", "cursive", "fantasy"]
+                font_family = st.selectbox("Font Family", font_options, index=0)
+
+                title_size = st.slider("Plot Title Font Size", 8, 32, 18)
+                title_weight = st.selectbox("Title Weight", ["normal", "bold", "heavy"], index=1)
+                title_loc = st.selectbox("Title Alignment", ["center", "left", "right"], index=0)
+
+                label_size = st.slider("Axis Label Font Size", 8, 28, 14)
+                label_weight = st.selectbox("Label Weight", ["normal", "bold", "heavy"], index=0)
+
+                tick_size = st.slider("Tick Label Font Size", 6, 20, 12)
+
+            with st.expander("📏 Border (Spine) Thickness"):
+                spine_width = st.slider("Axes Line Width", 0.5, 5.0, 1.0)
+
+            with st.expander("⚙️ Additional Plot Settings"):
+                grid_on = st.checkbox("Show Grid", value=True)
+                show_legend = st.checkbox("Show Legend", value=True)
+
+            if st.button("Generate Plot"):
+                fig, ax = plt.subplots(figsize=(8, 6))
+
+                for ds in dataset_info:
+                    ax.plot(df[ds["x"]], df[ds["y"]],
+                            color=ds["color"],
+                            linewidth=2.0,
+                            marker=ds["marker"],
+                            linestyle=ds["linestyle"],
+                            label=ds["label"] if show_legend else None)
+
+                ax.set_xlabel(format_subscripts(x_label), fontsize=label_size, weight=label_weight, family=font_family)
+                ax.set_ylabel(format_subscripts(y_label), fontsize=label_size, weight=label_weight, family=font_family)
+                ax.set_title(format_subscripts(plot_title_raw),
+                             fontsize=title_size, weight=title_weight, loc=title_loc, family=font_family)
+
+                ax.set_xlim(x_min, x_max)
+                ax.set_ylim(y_min, y_max)
+                ax.tick_params(axis='both', labelsize=tick_size)
+
+                for label in ax.get_xticklabels() + ax.get_yticklabels():
+                    label.set_family(font_family)
+
+                if x_tick_gap > 0:
+                    ax.xaxis.set_major_locator(MultipleLocator(x_tick_gap))
+                if y_tick_gap > 0:
+                    ax.yaxis.set_major_locator(MultipleLocator(y_tick_gap))
+
+                for spine in ax.spines.values():
+                    spine.set_linewidth(spine_width)
+
+                if grid_on:
+                    ax.grid(True)
+                if show_legend:
+                    ax.legend(fontsize=label_size)
+
+                st.pyplot(fig)
+
+
+                def save_plot_bytes(fmt):
+                    buf = BytesIO()
+                    fig.savefig(buf, format=fmt, bbox_inches='tight')
+                    buf.seek(0)
+                    return buf
+
+
+                pdf_bytes = save_plot_bytes("pdf")
+                png_bytes = save_plot_bytes("png")
+
+                st.download_button("Download Plot as PDF", data=pdf_bytes, file_name="plot.pdf", mime="application/pdf")
+                st.download_button("Download Plot as PNG", data=png_bytes, file_name="plot.png", mime="image/png")
+
+        except Exception as e:
+            st.error(f"Failed to read file: {e}")
 
 
 

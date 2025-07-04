@@ -88,6 +88,42 @@ def initialize_structure(uploaded_data, file_format, file_name, exceptions=None,
     # output_suffix = ""
     return atoms, molecules, modified_symbols
 
+from fractions import Fraction
+
+def normalize_fractional_direction(dipole_frac, tol=1e-6):
+    """
+    Take the raw fractional dipole vector (Δx, Δy, Δz),
+    zero out any tiny components, then return the minimal
+    integer [u v w] direction with the convention that the
+    dominant component is positive.
+    """
+    # 1) kill sub-threshold noise
+    vec = np.array(dipole_frac, dtype=float)
+    vec[np.abs(vec) < tol] = 0
+
+    # 2) turn each component into a Fraction
+    fracs = [Fraction(v).limit_denominator() for v in vec]
+
+    # 3) clear denominators
+    lcm = np.lcm.reduce([f.denominator for f in fracs])
+    ints = np.array([f * lcm for f in fracs], dtype=int)
+
+    # 4) divide out any common factor
+    gcd = np.gcd.reduce(ints)
+    ints //= gcd
+
+    # 5) if the *largest* component is negative, flip the whole thing
+    idx = np.argmax(np.abs(ints))
+    if ints[idx] < 0:
+        ints = -ints
+
+    return ints.tolist()
+
+def wrap_frac(coords):
+    # coords: (N,3) array of fractional coords in [0,1)
+    return (coords + 0.5) % 1.0 - 0.5
+
+
 def initialize_structure_v2(uploaded_data, file_format):
 
 
@@ -1704,101 +1740,7 @@ def volume_octahedron_del(input_list):
 
 
 
-def calculate_bond_distance_variance(AB_groups, atoms_obj, atom_dict, A2_indices=None, A2_symbol=None):
-    unique_distance_variance_with_idx = {}
-    atom_name = []
 
-    for A, B_list in AB_groups.items():
-        pos_A = atoms_obj[A].position
-        idx_A = atoms_obj[A].index
-        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
-        atom_name.append(current_symbol)
-
-        # Extract positions for B atoms
-        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
-
-        # Calculate octahedral volume
-        V = volume_octahedron_del(B_positions)
-
-        # Calculate ideal edge length a
-        a = (3 * V / np.sqrt(2)) ** (1 / 3)
-
-        # Calculate ideal distance d0
-        d0 = (a / np.sqrt(2))
-
-        distance_squares = [(np.linalg.norm(pos_A - atoms_obj[B].position) / d0) ** 2 for B in B_list]
-
-        distance_variance = sum(distance_squares) / 6.0
-        rounded_variance = round(distance_variance, 6)
-
-        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
-            unique_distance_variance_with_idx[rounded_variance] = idx_A
-
-    mapped_variances_with_original_idx = {}
-
-    for variance, supercell_idx in unique_distance_variance_with_idx.items():
-        original_idx = None
-        for key, values in atom_dict.items():
-            if supercell_idx in values:
-                original_idx = key
-                break
-
-        if original_idx is not None:
-            mapped_variances_with_original_idx[variance] = original_idx
-
-    variance_list = []
-    for variance, original_idx in mapped_variances_with_original_idx.items():
-        # Check if original_idx is in A2_indices and update symbol if needed
-        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
-        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
-
-    return variance_list
-
-
-def calculate_bond_distance_variance_v2(AB_groups, atoms_obj, atom_dict, A2_indices=None, A2_symbol=None):
-    unique_distance_variance_with_idx = {}
-    atom_name = []
-
-    for A, B_list in AB_groups.items():
-        pos_A = atoms_obj[A].position
-        idx_A = atoms_obj[A].index
-        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
-        atom_name.append(current_symbol)
-
-        # Extract positions for B atoms
-        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
-
-        # Loop through each B in B_list to calculate distances from A
-        AB_distances = [np.linalg.norm(pos_A - atoms_obj[B].position) for B in B_list]
-        d0_m = np.mean(AB_distances) if AB_distances else 0
-
-        distance_squares = [(((np.linalg.norm(pos_A - atoms_obj[B].position) - d0_m) ** 2) / (d0_m ** 2)) for B in B_list]
-
-        distance_variance = (sum(distance_squares) / 6.0)*1e5
-        rounded_variance = round(distance_variance, 6)
-
-        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
-            unique_distance_variance_with_idx[rounded_variance] = idx_A
-
-    mapped_variances_with_original_idx = {}
-
-    for variance, supercell_idx in unique_distance_variance_with_idx.items():
-        original_idx = None
-        for key, values in atom_dict.items():
-            if supercell_idx in values:
-                original_idx = key
-                break
-
-        if original_idx is not None:
-            mapped_variances_with_original_idx[variance] = original_idx
-
-    variance_list = []
-    for variance, original_idx in mapped_variances_with_original_idx.items():
-        # Check if original_idx is in A2_indices and update symbol if needed
-        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
-        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
-
-    return variance_list
 
 
 def calculate_centroid(coordinates):
@@ -1822,52 +1764,7 @@ def calculate_centroid(coordinates):
 
     return [centroid_x, centroid_y, centroid_z]
 
-def calculate_off_centering(AB_groups, atoms_obj, atom_dict, A2_indices=None, A2_symbol=None):
-    unique_distance_variance_with_idx = {}
-    atom_name = []
 
-    for A, B_list in AB_groups.items():
-        pos_A = atoms_obj[A].position
-        idx_A = atoms_obj[A].index
-        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
-        atom_name.append(current_symbol)
-
-        # Extract positions for B atoms
-        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
-
-        # calculate center of mass (com) of B-atoms
-        com_B = calculate_centroid(B_positions)
-
-        # calculate distance of A from the com of B
-        x1, y1, z1 = pos_A
-        x2, y2, z2 = com_B
-
-        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
-
-        rounded_variance = round(off_centering_var, 6)
-
-        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
-            unique_distance_variance_with_idx[rounded_variance] = idx_A
-
-    mapped_variances_with_original_idx = {}
-
-    for variance, supercell_idx in unique_distance_variance_with_idx.items():
-        original_idx = None
-        for key, values in atom_dict.items():
-            if supercell_idx in values:
-                original_idx = key
-                break
-
-        if original_idx is not None:
-            mapped_variances_with_original_idx[variance] = original_idx
-
-    variance_list = []
-    for variance, original_idx in mapped_variances_with_original_idx.items():
-        # Check if original_idx is in A2_indices and update symbol if needed
-        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
-        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
-
-    return variance_list
 
 
 
@@ -1880,112 +1777,7 @@ def calculate_angle(P, A, B):
     theta_deg = np.degrees(theta_rad)
     return theta_deg
 
-def calculate_angle_variance(AB_groups, atoms_obj, atom_dict, A2_indices=None, A2_symbol=None):
-    unique_variances_with_idx = {}
-    atom_name = []
 
-    for A, B_list in AB_groups.items():
-        pos_A = atoms_obj[A].position
-        idx_A = atoms_obj[A].index
-        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
-        atom_name.append(current_symbol)
-        angle_squares = []
-
-        # Generate all B-A-B combinations
-        BAB_combinations = list(itertools.combinations(B_list, 2))
-
-        for B1, B2 in BAB_combinations:
-            pos_B1 = atoms_obj[B1].position
-            pos_B2 = atoms_obj[B2].position
-
-            # Calculate vectors and norms
-            vec_B1_A = pos_A - pos_B1
-            vec_B2_A = pos_A - pos_B2
-
-            norm_B1_A = np.linalg.norm(vec_B1_A)
-            norm_B2_A = np.linalg.norm(vec_B2_A)
-
-            # Calculate cosine of angle
-            cos_theta = np.dot(vec_B1_A, vec_B2_A) / (norm_B1_A * norm_B2_A)
-
-            # Calculate angle in radians and then convert to degrees
-            theta_rad = np.arccos(np.clip(cos_theta, -1.0, 1.0))
-            theta_deg = np.degrees(theta_rad)
-
-            # Skip angles close to 180 degrees
-            if np.abs(theta_deg - 180) < 40:
-                continue
-
-            angle_squares.append((theta_deg - 90) ** 2)
-
-        # Calculate the angle variance
-        angle_variance = sum(angle_squares) / 11.0
-        rounded_variance = round(angle_variance, 3)
-
-        # Check if the variance already exists
-        if rounded_variance not in unique_variances_with_idx or idx_A < unique_variances_with_idx[rounded_variance]:
-            unique_variances_with_idx[rounded_variance] = idx_A
-
-    mapped_variances_with_original_idx = {}
-
-    for variance, supercell_idx in unique_variances_with_idx.items():
-        original_idx = None
-        for key, values in atom_dict.items():
-            if supercell_idx in values:
-                original_idx = key
-                break
-
-        if original_idx is not None:
-            mapped_variances_with_original_idx[variance] = original_idx
-
-    variance_list = []
-    for variance, original_idx in mapped_variances_with_original_idx.items():
-        # Check if original_idx is in A2_indices and update symbol if needed
-        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
-        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
-
-    return variance_list
-
-def calculate_unique_ABA_angles(AB_groups, atoms_obj, atom_dict=None,A2_indices=None, A2_symbol=None):
-    ABA_groups = detect_ABA_groups(AB_groups)
-    # Dictionary to store angles for each ABA group
-    ABA_angles = {}
-    unique_angles_dict = {}  # Dictionary to store unique angles
-
-    for A1, B, A2 in sorted(ABA_groups):  # Sort to prioritize smaller A1 index
-        # Get positions directly from the atoms object
-        pos_A1 = atoms_obj[A1].position
-        pos_B = atoms_obj[B].position
-        pos_A2 = atoms_obj[A2].position
-
-        # Calculate vectors
-        vec_A1_B = pos_B - pos_A1
-        vec_A2_B = pos_B - pos_A2
-
-        # Calculate norms
-        norm_A1_B = np.linalg.norm(vec_A1_B)
-        norm_A2_B = np.linalg.norm(vec_A2_B)
-
-        # Calculate cosine of angle
-        cos_theta = np.dot(vec_A1_B, vec_A2_B) / (norm_A1_B * norm_A2_B)
-
-        # Calculate angle in radians
-        theta_rad = np.arccos(np.clip(cos_theta, -1.0, 1.0))
-
-        # Convert to degrees
-        theta_deg = np.degrees(theta_rad)
-
-        # Round to 3 decimal places
-        rounded_theta_deg = round(theta_deg, 3)
-
-        # Check if this angle is already in the unique angles dictionary
-        if rounded_theta_deg not in unique_angles_dict:
-            unique_angles_dict[rounded_theta_deg] = (A1, B, A2)
-
-        # Calculate beta
-        beta_param = calculate_angle_differences(unique_angles_dict)
-
-    return unique_angles_dict, beta_param
 
 
 def find_bonded_b_atoms(AB_groups):
@@ -2021,8 +1813,8 @@ def find_bonded_b_atoms(AB_groups):
 
 
 
-def calculate_layer_planes(AB_groups, atoms_obj):
-    layers = detect_molecules(atoms_obj)
+def calculate_layer_planes(AB_groups, atoms_obj,b):
+    layers = detect_molecules(atoms_obj, b=b)
     # Initialize a dictionary to store the plane normal vectors by layer index
 
     layer_planes = {}
@@ -2055,56 +1847,7 @@ def calculate_layer_planes(AB_groups, atoms_obj):
     return layer_planes
 
 
-def calculate_mc_2D(AB_groups, atoms_obj, atom_dict=None,A2_indices=None, A2_symbol=None):
 
-    AB_eq = find_bonded_b_atoms(AB_groups)
-
-    unique_distance_variance_with_idx = {}
-    atom_name = []
-
-    for A, B_list in AB_eq.items():
-        pos_A = atoms_obj[A].position
-        idx_A = atoms_obj[A].index
-        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
-        atom_name.append(current_symbol)
-
-        # Extract positions for B atoms
-        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
-
-        # calculate center of mass (com) of B-atoms
-        com_B = calculate_centroid(B_positions)
-
-        # calculate distance of A from the com of B
-        x1, y1, z1 = pos_A
-        x2, y2, z2 = com_B
-
-        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
-
-        rounded_variance = round(off_centering_var, 6)
-
-        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[
-            rounded_variance]:
-            unique_distance_variance_with_idx[rounded_variance] = idx_A
-
-    mapped_variances_with_original_idx = {}
-
-    for variance, supercell_idx in unique_distance_variance_with_idx.items():
-        original_idx = None
-        for key, values in atom_dict.items():
-            if supercell_idx in values:
-                original_idx = key
-                break
-
-        if original_idx is not None:
-            mapped_variances_with_original_idx[variance] = original_idx
-
-    variance_list = []
-    for variance, original_idx in mapped_variances_with_original_idx.items():
-        # Check if original_idx is in A2_indices and update symbol if needed
-        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
-        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
-
-    return variance_list
 
 
 
@@ -2155,108 +1898,7 @@ def find_closest_plane_and_calculate_distance(layer_planes, point_M, point_X):
     return projected_X, projected_M
 
 
-def calculate_mc_2D_proj(AB_groups, atoms_obj, atom_dict=None,A2_indices=None, A2_symbol=None):
 
-    AB_eq = find_bonded_b_atoms(AB_groups)
-
-    unique_distance_variance_with_idx = {}
-    atom_name = []
-    layer_planes = calculate_layer_planes(AB_groups, atoms_obj)
-
-    for A, B_list in AB_eq.items():
-        pos_A = atoms_obj[A].position
-        idx_A = atoms_obj[A].index
-        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
-        atom_name.append(current_symbol)
-
-        # Extract positions for B atoms
-        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
-
-        # calculate center of mass (com) of B-atoms
-        com_B = calculate_centroid(B_positions)
-
-        # calculate distance of A from the com of B
-        proj_A, proj_X = find_closest_plane_and_calculate_distance(layer_planes, pos_A, com_B)
-        x1, y1, z1 = proj_A
-        x2, y2, z2 = proj_X
-
-        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
-
-        rounded_variance = round(off_centering_var, 6)
-
-        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[
-            rounded_variance]:
-            unique_distance_variance_with_idx[rounded_variance] = idx_A
-
-    mapped_variances_with_original_idx = {}
-
-    for variance, supercell_idx in unique_distance_variance_with_idx.items():
-        original_idx = None
-        for key, values in atom_dict.items():
-            if supercell_idx in values:
-                original_idx = key
-                break
-
-        if original_idx is not None:
-            mapped_variances_with_original_idx[variance] = original_idx
-
-    variance_list = []
-    for variance, original_idx in mapped_variances_with_original_idx.items():
-        # Check if original_idx is in A2_indices and update symbol if needed
-        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
-        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
-
-    return variance_list
-
-
-def calculate_off_centering_proj(AB_groups, atoms_obj, atom_dict, A2_indices=None, A2_symbol=None):
-    unique_distance_variance_with_idx = {}
-    atom_name = []
-    layer_planes = calculate_layer_planes(AB_groups, atoms_obj)
-
-    for A, B_list in AB_groups.items():
-        pos_A = atoms_obj[A].position
-        idx_A = atoms_obj[A].index
-        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
-        atom_name.append(current_symbol)
-
-        # Extract positions for B atoms
-        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
-
-        # calculate center of mass (com) of B-atoms
-        com_B = calculate_centroid(B_positions)
-
-        # calculate distance of A from the com of B
-        proj_A, proj_X = find_closest_plane_and_calculate_distance(layer_planes, pos_A, com_B)
-        x1, y1, z1 = proj_A
-        x2, y2, z2 = proj_X
-
-        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
-
-        rounded_variance = round(off_centering_var, 6)
-
-        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
-            unique_distance_variance_with_idx[rounded_variance] = idx_A
-
-    mapped_variances_with_original_idx = {}
-
-    for variance, supercell_idx in unique_distance_variance_with_idx.items():
-        original_idx = None
-        for key, values in atom_dict.items():
-            if supercell_idx in values:
-                original_idx = key
-                break
-
-        if original_idx is not None:
-            mapped_variances_with_original_idx[variance] = original_idx
-
-    variance_list = []
-    for variance, original_idx in mapped_variances_with_original_idx.items():
-        # Check if original_idx is in A2_indices and update symbol if needed
-        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
-        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
-
-    return variance_list
 
 
 
@@ -2396,13 +2038,7 @@ def calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj):
     return in_out_plane_angles
 
 
-def calculate_in_out_planes(AB_groups, atoms_obj, atom_dict=None,A2_indices=None, A2_symbol=None):
-    unique_angles_dict, _ = calculate_unique_ABA_angles(AB_groups, atoms_obj)
-    in_planes = find_in_planes(atoms_obj, unique_angles_dict, AB_groups)
-    perp_planes = find_perpendicular_planes(in_planes, atoms_obj)
-    plane_components = calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj)
 
-    return plane_components
 
 
 
@@ -2450,30 +2086,6 @@ def fetch_materials_datasets(conn, system_id):
 
     return results
 
-
-# def extract_structure_file(zip_data):
-#     """
-#     Extracts the .in or .cif file from a given zip data.
-#
-#     Parameters:
-#     - zip_data (bytes): Byte data of the zip file.
-#
-#     Returns:
-#     - file_buffer (BytesIO): A file buffer object containing the content of the first .in or .cif file found.
-#     """
-#     with zipfile.ZipFile(BytesIO(zip_data), 'r') as zip_ref:
-#         # Find all files that match the desired extensions
-#         matched_files = [f for f in zip_ref.namelist() if f.endswith('.in') or f.endswith('.cif')]
-#
-#         # If there are matched files, extract the first one and return its content
-#         if matched_files:
-#             with zip_ref.open(matched_files[0], 'r') as file:
-#                 return BytesIO(file.read())
-#
-#     # Return None if no matching files found
-#     return None
-#
-#
 def extract_structure_file(zip_data: bytes) -> tuple:
     """
     Extracts the first .in or .cif file from the given zip data.
@@ -2606,3 +2218,417 @@ def extract_Uij_from_cif(file_buffer):
     df = df.iloc[6:].reset_index(drop=True)
 
     return df
+
+
+def calculate_bond_distance_variance(AB_groups, atoms_obj, atom_dict, b=0, A2_indices=None, A2_symbol=None):
+    unique_distance_variance_with_idx = {}
+    atom_name = []
+
+    for A, B_list in AB_groups.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+
+        # Extract positions for B atoms
+        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
+
+        # Calculate octahedral volume
+        V = volume_octahedron_del(B_positions)
+
+        # Calculate ideal edge length a
+        a = (3 * V / np.sqrt(2)) ** (1 / 3)
+
+        # Calculate ideal distance d0
+        d0 = (a / np.sqrt(2))
+
+        distance_squares = [(np.linalg.norm(pos_A - atoms_obj[B].position) / d0) ** 2 for B in B_list]
+
+        distance_variance = sum(distance_squares) / 6.0
+        rounded_variance = round(distance_variance, 6)
+
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+
+def calculate_bond_distance_variance_v2(AB_groups, atoms_obj, atom_dict, b=0, A2_indices=None, A2_symbol=None):
+    unique_distance_variance_with_idx = {}
+    atom_name = []
+
+    for A, B_list in AB_groups.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+
+        # Extract positions for B atoms
+        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
+
+        # Loop through each B in B_list to calculate distances from A
+        AB_distances = [np.linalg.norm(pos_A - atoms_obj[B].position) for B in B_list]
+        d0_m = np.mean(AB_distances) if AB_distances else 0
+
+        distance_squares = [(((np.linalg.norm(pos_A - atoms_obj[B].position) - d0_m) ** 2) / (d0_m ** 2)) for B in B_list]
+
+        distance_variance = (sum(distance_squares) / 6.0)*1e5
+        rounded_variance = round(distance_variance, 6)
+
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+def calculate_angle_variance(AB_groups, atoms_obj, atom_dict, b=0, A2_indices=None, A2_symbol=None):
+    unique_variances_with_idx = {}
+    atom_name = []
+
+    for A, B_list in AB_groups.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+        angle_squares = []
+
+        # Generate all B-A-B combinations
+        BAB_combinations = list(itertools.combinations(B_list, 2))
+
+        for B1, B2 in BAB_combinations:
+            pos_B1 = atoms_obj[B1].position
+            pos_B2 = atoms_obj[B2].position
+
+            # Calculate vectors and norms
+            vec_B1_A = pos_A - pos_B1
+            vec_B2_A = pos_A - pos_B2
+
+            norm_B1_A = np.linalg.norm(vec_B1_A)
+            norm_B2_A = np.linalg.norm(vec_B2_A)
+
+            # Calculate cosine of angle
+            cos_theta = np.dot(vec_B1_A, vec_B2_A) / (norm_B1_A * norm_B2_A)
+
+            # Calculate angle in radians and then convert to degrees
+            theta_rad = np.arccos(np.clip(cos_theta, -1.0, 1.0))
+            theta_deg = np.degrees(theta_rad)
+
+            # Skip angles close to 180 degrees
+            if np.abs(theta_deg - 180) < 40:
+                continue
+
+            angle_squares.append((theta_deg - 90) ** 2)
+
+        # Calculate the angle variance
+        angle_variance = sum(angle_squares) / 11.0
+        rounded_variance = round(angle_variance, 3)
+
+        # Check if the variance already exists
+        if rounded_variance not in unique_variances_with_idx or idx_A < unique_variances_with_idx[rounded_variance]:
+            unique_variances_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_variances_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+def calculate_unique_ABA_angles(AB_groups, atoms_obj, atom_dict=None,b=0, A2_indices=None, A2_symbol=None):
+    ABA_groups = detect_ABA_groups(AB_groups)
+    # Dictionary to store angles for each ABA group
+    ABA_angles = {}
+    unique_angles_dict = {}  # Dictionary to store unique angles
+
+    for A1, B, A2 in sorted(ABA_groups):  # Sort to prioritize smaller A1 index
+        # Get positions directly from the atoms object
+        pos_A1 = atoms_obj[A1].position
+        pos_B = atoms_obj[B].position
+        pos_A2 = atoms_obj[A2].position
+
+        # Calculate vectors
+        vec_A1_B = pos_B - pos_A1
+        vec_A2_B = pos_B - pos_A2
+
+        # Calculate norms
+        norm_A1_B = np.linalg.norm(vec_A1_B)
+        norm_A2_B = np.linalg.norm(vec_A2_B)
+
+        # Calculate cosine of angle
+        cos_theta = np.dot(vec_A1_B, vec_A2_B) / (norm_A1_B * norm_A2_B)
+
+        # Calculate angle in radians
+        theta_rad = np.arccos(np.clip(cos_theta, -1.0, 1.0))
+
+        # Convert to degrees
+        theta_deg = np.degrees(theta_rad)
+
+        # Round to 3 decimal places
+        rounded_theta_deg = round(theta_deg, 3)
+
+        # Check if this angle is already in the unique angles dictionary
+        if rounded_theta_deg not in unique_angles_dict:
+            unique_angles_dict[rounded_theta_deg] = (A1, B, A2)
+
+        # Calculate beta
+        beta_param = calculate_angle_differences(unique_angles_dict)
+
+    return unique_angles_dict, beta_param
+
+def calculate_off_centering(AB_groups, atoms_obj, atom_dict, b=0, A2_indices=None, A2_symbol=None):
+    unique_distance_variance_with_idx = {}
+    atom_name = []
+
+    for A, B_list in AB_groups.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+
+        # Extract positions for B atoms
+        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
+
+        # calculate center of mass (com) of B-atoms
+        com_B = calculate_centroid(B_positions)
+
+        # calculate distance of A from the com of B
+        x1, y1, z1 = pos_A
+        x2, y2, z2 = com_B
+
+        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
+        rounded_variance = round(off_centering_var, 6)
+
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+
+def calculate_mc_2D(AB_groups, atoms_obj, atom_dict=None,b=0, A2_indices=None, A2_symbol=None):
+
+    AB_eq = find_bonded_b_atoms(AB_groups)
+
+    unique_distance_variance_with_idx = {}
+    atom_name = []
+
+    for A, B_list in AB_eq.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+
+        # Extract positions for B atoms
+        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
+
+        # calculate center of mass (com) of B-atoms
+        com_B = calculate_centroid(B_positions)
+
+        # calculate distance of A from the com of B
+        x1, y1, z1 = pos_A
+        x2, y2, z2 = com_B
+
+        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
+        rounded_variance = round(off_centering_var, 6)
+
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[
+            rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+def calculate_mc_2D_proj(AB_groups, atoms_obj,  atom_dict=None, b=0,A2_indices=None, A2_symbol=None):
+
+    AB_eq = find_bonded_b_atoms(AB_groups)
+
+    unique_distance_variance_with_idx = {}
+    atom_name = []
+    layer_planes = calculate_layer_planes(AB_groups, atoms_obj,b)
+
+    for A, B_list in AB_eq.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+
+        # Extract positions for B atoms
+        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
+
+        # calculate center of mass (com) of B-atoms
+        com_B = calculate_centroid(B_positions)
+
+        # calculate distance of A from the com of B
+        proj_A, proj_X = find_closest_plane_and_calculate_distance(layer_planes, pos_A, com_B)
+        x1, y1, z1 = proj_A
+        x2, y2, z2 = proj_X
+
+        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
+        rounded_variance = round(off_centering_var, 6)
+
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[
+            rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+
+def calculate_off_centering_proj(AB_groups, atoms_obj, atom_dict, b=0, A2_indices=None, A2_symbol=None):
+    unique_distance_variance_with_idx = {}
+    atom_name = []
+    layer_planes = calculate_layer_planes(AB_groups, atoms_obj,b)
+
+    for A, B_list in AB_groups.items():
+        pos_A = atoms_obj[A].position
+        idx_A = atoms_obj[A].index
+        current_symbol = A2_symbol if A2_indices is not None and idx_A in A2_indices else atoms_obj[A].symbol
+        atom_name.append(current_symbol)
+
+        # Extract positions for B atoms
+        B_positions = [atoms_obj[B].position.tolist() for B in B_list]
+
+        # calculate center of mass (com) of B-atoms
+        com_B = calculate_centroid(B_positions)
+
+        # calculate distance of A from the com of B
+        proj_A, proj_X = find_closest_plane_and_calculate_distance(layer_planes, pos_A, com_B)
+        x1, y1, z1 = proj_A
+        x2, y2, z2 = proj_X
+
+        off_centering_var = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
+        rounded_variance = round(off_centering_var, 6)
+
+        if rounded_variance not in unique_distance_variance_with_idx or idx_A < unique_distance_variance_with_idx[rounded_variance]:
+            unique_distance_variance_with_idx[rounded_variance] = idx_A
+
+    mapped_variances_with_original_idx = {}
+
+    for variance, supercell_idx in unique_distance_variance_with_idx.items():
+        original_idx = None
+        for key, values in atom_dict.items():
+            if supercell_idx in values:
+                original_idx = key
+                break
+
+        if original_idx is not None:
+            mapped_variances_with_original_idx[variance] = original_idx
+
+    variance_list = []
+    for variance, original_idx in mapped_variances_with_original_idx.items():
+        # Check if original_idx is in A2_indices and update symbol if needed
+        current_symbol = A2_symbol if A2_indices is not None and original_idx in A2_indices else atom_name[0]
+        variance_list.append(f"{variance} ({current_symbol}{original_idx + 1})")  # add 1 to match with VESTA
+
+    return variance_list
+
+def calculate_in_out_planes(AB_groups, atoms_obj, atom_dict=None,b =0, A2_indices=None, A2_symbol=None):
+    unique_angles_dict, _ = calculate_unique_ABA_angles(AB_groups, atoms_obj)
+    in_planes = find_in_planes(atoms_obj, unique_angles_dict, AB_groups)
+    perp_planes = find_perpendicular_planes(in_planes, atoms_obj)
+    plane_components = calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj)
+
+    return plane_components

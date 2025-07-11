@@ -4,13 +4,18 @@ import plotly.express as px
 from molecule_builder import *
 from electronic_property import *
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from pymatgen.io.cif import CifWriter
+from pymatgen.core.structure import Structure
 from contextlib import redirect_stdout
 from MD_analysis import *
+from PDFAnalysis import *
 import streamlit as st
 import subprocess
 import os
 import shutil
 from pathlib import Path
+from diffpy.structure import loadStructure
+from diffpy.pdffit2 import PdfFit
 import requests
 from PIL import Image
 from streamlit_lottie import st_lottie
@@ -302,6 +307,7 @@ with st.sidebar:
     distortion_option = st.sidebar.checkbox("Calculate octahedral distortions", value=False)
     deviation_calculation_option = st.sidebar.checkbox("Calculate percentage deviation", value=False)
     ADP_table_option = st.sidebar.checkbox("Anisotropic displacement parameters", value=False)
+    PDF_option = st.sidebar.checkbox("PDF analysis", value=False)
 
     st.divider()
 
@@ -339,7 +345,7 @@ with st.sidebar:
 
     st.sidebar.header("Experimental")
     script_option=st.sidebar.checkbox("Run your own script", value=False)
-    xy_plot_option=st.sidebar.checkbox("Simple XY plot", value=False)
+    xy_plot_option=st.sidebar.checkbox("Plot Data", value=False)
 
 
 
@@ -827,7 +833,6 @@ if st.session_state.atoms is not None:
         except ValueError as e:
             st.error(f"An error occurred when trying to extract the ADP values: {e}")
 
-
     if polarization_option:
         st.header("Calculated Polarization direction", divider='violet')
         pymatgen_structure = generate_symmetrized_structure(modified_atoms, 0.001,5.0)
@@ -857,6 +862,303 @@ if st.session_state.atoms is not None:
         miller_direction = normalize_fractional_direction(dipole_frac)
 
         st.write(miller_direction)
+
+    if PDF_option:
+        st.header("Simulate pair distribution function", divider='violet')
+
+        # -------------------------------------------------------------------------
+        # 1) Parameter sliders
+        # -------------------------------------------------------------------------
+        qmin, qmax = st.slider("q (Å⁻¹)", 0.1, 50.0, (1.0, 20.0))
+        # qmax = st.slider("qmax (Å⁻¹)", qmin + 0.1, 100.0, 20.0, step=0.1)
+        rmin, rmax = st.slider("r (Å)", 0.0, 30.0, (0.1, 20.0))
+        # rmax = st.slider("rmax (Å)", rmin + 0.1, 100.0, 20.0, step=0.1)
+
+        # -------------------------------------------------------------------------
+        # 2) Build & write a clean CIF
+        # -------------------------------------------------------------------------
+        pymatgen_structure = generate_symmetrized_structure(modified_atoms, 0.01, 0.1)
+        tmpdir = os.path.join(os.getcwd(), "pdfanalysis_temp")
+        path = Path(tmpdir) / "structure_clean.cif"
+        os.makedirs(tmpdir, exist_ok=True)
+        CifWriter(pymatgen_structure).write_file(str(path))
+
+        # -------------------------------------------------------------------------
+        # 3) Compute the simulated PDF
+        # -------------------------------------------------------------------------
+        diffpy_structure = loadStructure(str(path))
+        r1, g1 = calculate_pdf(
+            diffpy_structure,
+            diffpy_structure_attributes={"Uisoequiv": 0.01},
+            pdf_calculator_kwargs={
+                "qmin": qmin,
+                "qmax": qmax,
+                "rmin": rmin,
+                "rmax": rmax,
+                "qdamp": 0.06,
+                "qbroad": 0.06
+            }
+        )
+
+        # 4) DataFrame & expander
+        df_pdf = pd.DataFrame({"r (Å)": r1, "G_sim(r)": g1})
+        with st.expander("View simulated PDF data"):
+            st.dataframe(df_pdf, use_container_width= True, hide_index = True)
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df_pdf["r (Å)"],
+            y=df_pdf["G_sim(r)"],
+            mode="lines",
+            name="Simulated G(r)"
+        ))
+
+        fig.update_layout(
+            xaxis_title="r (Å)", yaxis_title="G(r)",
+            xaxis=dict(
+                range=[rmin, rmax],
+                tickfont=dict(size=20, color="black"),
+                title_font=dict(size=20, color="black")
+            ),
+            yaxis=dict(
+                tickfont=dict(size=20, color="black"),
+                title_font=dict(size=20, color="black")
+            ),
+            font=dict(color="black"),
+            margin=dict(t=40, b=40, l=40, r=40),
+            legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # -------------------------------------------------------------------------
+        # 5) Optionally load experimental .gr
+        # -------------------------------------------------------------------------
+        # --- 5) Optional experimental upload and improved fitting (no normalization) ---
+        exp_file = st.file_uploader("Optionally upload experimental .gr file", type=["gr"], key="gr_uploader")
+        if exp_file is not None:
+            content = exp_file.read().decode("utf-8", errors="ignore").splitlines()
+            idx = next((i for i, L in enumerate(content) if L.strip().startswith("#### start data")), None)
+            if idx is None:
+                st.error("Couldn't find '#### start data' in the .gr file.")
+            else:
+                data_lines = content[idx + 3:]
+                df_exp = pd.read_csv(
+                    io.StringIO("\n".join(data_lines)),
+                    delim_whitespace=True, header=None, names=["r", "G_exp"]
+                ).pipe(lambda d: d[(d.r >= rmin) & (d.r <= rmax)].reset_index(drop=True))
+
+                # interpolate simulation onto experimental r-grid
+                g_sim_interp = np.interp(df_exp.r, r1, g1)
+
+                # use scipy curve_fit for a linear model G_exp = a·G_sim + b
+                from scipy.optimize import curve_fit
+
+
+                def linear_model(G_sim, a, b):
+                    return a * G_sim + b
+
+
+                popt, pcov = curve_fit(linear_model, g_sim_interp, df_exp.G_exp, p0=[1.0, 0.0])
+                a, b = popt
+                g_fit = linear_model(g_sim_interp, a, b)
+                residual = df_exp.G_exp - g_fit
+
+                df_combined = pd.DataFrame({
+                    "r (Å)": df_exp.r,
+                    "G_sim": g_sim_interp,
+                    "G_exp": df_exp.G_exp,
+                    "G_fit": g_fit,
+                    "Residual": residual
+                })
+                with st.expander("View combined PDF data"):
+                    st.dataframe(df_combined, use_container_width=True, hide_index=True)
+
+        # --- 6) Plotting: customization, trigger button, downloads, and interactive Plotly ---
+        # Load saved customization if provide
+
+            with st.expander("Plot customization"):
+                config_file = st.file_uploader("Upload plot customization config (.json)", type=["json"],
+                                               key="config_uploader")
+                if config_file:
+                    import json
+
+                    config = json.load(config_file)
+                else:
+                    config = {}
+
+                sim_color = st.color_picker("Simulated line color", config.get("sim_color", "#1f77b4"))
+                sim_width = st.slider("Simulated line width", 0.5, 5.0, config.get("sim_width", 2.0), step=0.1)
+                sim_ls = st.selectbox("Simulated line style", ["-", "--", "-.", ":"],
+                                      index=["-", "--", "-.", ":"].index(config.get("sim_ls", "-")))
+                sim_opacity = st.slider("Simulated line opacity", 0.0, 1.0, config.get("sim_opacity", 1.0), step=0.05)
+                exp_color = st.color_picker("Experimental line color", config.get("exp_color", "#ff7f0e"))
+                exp_width = st.slider("Experimental line width", 0.5, 5.0, config.get("exp_width", 2.0), step=0.1)
+                exp_ls = st.selectbox("Experimental line style", ["-", "--", "-.", ":"],
+                                      index=["-", "--", "-.", ":"].index(config.get("exp_ls", "--")))
+                exp_opacity = st.slider("Experimental line opacity", 0.0, 1.0, config.get("exp_opacity", 1.0), step=0.05)
+                bar_color = st.color_picker("Residual bar color", config.get("bar_color", "#7f7f7f"))
+                spline_width = st.slider("Fitted line width", 0.5, 5.0, config.get("spline_width", 1.5), step=0.1)
+                text_size = st.slider("Text size", 8, 20, config.get("text_size", 12))
+                text_style = st.selectbox("Text style", ["normal", "bold", "italic"],
+                                          index=["normal", "bold", "italic"].index(config.get("text_style", "normal")))
+                axis_lw = st.slider("Axis spine linewidth", 0.5, 5.0, config.get("axis_linewidth", 1.0), step=0.1)
+                tick_lw = st.slider("Tick mark linewidth", 0.5, 5.0, config.get("tick_linewidth", 1.0), step=0.1)
+                hide_legends   = st.checkbox("Hide legends", config.get("hide_legends", False))
+                show_sim = st.checkbox("Show simulated data", config.get("show_sim", True))
+                show_exp = st.checkbox("Show experimental data", config.get("show_exp", True))
+                show_res = st.checkbox("Show residual data", config.get("show_res", True))
+                aspect_opt = st.selectbox("Aspect ratio", ["auto", "equal", "custom"],
+                                          index=["auto", "equal", "custom"].index(config.get("aspect_option", "auto")))
+                aspect_val = config.get("aspect_val", 1.0)
+                if aspect_opt == "custom":
+                    aspect_val = st.number_input("Custom aspect ratio (y/x)", 0.1, 10.0, aspect_val, step=0.1)
+                # axis limits & ticks
+                x_min = st.number_input("X-axis min", value=config.get("x_min", rmin), step=0.1)
+                x_max = st.number_input("X-axis max", value=config.get("x_max", rmax), step=0.1)
+                y_min = st.number_input("Y-axis min", value=config.get("y_min", float(df_combined.G_sim.min())), step=0.1)
+                y_max = st.number_input("Y-axis max", value=config.get("y_max", float(df_combined.G_sim.max())), step=0.1)
+                tick_gap_x = st.number_input("X-axis tick interval", value=config.get("tick_gap_x", (x_max - x_min) / 5),
+                                             step=0.1)
+                tick_gap_y = st.number_input("Y-axis tick interval", value=config.get("tick_gap_y", (y_max - y_min) / 5),
+                                             step=0.1)
+                plot_title = st.text_input("Plot title",
+                                           value=config.get("plot_title", f"PDF (q: {qmin}–{qmax}; r: {rmin}–{rmax})"))
+                show_fit = st.checkbox("Plot fitted data", config.get("show_fit", True))
+
+                # Download current customization as JSON
+                config_out = {
+                    "sim_color": sim_color, "sim_width": sim_width, "sim_ls": sim_ls, "sim_opacity": sim_opacity,
+                    "exp_color": exp_color, "exp_width": exp_width, "exp_ls": exp_ls, "exp_opacity": exp_opacity,
+                    "bar_color": bar_color, "spline_width": spline_width, "text_size": text_size, "text_style": text_style,
+                    "axis_linewidth": axis_lw, "tick_linewidth": tick_lw, "hide_legends": hide_legends,
+                    "show_sim": show_sim, "show_exp": show_exp, "show_res": show_res,
+                    "aspect_option": aspect_opt, "aspect_val": aspect_val,
+                    "x_min": x_min, "x_max": x_max, "y_min": y_min, "y_max": y_max,
+                    "tick_gap_x": tick_gap_x, "tick_gap_y": tick_gap_y,
+                    "plot_title": plot_title, "show_fit": show_fit
+                }
+                st.download_button(
+                    "Download customization as JSON",
+                    data=json.dumps(config_out, indent=2),
+                    file_name="plot_config.json",
+                    mime="application/json"
+                )
+
+            plot_btn = st.button("Generate Plot")
+            if plot_btn:
+                import matplotlib.ticker as ticker
+
+                fig, ax = plt.subplots()
+                # apply spine & tick widths
+                for s in ax.spines.values():
+                    s.set_linewidth(axis_lw)
+                ax.tick_params(width=tick_lw)
+
+                # plot based on toggles
+                if show_sim:
+                    ax.plot(r1, g1, color=sim_color, linewidth=sim_width,
+                            linestyle=sim_ls, alpha=sim_opacity, label="Simulated")
+                if exp_file and show_exp:
+                    ax.plot(df_combined["r (Å)"], df_combined["G_exp"],
+                            color=exp_color, linewidth=exp_width,
+                            linestyle=exp_ls, alpha=exp_opacity, label="Experimental")
+                if exp_file and show_res:
+                    baseline = min(np.min(g1), df_combined["G_exp"].min()) - 0.5
+                    bar_w = (x_max - x_min) / (len(df_combined) * 1.5)
+                    ax.bar(df_combined["r (Å)"], df_combined["Residual"],
+                           width=bar_w, bottom=baseline, color=bar_color,
+                           alpha=0.6, label="Residual")
+                if exp_file and show_fit:
+                    ax.plot(df_combined["r (Å)"], df_combined["G_fit"],
+                            color="gray", linewidth=spline_width,
+                            linestyle=":", alpha=0.8, label="Fitted")
+
+                # axes limits, ticks, aspect
+                ax.set_xlim(x_min, x_max);
+                ax.set_ylim(y_min, y_max)
+                ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_gap_x))
+                ax.yaxis.set_major_locator(ticker.MultipleLocator(tick_gap_y))
+                ax.set_aspect(aspect_val)
+
+                # labels & title
+                title_kw = {"fontsize": text_size + 2}
+                if text_style == "bold":   title_kw["fontweight"] = "bold"
+                if text_style == "italic": title_kw["fontstyle"] = "italic"
+                ax.set_title(plot_title, **title_kw)
+                label_kw = {"fontsize": text_size}
+                if text_style == "bold":   label_kw["fontweight"] = "bold"
+                if text_style == "italic": label_kw["fontstyle"] = "italic"
+                ax.set_xlabel("r (Å)", **label_kw)
+                ax.set_ylabel("G(r)", **label_kw)
+
+                ax.tick_params(labelsize=text_size)
+                if not hide_legends:
+                    ax.legend(fontsize=text_size)
+                st.pyplot(fig)
+
+                # downloads
+                buf_pdf = io.BytesIO();
+                fig.savefig(buf_pdf, format="pdf");
+                buf_pdf.seek(0)
+                st.download_button("Download PDF", buf_pdf, "plot.pdf", "application/pdf")
+                buf_png = io.BytesIO();
+                fig.savefig(buf_png, format="png");
+                buf_png.seek(0)
+                st.download_button("Download PNG", buf_png, "plot.png", "image/png")
+
+        # Interactive Plotly chart
+        if st.checkbox("Show interactive Plotly chart"):
+            fig_int = go.Figure()
+            fig_int.add_trace(go.Scatter(
+                x=df_combined["r (Å)"], y=df_combined["G_sim"],
+                mode="lines", name="Simulated G(r)",
+                line=dict(color=sim_color, width=sim_width, dash='solid'),
+                opacity=sim_opacity
+            ))
+            fig_int.add_trace(go.Scatter(
+                x=df_combined["r (Å)"], y=df_combined["G_exp"],
+                mode="lines", name="Experimental G(r)",
+                line=dict(color=exp_color, width=exp_width, dash='solid'),
+                opacity=exp_opacity
+            ))
+            fig_int.add_trace(go.Bar(
+                x=df_combined["r (Å)"], y=df_combined["Residual"],
+                base=(min(df_combined["G_sim"].min(), df_combined["G_exp"].min()) - 0.5), name="Residual",
+                marker_color=bar_color, opacity=0.6
+            ))
+            if show_fit:
+                fig_int.add_trace(go.Scatter(
+                    x=df_combined["r (Å)"], y=df_combined["G_fit"],
+                    mode="lines", name="Fitted G(r)",
+                    line=dict(color="gray", width=spline_width, dash="dot"),
+                    opacity=0.8
+                ))
+            fig_int.update_layout(
+                xaxis_title="r (Å)", yaxis_title="G(r)",
+                xaxis=dict(
+                    range=[x_min, x_max],
+                    tickfont=dict(size=text_size+12, color="black"),
+                    title_font=dict(size=text_size+12, color="black")
+                ),
+                yaxis=dict(
+                    range=[y_min, y_max],
+                    tickfont=dict(size=text_size+12, color="black"),
+                    title_font=dict(size=text_size+12, color="black")
+                ),
+                font=dict(color="black"),
+                margin=dict(t=40, b=40, l=40, r=40),
+                legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
+            )
+            st.plotly_chart(fig_int, use_container_width=True)
+
+
+
+
+
+
+
+
 
     # if create_cent_option:
     #     st.header("Create Idealized Structure")
@@ -2116,46 +2418,108 @@ def modify_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 if xy_plot_option:
-    st.header("XY Plot Generator")
+    st.header("Plot Generator")
 
-    uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
+    # 1) upload (allow any text table)
+    uploaded_file = st.file_uploader("Upload Data File", type=None)
 
-    # Optional config upload
-    uploaded_config = st.file_uploader("Optionally, Upload Saved Plot Config (JSON)", type=["json"])
-
+    # 2) optional config
+    uploaded_config = st.file_uploader(
+        "Optionally, Upload Saved Plot Config (JSON)", type=["json"]
+    )
     config_data = None
-    if uploaded_config is not None:
+    if uploaded_config:
         try:
             config_data = json.load(uploaded_config)
             st.success("Configuration loaded.")
         except Exception as e:
             st.error(f"Failed to load config: {e}")
 
-    if uploaded_file is not None:
+    if uploaded_file:
         try:
-            # Load once and store in session_state if not already loaded
-            if "original_df" not in st.session_state or st.session_state.get(
-                    "last_uploaded_filename") != uploaded_file.name:
-                st.session_state.original_df = pd.read_csv(uploaded_file)
-                st.session_state.modified_df = st.session_state.original_df.copy()
-                st.session_state.last_uploaded_filename = uploaded_file.name
-                st.success("File uploaded and stored.")
+            # A) UI controls for parsing
+            skip_rows = st.number_input(
+                "Number of header/comment lines to skip",
+                min_value=0, value=1, step=1
+            )
+            use_header = st.checkbox(
+                "Treat first non-skipped row as header",
+                value=True
+            )
 
-            # UI for showing/modifying
-            st.dataframe(st.session_state.modified_df.head())
+            manual_columns = None
+            if not use_header:
+                col_str = st.text_input(
+                    "Enter column names (comma-separated)",
+                    placeholder="e.g. time, intensity"
+                )
+                if col_str:
+                    manual_columns = [c.strip() for c in col_str.split(",")]
+
+            # B) let user peek at raw text
+            with st.expander("📄 View raw data file (as text)"):
+                text = uploaded_file.read().decode("utf-8", errors="ignore")
+                st.text_area("Raw File Content", text, height=300)
+                uploaded_file.seek(0)
+
+            # C) decide if we need to re-parse
+            current_params = {
+                "name": uploaded_file.name,
+                "skip_rows": skip_rows,
+                "use_header": use_header,
+                "manual_columns": manual_columns,
+            }
+            last_params = st.session_state.get("last_parse_params")
+            if current_params != last_params:
+                # detect delimiter
+                content = uploaded_file.read().decode("utf-8", errors="ignore")
+                uploaded_file.seek(0)
+                if "\t" in content:
+                    delim = "\t"
+                elif "," in content:
+                    delim = ","
+                elif ";" in content:
+                    delim = ";"
+                else:
+                    delim = r"\s+"
+
+                # parse!
+                df = pd.read_csv(
+                    uploaded_file,
+                    delimiter=delim,
+                    skiprows=skip_rows,
+                    header=0 if use_header else None,
+                    names=manual_columns if not use_header else None,
+                    engine="python" if delim == r"\s+" else "c"
+                )
+
+                # store
+                st.session_state.original_df = df
+                st.session_state.modified_df = df.copy()
+                st.session_state.last_parse_params = current_params
+                st.success("File uploaded and parsed.")
+
+            # D) now work with the parsed DataFrame
+            df = st.session_state.modified_df
+            st.dataframe(df.head())
 
             if st.checkbox("🧪 Modify datasets?"):
-                st.session_state.modified_df = modify_dataframe(st.session_state.modified_df.copy())
+                st.session_state.modified_df = modify_dataframe(df.copy())
                 st.success("Dataset modified.")
 
-            df = st.session_state.modified_df  # <- use this throughout the app
+            # E) your downstream plotting UI
+            df = st.session_state.modified_df
             columns = df.columns.tolist()
-
             with st.expander("🗂 Dataset Configuration"):
-                num_datasets = st.number_input("Number of Datasets to Plot", min_value=1, max_value=10,
-                                               value=config_data.get("num_datasets", 1) if config_data else 1)
-                shared_x = st.checkbox("All datasets share the same X-axis",
-                                       value=config_data.get("shared_x", True) if config_data else True)
+                num_datasets = st.number_input(
+                    "Number of Datasets to Plot",
+                    min_value=1, max_value=10,
+                    value=config_data.get("num_datasets", 1) if config_data else 1
+                )
+                shared_x = st.checkbox(
+                    "All datasets share the same X-axis",
+                    value=config_data.get("shared_x", True) if config_data else True
+                )
 
             dataset_info = []
             for i in range(num_datasets):
@@ -2220,7 +2584,7 @@ if xy_plot_option:
                 x_tick_gap = st.number_input(
                     "X-axis Tick Interval",
                     min_value=0.0,
-                    value=config_data.get("x_tick_gap", 1.0) if config_data else 1.0,
+                    value=config_data.get("x_tick_gap", 1.0) if config_data else np.around((df[dataset_info[0]["x"]].max() - df[dataset_info[0]["x"]].min())/5),
                     step=0.1
                 )
 
@@ -2248,12 +2612,12 @@ if xy_plot_option:
 
                 title_size = st.slider(
                     "Plot Title Font Size", 8, 32,
-                    value=config_data.get("title_size", 18) if config_data else 18
+                    value=config_data.get("title_size", 18) if config_data else 14
                 )
                 title_weight = st.selectbox(
                     "Title Weight", ["normal", "bold", "heavy"],
                     index=["normal", "bold", "heavy"].index(
-                        config_data.get("title_weight", "bold") if config_data else "bold")
+                        config_data.get("title_weight", "bold") if config_data else "normal")
                 )
                 title_loc = st.selectbox(
                     "Title Alignment", ["center", "left", "right"],

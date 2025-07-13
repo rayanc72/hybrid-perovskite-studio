@@ -24,6 +24,8 @@ import streamlit_authenticator as stauth
 from streamlit_extras.mention import mention
 from streamlit_extras.jupyterlite import jupyterlite
 import matplotlib as mpl
+from itertools import combinations_with_replacement
+import matplotlib.pyplot as plt
 mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
 
@@ -869,10 +871,8 @@ if st.session_state.atoms is not None:
         # -------------------------------------------------------------------------
         # 1) Parameter sliders
         # -------------------------------------------------------------------------
-        qmin, qmax = st.slider("q (Å⁻¹)", 0.1, 50.0, (1.0, 20.0))
-        # qmax = st.slider("qmax (Å⁻¹)", qmin + 0.1, 100.0, 20.0, step=0.1)
+        qmin, qmax = st.slider("q (Å⁻¹)", 0, 25, (1, 20))
         rmin, rmax = st.slider("r (Å)", 0.0, 30.0, (0.1, 20.0))
-        # rmax = st.slider("rmax (Å)", rmin + 0.1, 100.0, 20.0, step=0.1)
 
         # -------------------------------------------------------------------------
         # 2) Build & write a clean CIF
@@ -905,36 +905,107 @@ if st.session_state.atoms is not None:
         with st.expander("View simulated PDF data"):
             st.dataframe(df_pdf, use_container_width= True, hide_index = True)
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df_pdf["r (Å)"],
-            y=df_pdf["G_sim(r)"],
-            mode="lines",
-            name="Simulated G(r)"
-        ))
+        with st.expander("View simulated PDF"):
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df_pdf["r (Å)"],
+                y=df_pdf["G_sim(r)"],
+                mode="lines",
+                name="Simulated G(r)"
+            ))
 
-        fig.update_layout(
-            xaxis_title="r (Å)", yaxis_title="G(r)",
-            xaxis=dict(
-                range=[rmin, rmax],
-                tickfont=dict(size=20, color="black"),
-                title_font=dict(size=20, color="black")
-            ),
-            yaxis=dict(
-                tickfont=dict(size=20, color="black"),
-                title_font=dict(size=20, color="black")
-            ),
-            font=dict(color="black"),
-            margin=dict(t=40, b=40, l=40, r=40),
-            legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
-        )
+            fig.update_layout(
+                xaxis_title="r (Å)", yaxis_title="G(r)",
+                xaxis=dict(
+                    range=[rmin, rmax],
+                    tickfont=dict(size=20, color="black"),
+                    title_font=dict(size=20, color="black")
+                ),
+                yaxis=dict(
+                    tickfont=dict(size=20, color="black"),
+                    title_font=dict(size=20, color="black")
+                ),
+                font=dict(color="black"),
+                margin=dict(t=40, b=40, l=40, r=40),
+                legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
+            )
 
-        st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+        st.subheader("Optional: plot Radial Distribution Function")
+
+        # 1) Gather inputs
+        rdf_atoms = st.text_input("Enter atom labels (comma-sep)", "Pb, I")
+        atom_list = [a.strip() for a in rdf_atoms.split(",") if a.strip()]
+        all_pairs = list(combinations_with_replacement(atom_list, 2))
+        bins = st.slider("Number of bins", 50, 500, 200)
+
+        # 2) Choose library
+        lib = st.radio("Choose plotting library", ["Matplotlib", "Plotly"])
+
+        # 3) Load the appropriate config UI
+        if lib == "Matplotlib":
+            config = load_or_create_plot_config_matplotlib(all_pairs)
+        else:
+            config = load_or_create_plot_config(all_pairs)
+
+        # 4) Compute & display
+        if st.button("Compute RDF"):
+            if lib == "Matplotlib":
+                fig, df_all = plot_rdf_pdf_matplotlib(
+                    atom_list, modified_atoms, df_pdf, rmax, bins,
+                    compute_rdf_weighted, config
+                )
+                st.pyplot(fig)
+
+                # Download buttons for Matplotlib
+                buf_png = io.BytesIO()
+                fig.savefig(buf_png, format='png', bbox_inches='tight')
+                st.download_button(
+                    "Download as PNG", buf_png.getvalue(),
+                    file_name="rdf_plot.png", mime="image/png"
+                )
+
+                buf_pdf = io.BytesIO()
+                fig.savefig(buf_pdf, format='pdf', bbox_inches='tight')
+                st.download_button(
+                    "Download as PDF", buf_pdf.getvalue(),
+                    file_name="rdf_plot.pdf", mime="application/pdf"
+                )
+
+            else:  # Plotly
+                fig_rdf, df_all = plot_rdf_pdf(
+                    atom_list, modified_atoms, df_pdf, rmax, bins,
+                    compute_rdf_weighted, config
+                )
+                st.plotly_chart(fig_rdf, use_container_width=True)
+
+                # Download buttons for Plotly
+                png_bytes = fig_rdf.to_image(format="png", engine="kaleido")
+                st.download_button(
+                    "Download as PNG", png_bytes,
+                    file_name="rdf_plot.png", mime="image/png"
+                )
+
+                pdf_bytes = fig_rdf.to_image(format="pdf", engine="kaleido")
+                st.download_button(
+                    "Download as PDF", pdf_bytes,
+                    file_name="rdf_plot.pdf", mime="application/pdf"
+                )
+
+            # Show data table
+            with st.expander("View simulated RDF data"):
+                st.dataframe(df_all, use_container_width=True, hide_index=True)
+
+
+        st.divider()
+        st.subheader("Optional: Compare Experimental vs. Simulated PDF")
+
 
         # -------------------------------------------------------------------------
         # 5) Optionally load experimental .gr
-        # -------------------------------------------------------------------------
-        # --- 5) Optional experimental upload and improved fitting (no normalization) ---
+        # -------------------------------------------------------------------------=
         exp_file = st.file_uploader("Optionally upload experimental .gr file", type=["gr"], key="gr_uploader")
         if exp_file is not None:
             content = exp_file.read().decode("utf-8", errors="ignore").splitlines()
@@ -964,6 +1035,8 @@ if st.session_state.atoms is not None:
                 g_fit = linear_model(g_sim_interp, a, b)
                 residual = df_exp.G_exp - g_fit
 
+                pcc_value = compute_pcc((df_exp.r, df_exp.G_exp), (df_exp.r, g_sim_interp))
+
                 df_combined = pd.DataFrame({
                     "r (Å)": df_exp.r,
                     "G_sim": g_sim_interp,
@@ -976,7 +1049,6 @@ if st.session_state.atoms is not None:
 
         # --- 6) Plotting: customization, trigger button, downloads, and interactive Plotly ---
         # Load saved customization if provide
-
             with st.expander("Plot customization"):
                 config_file = st.file_uploader("Upload plot customization config (.json)", type=["json"],
                                                key="config_uploader")
@@ -1009,22 +1081,22 @@ if st.session_state.atoms is not None:
                 show_exp = st.checkbox("Show experimental data", config.get("show_exp", True))
                 show_res = st.checkbox("Show residual data", config.get("show_res", True))
                 aspect_opt = st.selectbox("Aspect ratio", ["auto", "equal", "custom"],
-                                          index=["auto", "equal", "custom"].index(config.get("aspect_option", "auto")))
+                                          index=["auto", "equal", "custom"].index(config.get("aspect_option", "equal")))
                 aspect_val = config.get("aspect_val", 1.0)
                 if aspect_opt == "custom":
                     aspect_val = st.number_input("Custom aspect ratio (y/x)", 0.1, 10.0, aspect_val, step=0.1)
                 # axis limits & ticks
                 x_min = st.number_input("X-axis min", value=config.get("x_min", rmin), step=0.1)
                 x_max = st.number_input("X-axis max", value=config.get("x_max", rmax), step=0.1)
-                y_min = st.number_input("Y-axis min", value=config.get("y_min", float(df_combined.G_sim.min())), step=0.1)
+                y_min = st.number_input("Y-axis min", value=config.get("y_min", float(df_combined.G_sim.min()-1.5)), step=0.1)
                 y_max = st.number_input("Y-axis max", value=config.get("y_max", float(df_combined.G_sim.max())), step=0.1)
                 tick_gap_x = st.number_input("X-axis tick interval", value=config.get("tick_gap_x", (x_max - x_min) / 5),
                                              step=0.1)
                 tick_gap_y = st.number_input("Y-axis tick interval", value=config.get("tick_gap_y", (y_max - y_min) / 5),
                                              step=0.1)
                 plot_title = st.text_input("Plot title",
-                                           value=config.get("plot_title", f"PDF (q: {qmin}–{qmax}; r: {rmin}–{rmax})"))
-                show_fit = st.checkbox("Plot fitted data", config.get("show_fit", True))
+                                           value=config.get("plot_title", "PDF"))
+                show_fit = st.checkbox("Plot fitted data", config.get("show_fit", False))
 
                 # Download current customization as JSON
                 config_out = {
@@ -1089,8 +1161,20 @@ if st.session_state.atoms is not None:
                 label_kw = {"fontsize": text_size}
                 if text_style == "bold":   label_kw["fontweight"] = "bold"
                 if text_style == "italic": label_kw["fontstyle"] = "italic"
-                ax.set_xlabel("r (Å)", **label_kw)
-                ax.set_ylabel("G(r)", **label_kw)
+                ax.set_xlabel(r"$r\ (\mathrm{\AA})$", **label_kw)
+                ax.set_ylabel(r"$G(r)\ (\mathrm{\AA}^{-2})$", **label_kw)
+
+                ax.annotate(
+                    f"PCC = {pcc_value:.2f}",
+                    xy=(0.82, 0.1),
+                    xycoords="axes fraction",
+                    ha="center",
+                    va="center",
+                    fontsize=text_size,
+                    fontweight="bold" if text_style == "bold" else "normal",
+                    fontstyle="italic" if text_style == "italic" else "normal",
+                    # bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.6)
+                )
 
                 ax.tick_params(labelsize=text_size)
                 if not hide_legends:
@@ -1098,59 +1182,66 @@ if st.session_state.atoms is not None:
                 st.pyplot(fig)
 
                 # downloads
-                buf_pdf = io.BytesIO();
-                fig.savefig(buf_pdf, format="pdf");
+                base_name = os.path.splitext(exp_file.name)[0]
+                buf_pdf = io.BytesIO()
+                fig.savefig(buf_pdf, format="pdf", dpi=300, bbox_inches="tight")
                 buf_pdf.seek(0)
-                st.download_button("Download PDF", buf_pdf, "plot.pdf", "application/pdf")
-                buf_png = io.BytesIO();
-                fig.savefig(buf_png, format="png");
+                st.download_button("Download PDF", buf_pdf, f"{base_name}.pdf", "application/pdf")
+                buf_png = io.BytesIO()
+                fig.savefig(buf_png, format="png", dpi=300, bbox_inches="tight")
                 buf_png.seek(0)
-                st.download_button("Download PNG", buf_png, "plot.png", "image/png")
+                st.download_button("Download PNG", buf_png, f"{base_name}.png", "image/png")
 
         # Interactive Plotly chart
-        if st.checkbox("Show interactive Plotly chart"):
-            fig_int = go.Figure()
-            fig_int.add_trace(go.Scatter(
-                x=df_combined["r (Å)"], y=df_combined["G_sim"],
-                mode="lines", name="Simulated G(r)",
-                line=dict(color=sim_color, width=sim_width, dash='solid'),
-                opacity=sim_opacity
-            ))
-            fig_int.add_trace(go.Scatter(
-                x=df_combined["r (Å)"], y=df_combined["G_exp"],
-                mode="lines", name="Experimental G(r)",
-                line=dict(color=exp_color, width=exp_width, dash='solid'),
-                opacity=exp_opacity
-            ))
-            fig_int.add_trace(go.Bar(
-                x=df_combined["r (Å)"], y=df_combined["Residual"],
-                base=(min(df_combined["G_sim"].min(), df_combined["G_exp"].min()) - 0.5), name="Residual",
-                marker_color=bar_color, opacity=0.6
-            ))
-            if show_fit:
+            if st.checkbox("Show interactive Plotly chart"):
+                fig_int = go.Figure()
                 fig_int.add_trace(go.Scatter(
-                    x=df_combined["r (Å)"], y=df_combined["G_fit"],
-                    mode="lines", name="Fitted G(r)",
-                    line=dict(color="gray", width=spline_width, dash="dot"),
-                    opacity=0.8
+                    x=df_combined["r (Å)"], y=df_combined["G_sim"],
+                    mode="lines", name="Simulated G(r)",
+                    line=dict(color=sim_color, width=sim_width, dash='solid'),
+                    opacity=sim_opacity
                 ))
-            fig_int.update_layout(
-                xaxis_title="r (Å)", yaxis_title="G(r)",
-                xaxis=dict(
-                    range=[x_min, x_max],
-                    tickfont=dict(size=text_size+12, color="black"),
-                    title_font=dict(size=text_size+12, color="black")
-                ),
-                yaxis=dict(
-                    range=[y_min, y_max],
-                    tickfont=dict(size=text_size+12, color="black"),
-                    title_font=dict(size=text_size+12, color="black")
-                ),
-                font=dict(color="black"),
-                margin=dict(t=40, b=40, l=40, r=40),
-                legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
-            )
-            st.plotly_chart(fig_int, use_container_width=True)
+                fig_int.add_trace(go.Scatter(
+                    x=df_combined["r (Å)"], y=df_combined["G_exp"],
+                    mode="lines", name="Experimental G(r)",
+                    line=dict(color=exp_color, width=exp_width, dash='solid'),
+                    opacity=exp_opacity
+                ))
+                fig_int.add_trace(go.Bar(
+                    x=df_combined["r (Å)"], y=df_combined["Residual"],
+                    base=(min(df_combined["G_sim"].min(), df_combined["G_exp"].min()) - 0.5), name="Residual",
+                    marker_color=bar_color, opacity=0.6
+                ))
+                if show_fit:
+                    fig_int.add_trace(go.Scatter(
+                        x=df_combined["r (Å)"], y=df_combined["G_fit"],
+                        mode="lines", name="Fitted G(r)",
+                        line=dict(color="gray", width=spline_width, dash="dot"),
+                        opacity=0.8
+                    ))
+                fig_int.update_layout(
+                    xaxis_title="r (Å)", yaxis_title="G(r)",
+                    xaxis=dict(
+                        range=[x_min, x_max],
+                        tickfont=dict(size=text_size+12, color="black"),
+                        title_font=dict(size=text_size+12, color="black")
+                    ),
+                    yaxis=dict(
+                        range=[y_min, y_max],
+                        tickfont=dict(size=text_size+12, color="black"),
+                        title_font=dict(size=text_size+12, color="black")
+                    ),
+                    font=dict(color="black"),
+                    margin=dict(t=40, b=40, l=40, r=40),
+                    legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
+                )
+                st.plotly_chart(fig_int, use_container_width=True)
+
+
+
+
+
+
 
 
 

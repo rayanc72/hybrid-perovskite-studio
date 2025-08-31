@@ -1,18 +1,9 @@
-import pandas as pd
-import os
-import glob
-import re
+
 import streamlit as st
 import subprocess
-import shutil
-import zipfile
-import shutil
 from MDAnalysis import Universe
 from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
-from MDAnalysis.analysis import hbonds
-import numpy as np
-import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 import collections
@@ -31,6 +22,13 @@ from MDAnalysis.analysis import align
 from MDAnalysis.transformations import positionaveraging
 from MDAnalysis.transformations import nojump
 from MDAnalysis.analysis.rdf import InterRDF, InterRDF_s
+import os
+import glob
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+from tempfile import NamedTemporaryFile
+import shutil
+
 
 def try_float_conversion(value):
     try:
@@ -265,20 +263,63 @@ def get_download_link_md(file_path, download_name):
 
 from ase.io import read, write
 
+def _strip_first_n_lines_inplace(path: Path, n: int = 6) -> None:
+    """
+    Remove the first n lines from `path` in-place:
+      • streams (no full-file read)
+      • preserves mode/permissions
+      • atomic replace on the same filesystem
+    """
+    # If file has fewer than n lines, do nothing
+    # (you can change this to truncate if you prefer)
+    lines_seen = 0
+
+    with path.open('rb') as src:
+        # Peek to see if there are >= n lines
+        for _ in range(n):
+            chunk = src.readline()
+            if not chunk:
+                return  # fewer than n lines, skip
+            lines_seen += 1
+
+        # Create temp file in same dir for atomic replace
+        with NamedTemporaryFile('wb', delete=False, dir=path.parent) as tmp:
+            tmp_name = tmp.name
+            # Copy the remainder after the first n lines already consumed
+            shutil.copyfileobj(src, tmp)
+
+    # Preserve permissions/mode, then replace atomically
+    shutil.copymode(path, tmp_name)
+    os.replace(tmp_name, path)
+
+
+def _strip_many(files, n=6, max_workers=None):
+    if not files:
+        return
+    # I/O bound: threads are fine
+    if max_workers is None:
+        # Reasonable default for lots of small files
+        max_workers = min(32, (os.cpu_count() or 4) + 4)
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        list(ex.map(lambda p: _strip_first_n_lines_inplace(Path(p), n), files))
+
+
 # Function to build Universe from directory of frames
 # Updated build_universe_from_dir function to handle subdirectories
 def build_universe_from_dir(directory, timestep):
-    # Get a sorted list of all frame files in the directory
+    # 1) Find all frames recursively
     frame_files = sorted(glob.glob(os.path.join(directory, '**', 'geometry*.in'), recursive=True))
 
-    for f in frame_files:
-        atoms_compare = read(f)
-        # Rewrite the file with the new positions
-        write(f, atoms_compare, format='aims')
-
-    # If no frame files found, raise an exception
     if not frame_files:
         raise Exception(f"No 'geometry*.in' files found in directory: {directory}")
+
+    # 2) Re-write each with ASE (this may add headers)
+    for f in frame_files:
+        atoms_compare = read(f)
+        write(f, atoms_compare, format='aims')
+
+    # 3) Strip the first 6 lines from every file efficiently
+    _strip_many(frame_files, n=6)
 
     # Read the unit cell dimensions from the first geometry file
     ase_atoms = read(frame_files[0])

@@ -940,6 +940,12 @@ if st.session_state.atoms is not None:
         atom_list = [a.strip() for a in rdf_atoms.split(",") if a.strip()]
         all_pairs = list(combinations_with_replacement(atom_list, 2))
         bins = st.slider("Number of bins", 50, 500, 200)
+        rdf_w_weights = st.radio("Scale by atomic weights?",["True","False"])
+
+        if rdf_w_weights == "True":
+            weight = True
+        else:
+            weight=False
 
         # 2) Choose library
         lib = st.radio("Choose plotting library", ["Matplotlib", "Plotly"])
@@ -954,8 +960,8 @@ if st.session_state.atoms is not None:
         if st.button("Compute RDF"):
             if lib == "Matplotlib":
                 fig, df_all = plot_rdf_pdf_matplotlib(
-                    atom_list, modified_atoms, df_pdf, rmax, bins,
-                    compute_rdf_weighted, config
+                    atom_list, modified_atoms, df_pdf, rmin, rmax, bins,
+                    compute_rdf_weighted, config, weight
                 )
                 st.pyplot(fig)
 
@@ -977,22 +983,22 @@ if st.session_state.atoms is not None:
             else:  # Plotly
                 fig_rdf, df_all = plot_rdf_pdf(
                     atom_list, modified_atoms, df_pdf, rmax, bins,
-                    compute_rdf_weighted, config
+                    compute_rdf_weighted, config, weight
                 )
                 st.plotly_chart(fig_rdf, use_container_width=True)
 
-                # Download buttons for Plotly
-                png_bytes = fig_rdf.to_image(format="png", engine="kaleido")
-                st.download_button(
-                    "Download as PNG", png_bytes,
-                    file_name="rdf_plot.png", mime="image/png"
-                )
-
-                pdf_bytes = fig_rdf.to_image(format="pdf", engine="kaleido")
-                st.download_button(
-                    "Download as PDF", pdf_bytes,
-                    file_name="rdf_plot.pdf", mime="application/pdf"
-                )
+                # # Download buttons for Plotly
+                # png_bytes = fig_rdf.to_image(format="png")
+                # st.download_button(
+                #     "Download as PNG", png_bytes,
+                #     file_name="rdf_plot.png", mime="image/png"
+                # )
+                #
+                # pdf_bytes = fig_rdf.to_image(format="pdf")
+                # st.download_button(
+                #     "Download as PDF", pdf_bytes,
+                #     file_name="rdf_plot.pdf", mime="application/pdf"
+                # )
 
             # Show data table
             with st.expander("View simulated RDF data"):
@@ -1119,6 +1125,8 @@ if st.session_state.atoms is not None:
 
             plot_btn = st.button("Generate Plot")
             if plot_btn:
+                import matplotlib.style
+                matplotlib.style.use('classic')
                 import matplotlib.ticker as ticker
 
                 fig, ax = plt.subplots()
@@ -2746,7 +2754,9 @@ if xy_plot_option:
                 )
 
             if st.button("Generate Plot"):
+                plt.style.use('classic')
                 fig, ax = plt.subplots(figsize=(8, 6))
+
 
                 for ds in dataset_info:
                     ax.plot(df[ds["x"]], df[ds["y"]],

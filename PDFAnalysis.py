@@ -87,7 +87,7 @@ from ase.neighborlist import neighbor_list
 import numpy as np
 
 
-def compute_rdf_weighted(structure, pair=('O', 'H'), r_max=10.0, bins=200):
+def compute_rdf_weighted(structure, pair=('O', 'H'), r_max=10.0, bins=200, w=True):
     from ase.data import atomic_numbers
     from ase.neighborlist import neighbor_list
     import numpy as np
@@ -104,10 +104,14 @@ def compute_rdf_weighted(structure, pair=('O', 'H'), r_max=10.0, bins=200):
     for i, j, d in zip(i_list, j_list, distances):
         s_i, s_j = structure[i].symbol, structure[j].symbol
         if (s_i, s_j) == (a1, a2) or (s_i, s_j) == (a2, a1):
-            Z_i = atomic_numbers[s_i]
-            Z_j = atomic_numbers[s_j]
-            weights.append(Z_i * Z_j)
-            mask.append(True)
+            if w:
+                Z_i = atomic_numbers[s_i]
+                Z_j = atomic_numbers[s_j]
+                weights.append(Z_i * Z_j)
+                mask.append(True)
+            else:
+                weights.append(1)
+                mask.append(True)
         else:
             mask.append(False)
 
@@ -134,14 +138,14 @@ def compute_pdf_from_rdf_df(df_all: pd.DataFrame, density: float) -> pd.DataFram
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 
-def plot_rdf_pdf(atom_list, modified_atoms, df_pdf, rmax, bins, compute_rdf_weighted, config):
+def plot_rdf_pdf(atom_list, modified_atoms, df_pdf, rmax, bins, compute_rdf_weighted, config, weight=True):
     from itertools import combinations_with_replacement
     fig_rdf = make_subplots(specs=[[{"secondary_y": True}]])
     df_all = pd.DataFrame()
 
     all_pairs = list(combinations_with_replacement(atom_list, 2))
     for pair in all_pairs:
-        r, g_r = compute_rdf_weighted(modified_atoms, pair=pair, r_max=rmax, bins=bins)
+        r, g_r = compute_rdf_weighted(modified_atoms, pair=pair, r_max=rmax, bins=bins, w=weight)
         if r is not None:
             pair_label = f"{pair[0]}–{pair[1]}"
             bar_color = config.get("pair_colors", {}).get(pair_label, "#1f77b4")
@@ -379,7 +383,7 @@ def load_or_create_plot_config_matplotlib(all_pairs):
         # ensure saved style exists
         default_style = config.get('style_sheet', styles[0])
         if default_style not in styles:
-            default_style = styles[0]
+            default_style = styles[5]
         config['style_sheet'] = st.selectbox("Matplotlib Style", styles, index=styles.index(default_style))
 
         config['fig_width']  = st.slider("Width (inches)",  4.0, 12.0, config.get('fig_width',  8.0), 0.5)
@@ -389,7 +393,7 @@ def load_or_create_plot_config_matplotlib(all_pairs):
         # new: axes (spine) linewidth
         config['axes_linewidth'] = st.slider(
             "Axes (spine) Linewidth", 0.5, 5.0,
-            config.get('axes_linewidth', 1.0), 0.1
+            config.get('axes_linewidth', 1.5), 0.1
         )
 
         # --- Plot types & colors ---
@@ -446,7 +450,7 @@ def load_or_create_plot_config_matplotlib(all_pairs):
             config['y2_scale'] = st.selectbox("Secondary Y scale", ['linear','log'], index=['linear','log'].index(config.get('y2_scale','linear')))
 
         # --- Grid, ticks & spines visibility ---
-        config['show_grid']  = st.checkbox("Show grid", config.get('show_grid',True))
+        config['show_grid']  = st.checkbox("Show grid", config.get('show_grid',False))
         config['grid_axis']  = st.selectbox("Grid axis", ['both','x','y'], index=['both','x','y'].index(config.get('grid_axis','both')))
         config['grid_style'] = st.selectbox("Grid style", ['-','--','-.',':'], index=['-','--','-.',':'].index(config.get('grid_style','--')))
         config['grid_color'] = st.color_picker("Grid color", config.get('grid_color','#cccccc'))
@@ -454,7 +458,7 @@ def load_or_create_plot_config_matplotlib(all_pairs):
         config['minor_ticks'] = st.checkbox("Show minor ticks", config.get('minor_ticks',False))
         config['visible_spines'] = st.multiselect(
             "Visible spines", ['left','right','top','bottom'],
-            default=config.get('visible_spines',['left','bottom'])
+            default=config.get('visible_spines',['left','bottom','right','top'])
         )
 
         # --- Tick‐label visibility ---
@@ -494,7 +498,7 @@ def load_or_create_plot_config_matplotlib(all_pairs):
 
 
 def plot_rdf_pdf_matplotlib(
-    atom_list, modified_atoms, df_pdf, rmax, bins, compute_rdf_weighted, config
+    atom_list, modified_atoms, df_pdf, rmin, rmax, bins, compute_rdf_weighted, config, weight=True
 ):
     """
     Apply the rich matplotlib config to plot RDF (bar/line) and PDF.
@@ -543,7 +547,7 @@ def plot_rdf_pdf_matplotlib(
 
     # RDF plotting
     for pair in pairs:
-        r, g_r = compute_rdf_weighted(modified_atoms, pair=pair, r_max=rmax, bins=bins)
+        r, g_r = compute_rdf_weighted(modified_atoms, pair=pair, r_max=rmax, bins=bins, w=weight)
         if r is None:
             st.warning(f"No data for {pair}")
             continue
@@ -613,6 +617,7 @@ def plot_rdf_pdf_matplotlib(
         ax2.set_ylabel(config.get('y2label','G(r)'), fontsize=config.get('label_size',14))
 
     # limits
+    ax.set_xlim(rmin, rmax)
     y1min,y1max = config.get('y1_min',None), config.get('y1_max',None)
     if y1min is not None: ax.set_ylim(bottom=y1min)
     if y1max is not None: ax.set_ylim(top=y1max)
@@ -622,7 +627,7 @@ def plot_rdf_pdf_matplotlib(
         if y2max is not None: ax2.set_ylim(top=y2max)
 
     # — TITLE & LABELS using new sizes —
-    ax.set_title("RDF & PDF", fontsize=config.get('title_size', 18))
+    # ax.set_title("RDF & PDF", fontsize=config.get('title_size', 18))
     ax.set_xlabel(config.get('xlabel', 'r (Å)'), fontsize=config.get('axis_label_size', 14))
     ax.set_ylabel(config.get('y1label', 'g(r)'), fontsize=config.get('axis_label_size', 14))
     if ax2:

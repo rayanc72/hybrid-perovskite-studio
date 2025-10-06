@@ -361,12 +361,10 @@ if st.session_state.atoms is not None:
         st.header("Rotation", divider='violet')
 
         rotate_type = st.selectbox("Select Rotation Type", (
-        "Rotate Individual Molecules", "Rotate Multiple Molecules", "Interpolate by Rotation", "Rotate Part of Molecules", "Rotate by Dipole Moment"))
+        "Rotate Individual Molecules", "Rotate Multiple Molecules", "Random Rotation", "Interpolate by Rotation", "Rotate Part of Molecules", "Rotate by Dipole Moment"))
 
 
         if rotate_type == "Rotate Individual Molecules":
-
-
 
             # Gather user inputs for rotation using Streamlit widgets
             molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
@@ -383,7 +381,6 @@ if st.session_state.atoms is not None:
 
                         axis_input = st.text_input("Enter crystal direction as h, k, l separated by spaces")
 
-                        # Add the centroid option selection
                         angle = st.number_input("Enter rotation angle in degrees", step=1.0)
 
                         if st.form_submit_button(f"Set Parameters for Molecule {i}"):
@@ -471,6 +468,275 @@ if st.session_state.atoms is not None:
                         atoms_to_speck(modified_atoms, "rotation")
                     else:
                         atoms_to_speck(modified_atoms, "rotation")
+
+        # --- Random Rotation UI & Logic (with logging & multi-structure ZIP) ---
+        if rotate_type == "Random Rotation":
+            st.subheader("Random Rotation")
+
+            mode = st.radio(
+                "Choose mode",
+                options=["Symmetric Random Rotation", "Asymmetric Random Rotation"],
+                horizontal=False,
+                index=0,
+                key="random_rotation_mode",
+            )
+
+
+            # helpers
+            def _random_axis_from_cell(cell):
+                # pick small Miller indices from {-1, 0, 1}^3 \ {(0,0,0)}
+                while True:
+                    hkl = np.random.randint(-1, 2, size=3)  # -1, 0, 1
+                    if np.any(hkl):
+                        break
+                axis = np.dot(hkl, cell)
+                n = np.linalg.norm(axis)
+                if n == 0:
+                    return _random_axis_from_cell(cell)
+                return axis / n, tuple(int(x) for x in hkl)
+
+
+            def _random_angle():
+                return float(np.random.uniform(0.0, 180.0))
+
+
+            def _log_table_to_df(log_rows):
+                import pandas as pd
+                # log_rows: list of dicts
+                cols = ["structure_id", "mode", "molecule_index", "h", "k", "l", "axis_x", "axis_y", "axis_z",
+                        "angle_deg"]
+                df = pd.DataFrame(log_rows)[cols]
+                return df
+
+
+            lattice_vectors = modified_atoms.get_cell()
+
+            # ---------- Mode-specific selection UIs ----------
+            if mode == "Symmetric Random Rotation":
+                st.markdown("Define **partner pairs** (two molecule indices per pair). "
+                            "Each pair receives equal-and-opposite rotations to preserve inversion symmetry.")
+
+                if "sym_pairs" not in st.session_state:
+                    st.session_state.sym_pairs = []
+
+                # Pair builder UI
+                with st.form("add_partner_pair_form"):
+                    pair = st.multiselect(
+                        "Select exactly two molecule indices to form a partner pair",
+                        options=range(1, len(molecules) + 1),
+                        max_selections=2,
+                        key="sym_pair_builder"
+                    )
+                    add_pair = st.form_submit_button("Add Pair")
+                    if add_pair:
+                        if len(pair) != 2:
+                            st.warning("Please select exactly two indices.")
+                        else:
+                            p = tuple(sorted(pair))
+                            if p in st.session_state.sym_pairs:
+                                st.info(f"Pair {p} already added.")
+                            else:
+                                st.session_state.sym_pairs.append(p)
+                                st.success(f"Added pair {p}.")
+
+                if st.session_state.sym_pairs:
+                    st.write("**Current partner pairs:**")
+                    st.write(", ".join([f"{p}" for p in st.session_state.sym_pairs]))
+                    if st.button("Clear All Pairs"):
+                        st.session_state.sym_pairs = []
+                        st.info("Cleared all partner pairs.")
+
+                # Optional seed
+                seed_col1, seed_col2 = st.columns(2)
+                with seed_col1:
+                    use_seed = st.checkbox("Use random seed (optional)")
+                with seed_col2:
+                    seed_val = st.number_input("Seed", value=0, step=1) if use_seed else None
+                if use_seed:
+                    np.random.seed(int(seed_val))
+
+                # How many structures?
+                num_structs = st.number_input(
+                    "How many structures should be generated?",
+                    min_value=1, max_value=32, value=1, step=1
+                )
+
+                if st.button("Apply Symmetric Random Rotations"):
+                    if not st.session_state.sym_pairs:
+                        st.warning("Add at least one partner pair first.")
+                    else:
+                        import copy, io, zipfile, tempfile
+                        from ase.io import write as ase_write
+
+                        base_atoms = modified_atoms  # keep original reference
+                        all_logs = []
+                        generated_atoms = []
+                        used_signatures = set()
+
+                        # Generate num_structs unique sets
+                        for s_idx in range(1, int(num_structs) + 1):
+                            # Make a working copy of atoms
+                            work_atoms = copy.deepcopy(base_atoms)
+                            struct_logs = []
+
+                            # Build a uniqueness signature for this set
+                            sig_parts = []
+
+                            for a, b in st.session_state.sym_pairs:
+                                mol_a = molecules[a - 1]
+                                mol_b = molecules[b - 1]
+
+                                axis, hkl = _random_axis_from_cell(lattice_vectors)
+                                angle = _random_angle()
+
+                                # signature part (rounded angle avoids float jitter)
+                                sig_parts.append((tuple(sorted((a, b))), hkl, round(angle, 3)))
+
+                                # Apply +θ to first, −θ to second
+                                work_atoms = rotate_molecules_v2(work_atoms, mol_a, axis, angle)
+                                work_atoms = rotate_molecules_v2(work_atoms, mol_b, axis, -angle)
+
+                                # log both applications
+                                struct_logs.append({
+                                    "structure_id": s_idx, "mode": "symmetric",
+                                    "molecule_index": a, "h": hkl[0], "k": hkl[1], "l": hkl[2],
+                                    "axis_x": float(axis[0]), "axis_y": float(axis[1]), "axis_z": float(axis[2]),
+                                    "angle_deg": float(angle)
+                                })
+                                struct_logs.append({
+                                    "structure_id": s_idx, "mode": "symmetric",
+                                    "molecule_index": b, "h": hkl[0], "k": hkl[1], "l": hkl[2],
+                                    "axis_x": float(axis[0]), "axis_y": float(axis[1]), "axis_z": float(axis[2]),
+                                    "angle_deg": float(-angle)
+                                })
+
+                            sig = tuple(sig_parts)
+                            # (Practically always unique; retry would require a loop. Here we accept near-certain uniqueness.)
+                            used_signatures.add(sig)
+
+                            generated_atoms.append(work_atoms)
+                            all_logs.extend(struct_logs)
+
+                        # Show logs in a table
+                        df = _log_table_to_df(all_logs)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+
+                        file_name = os.path.splitext(st.session_state.file_name)[0]
+
+                        if int(num_structs) == 1:
+                            # Single file output via your helper, preserve prior suffix style
+                            output_suffix = "_rand_sym"
+                            create_aims_download_file(generated_atoms[0], file_name, output_suffix)
+                            st.success("Symmetric random rotation applied and file generated.")
+                        else:
+                            # Batch ZIP
+                            buf = io.BytesIO()
+                            with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                                for s_idx, atoms_obj in enumerate(generated_atoms, start=1):
+                                    fname = f"{file_name}_rand_sym_{s_idx:02d}.in"
+                                    tmp_path = os.path.join(tempfile.gettempdir(), fname)
+                                    ase_write(tmp_path, atoms_obj, format="aims")
+                                    zf.write(tmp_path, arcname=fname)
+                            buf.seek(0)
+                            st.download_button(
+                                "Download ZIP of symmetric random-rotated structures",
+                                data=buf,
+                                file_name=f"{file_name}_rand_sym_batch.zip",
+                                mime="application/zip",
+                            )
+                            st.success(f"Generated {int(num_structs)} symmetric random-rotated structures.")
+
+            elif mode == "Asymmetric Random Rotation":
+                st.markdown("Select any molecules; each gets its **own** random axis and angle.")
+
+                target_indices = st.multiselect(
+                    "Select molecule indices for asymmetric random rotation",
+                    options=range(1, len(molecules) + 1),
+                    key="pure_random_indices",
+                )
+
+                # Optional seed
+                seed_col1, seed_col2 = st.columns(2)
+                with seed_col1:
+                    use_seed = st.checkbox("Use random seed (optional)", key="pure_use_seed")
+                with seed_col2:
+                    seed_val = st.number_input("Seed", value=0, step=1, key="pure_seed_val") if use_seed else None
+                if use_seed:
+                    np.random.seed(int(seed_val))
+
+                # How many structures?
+                num_structs = st.number_input(
+                    "How many structures should be generated?",
+                    min_value=1, max_value=32, value=1, step=1,
+                    key="pure_num_structs"
+                )
+
+                if st.button("Apply Asymmetric Random Rotations"):
+                    if not target_indices:
+                        st.warning("Please select at least one molecule.")
+                    else:
+                        import copy, io, zipfile, tempfile
+                        from ase.io import write as ase_write
+
+                        base_atoms = modified_atoms
+                        all_logs = []
+                        generated_atoms = []
+                        used_signatures = set()
+
+                        for s_idx in range(1, int(num_structs) + 1):
+                            work_atoms = copy.deepcopy(base_atoms)
+                            struct_logs = []
+                            sig_parts = []
+
+                            for idx in target_indices:
+                                molecule = molecules[idx - 1]
+                                axis, hkl = _random_axis_from_cell(lattice_vectors)
+                                angle = _random_angle()
+                                work_atoms = rotate_molecules_v2(work_atoms, molecule, axis, angle)
+
+                                struct_logs.append({
+                                    "structure_id": s_idx, "mode": "asym",
+                                    "molecule_index": idx, "h": hkl[0], "k": hkl[1], "l": hkl[2],
+                                    "axis_x": float(axis[0]), "axis_y": float(axis[1]), "axis_z": float(axis[2]),
+                                    "angle_deg": float(angle)
+                                })
+
+                                # uniqueness signature component
+                                sig_parts.append((idx, hkl, round(angle, 3)))
+
+                            sig = tuple(sorted(sig_parts, key=lambda x: x[0]))
+                            used_signatures.add(sig)
+
+                            generated_atoms.append(work_atoms)
+                            all_logs.extend(struct_logs)
+
+                        # Show logs in a table
+                        df = _log_table_to_df(all_logs)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+
+                        file_name = os.path.splitext(st.session_state.file_name)[0]
+
+                        if int(num_structs) == 1:
+                            output_suffix = "_rand_pure"
+                            create_aims_download_file(generated_atoms[0], file_name, output_suffix)
+                            st.success("Asymmetric random rotations applied and file generated.")
+                        else:
+                            buf = io.BytesIO()
+                            with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                                for s_idx, atoms_obj in enumerate(generated_atoms, start=1):
+                                    fname = f"{file_name}_rand_pure_{s_idx:02d}.in"
+                                    tmp_path = os.path.join(tempfile.gettempdir(), fname)
+                                    ase_write(tmp_path, atoms_obj, format="aims")
+                                    zf.write(tmp_path, arcname=fname)
+                            buf.seek(0)
+                            st.download_button(
+                                "Download ZIP of pure random-rotated structures",
+                                data=buf,
+                                file_name=f"{file_name}_rand_asym_batch.zip",
+                                mime="application/zip",
+                            )
+                            st.success(f"Generated {int(num_structs)} asymmetric random-rotated structures.")
+
 
         if rotate_type == "Interpolate by Rotation":
             st.header("Create a Series of Structures")
@@ -1410,7 +1676,17 @@ if st.session_state.atoms is not None:
         st.header("Get dipole moment direction", divider='violet')
 
         # Gather user inputs for rotation using Streamlit widgets
-        molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
+        all_options = list(range(1, len(molecules) + 1))
+        options_with_all = ["Select All"] + all_options
+
+        molecule_indices = st.multiselect(
+            "Select molecule indices",
+            options=options_with_all,
+        )
+
+        # If "Select All" is chosen, override with all indices
+        if "Select All" in molecule_indices:
+            molecule_indices = all_options
         # Add widget to get camera position
         x_pos = st.number_input("Camera X position", value=0.0)
         y_pos = st.number_input("Camera Y position", value=0.0)
@@ -1435,7 +1711,7 @@ if st.session_state.atoms is not None:
                                                  'Crystal Direction'])
 
             # Display the DataFrame using Streamlit
-            # st.write(direction_df)
+            st.dataframe(direction_df, hide_index=True, use_container_width=True)
             # if st.button("Set camera"):
             camera_pos = [x_pos, y_pos, z_pos]
             dm_plot = plot_dipole_moment_vectors(direction_df, modified_atoms, chosen_molecules, camera_pos)
@@ -1484,12 +1760,14 @@ if st.session_state.atoms is not None:
                                           value=0.00)
             c_paramter = st.number_input("Relax the octahedron distortion limit (useful for highly distorted systems):",
                                          value=0.00)
+            supercell_size= st.number_input("Modify the supercell size (useful for checking convergence):",
+                                         value=3)
 
         # Button for confirmation
         if st.button('Calculate'):
             try:
                 super_atoms, periodic_image_dict, A2_indices = filter_atoms_by_symbols_and_extend(modified_atoms, A=center_atom,
-                                                                                      B=surrounding_atoms, A2=center_atom_2)
+                                                                                      B=surrounding_atoms, A2=center_atom_2, s_size=supercell_size)
                 AB6_octahedra, AB_distances = identify_AB_groups(super_atoms, center_atom, surrounding_atoms, b=b_parameter, c=c_paramter)
                 unq_AB_distances = filter_unique_distances(AB_distances)
                 octahedral_distances = find_matching_distances(modified_atoms, center_atom, surrounding_atoms,

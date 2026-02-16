@@ -1,9 +1,13 @@
 
 from diffpy.pdffit2 import PdfFit
 import pandas as pd
-import streamlit as st
-import json
-import numpy as np
+# import tempfile
+# from ase import Atoms
+# from pathlib import Path
+# from diffpy.srreal.structureadapter import loadStructure
+# from pymatgen.io.cif import CifWriter
+
+
 def calculate_pdf(
         diffpy_structure,
         diffpy_structure_attributes={"Uisoequiv": 0.01},
@@ -656,3 +660,113 @@ def plot_rdf_pdf_matplotlib(
 
     fig.tight_layout()
     return fig, df_all
+
+# # Helper: run PDF simulation for an ASE Atoms object
+# def simulate_pdf_from_atoms(
+#     atoms_obj: Atoms,
+#     qmin: float,
+#     qmax: float,
+#     rmin: float,
+#     rmax: float,
+#     qdamp: float = 0.06,
+#     qbroad: float = 0.06,
+#     uiso: float = 0.01,
+# ):
+#     """
+#     Returns r_grid (np.ndarray), G_sim (np.ndarray) for the given ASE Atoms.
+#     """
+#     # 1. symmetrize / clean (your existing logic)
+#     pymatgen_structure = generate_symmetrized_structure(atoms_obj, 0.01, 0.1)
+#
+#     # 2. write temporary cif
+#     with tempfile.TemporaryDirectory() as tmpdir:
+#         cif_path = Path(tmpdir) / "temp_structure.cif"
+#         CifWriter(pymatgen_structure).write_file(str(cif_path))
+#
+#         # 3. diffpy structure + PDF
+#         diffpy_structure = loadStructure(str(cif_path))
+#
+#         r_calc, g_calc = calculate_pdf(
+#             diffpy_structure,
+#             diffpy_structure_attributes={"Uisoequiv": uiso},
+#             pdf_calculator_kwargs={
+#                 "qmin": qmin,
+#                 "qmax": qmax,
+#                 "rmin": rmin,
+#                 "rmax": rmax,
+#                 "qdamp": qdamp,
+#                 "qbroad": qbroad,
+#             },
+#         )
+#
+#     return np.array(r_calc), np.array(g_calc)
+#
+# # Helper: interpolate onto common r-grid
+# def interpolate_to_common_grid(r_target, r_src, g_src):
+#     """
+#     Returns g_src_interp evaluated at r_target using linear interp.
+#     Extrapolation outside the source range is filled with nan.
+#     """
+#     return np.interp(
+#         r_target,
+#         r_src,
+#         g_src,
+#         left=np.nan,
+#         right=np.nan,
+#     )
+#
+# # Helper: Pearson correlation cost (1 - r)
+# def pdf_mismatch_cost(sim_atoms_flat, base_atoms, r_exp, g_exp, fit_settings):
+#     """
+#     sim_atoms_flat: flattened coords (len = 3N)
+#     base_atoms: ASE Atoms template (for cell, species, etc.)
+#     r_exp, g_exp: experimental data vectors (common grid)
+#     fit_settings: dict with qmin,qmax,rmin,rmax,etc.
+#     """
+#     # rebuild atoms with new positions
+#     atoms_trial = base_atoms.copy()
+#     coords = sim_atoms_flat.reshape((-1, 3))
+#     atoms_trial.set_positions(coords)
+#
+#     # simulate PDF for trial structure
+#     r_sim, g_sim = simulate_pdf_from_atoms(
+#         atoms_trial,
+#         qmin=fit_settings["qmin"],
+#         qmax=fit_settings["qmax"],
+#         rmin=fit_settings["rmin"],
+#         rmax=fit_settings["rmax"],
+#         qdamp=fit_settings["qdamp"],
+#         qbroad=fit_settings["qbroad"],
+#         uiso=fit_settings["uiso"],
+#     )
+#
+#     # interpolate sim onto experimental r-grid
+#     g_sim_interp = interpolate_to_common_grid(r_exp, r_sim, g_sim)
+#
+#     # mask nans / invalid
+#     mask = np.isfinite(g_sim_interp) & np.isfinite(g_exp)
+#     if np.count_nonzero(mask) < 5:
+#         # not enough overlap, punish heavily
+#         return 1.0
+#
+#     r_val, _ = pearsonr(g_sim_interp[mask], g_exp[mask])
+#
+#     # objective to MINIMIZE
+#     return 1.0 - r_val
+#
+# # Helper: write final optimized structure to CIF (returns bytes)
+# def atoms_to_cif_bytes(atoms_obj: Atoms):
+#     """
+#     Uses your generate_symmetrized_structure -> CIF pipeline,
+#     returns CIF as bytes for st.download_button.
+#     """
+#     pymatgen_structure = generate_symmetrized_structure(atoms_obj, 0.01, 0.1)
+#
+#     tmp_buf = io.StringIO()
+#     # We can't directly write to StringIO with CifWriter, so write to temp then read back
+#     with tempfile.TemporaryDirectory() as tmpdir:
+#         cif_path = Path(tmpdir) / "refined_structure.cif"
+#         CifWriter(pymatgen_structure).write_file(str(cif_path))
+#         with open(cif_path, "r") as f:
+#             tmp_buf.write(f.read())
+#     return tmp_buf.getvalue().encode("utf-8")

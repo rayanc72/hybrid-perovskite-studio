@@ -376,7 +376,7 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
 
     if plane == 'xy':
         k1, k2 = k_points[:, 0]*10, k_points[:, 1]*10
-        ax_label_1, ax_label_2 = "kx ($// \\vec{a}$) ($nm^{-1}$)", "ky ($// \\vec{b}$) ($nm^{-1}$)"
+        ax_label_1, ax_label_2 = "kx ($nm^{-1}$)", "ky ($nm^{-1}$)"
         if spin_direction == 'z':
             spin_1, spin_2, color_component = spins[:, 0], spins[:, 1], spins[:, 2]
         elif spin_direction == 'x':
@@ -387,7 +387,7 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
             raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
     elif plane == 'yz':
         k1, k2 = k_points[:, 1]*10, k_points[:, 2]*10
-        ax_label_1, ax_label_2 = "ky ($// \\vec{b}$) ($nm^{-1}$)", "kz ($// \\vec{c}$) ($nm^{-1}$)"
+        ax_label_1, ax_label_2 = "ky ($nm^{-1}$)", "kz ($nm^{-1}$)"
         if spin_direction == 'z':
             spin_1, spin_2, color_component = spins[:, 1], spins[:, 2], spins[:, 2]
         elif spin_direction == 'x':
@@ -398,7 +398,7 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
             raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
     elif plane == 'xz':
         k1, k2 = k_points[:, 0]*10, k_points[:, 2]*10
-        ax_label_1, ax_label_2 = "kx ($// \\vec{a}$) ($nm^{-1}$)", "kz ($// \\vec{c}$) ($nm^{-1}$)"
+        ax_label_1, ax_label_2 = "kx ($nm^{-1}$)", "kz ($nm^{-1}$)"
         if spin_direction == 'z':
             spin_1, spin_2, color_component = spins[:, 0], spins[:, 2], spins[:, 2]
         elif spin_direction == 'x':
@@ -641,8 +641,8 @@ def set_custom_labels(ax, all_data, apply_scaling, n_data_sets):
         ax.set_xticks(band_len_tot)
         k_label_reduce = [label.replace('Gamma', 'Γ').replace('G', 'Γ') for label in k_label_reduce]
         ax.set_xticklabels(k_label_reduce, color=label_color, fontsize=26, rotation= 0)
-        for tick in ax.xaxis.get_major_ticks()[3:4]:
-            tick.set_pad(30)
+        # for tick in ax.xaxis.get_major_ticks()[3:4]:
+        #     tick.set_pad(30)
         # for tick in ax.xaxis.get_major_ticks()[7:8]:
         #     tick.set_pad(30)
         # for tick in ax.xaxis.get_major_ticks()[9:10]:

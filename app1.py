@@ -26,6 +26,23 @@ from streamlit_extras.jupyterlite import jupyterlite
 import matplotlib as mpl
 from itertools import combinations_with_replacement
 import matplotlib.pyplot as plt
+# import plotly.io as pio
+# import io
+# import numpy as np
+# import pandas as pd
+# import plotly.graph_objects as go
+# from scipy.optimize import minimize
+# from scipy.stats import pearsonr
+# import tempfile
+# from ase import Atoms
+# from pathlib import Path
+# from diffpy.srreal.structureadapter import loadStructure
+# from diffpy.srreal.pdfcalculator import DebyePDFCalculator
+# from pymatgen.io.cif import CifWriter
+
+
+
+
 mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
 
@@ -250,7 +267,6 @@ if file_buffer is not None:
             #     exception_atom_list = [atom_name.strip() for atom_name in  exception_list.split(',')]
             if 'atoms' not in st.session_state or st.session_state.file_name != file_name:
                 try:
-
                     file_format = get_file_format(file_buffer.name)
                     atoms, molecules, modified_symbols = initialize_structure(file_buffer, file_format=file_format,
                                                                               file_name=file_buffer.name, exceptions=[("F", "I")],b_p=0)
@@ -310,6 +326,7 @@ with st.sidebar:
     deviation_calculation_option = st.sidebar.checkbox("Calculate percentage deviation", value=False)
     ADP_table_option = st.sidebar.checkbox("Anisotropic displacement parameters", value=False)
     PDF_option = st.sidebar.checkbox("PDF analysis", value=False)
+    charge_analysis_option = st.sidebar.checkbox("Charge analysis", value=False)
 
     st.divider()
 
@@ -357,11 +374,19 @@ if st.session_state.atoms is not None:
     molecules = st.session_state.molecules.copy()
 
 
+
+
+
     if rotate_option:
         st.header("Rotation", divider='violet')
 
         rotate_type = st.selectbox("Select Rotation Type", (
         "Rotate Individual Molecules", "Rotate Multiple Molecules", "Random Rotation", "Interpolate by Rotation", "Rotate Part of Molecules", "Rotate by Dipole Moment"))
+
+
+
+
+
 
 
         if rotate_type == "Rotate Individual Molecules":
@@ -469,7 +494,12 @@ if st.session_state.atoms is not None:
                     else:
                         atoms_to_speck(modified_atoms, "rotation")
 
-        # --- Random Rotation UI & Logic (with logging & multi-structure ZIP) ---
+
+
+
+
+
+
         if rotate_type == "Random Rotation":
             st.subheader("Random Rotation")
 
@@ -483,17 +513,48 @@ if st.session_state.atoms is not None:
 
 
             # helpers
-            def _random_axis_from_cell(cell):
-                # pick small Miller indices from {-1, 0, 1}^3 \ {(0,0,0)}
+            def _random_axis_from_cell(
+                    cell,
+                    max_index=3,
+                    reduce_colinear=True,
+                    fixed_h=None,
+                    fixed_k=None,
+                    fixed_l=None,
+            ):
+                """
+                Pick a random crystal direction with Miller indices in [-max_index, max_index],
+                excluding (0,0,0). Optionally fix one or two Miller indices.
+
+                Returns
+                -------
+                axis : ndarray (3,)
+                    Unit vector of chosen axis in Cartesian space.
+                hkl : (h, k, l) as ints
+                """
+                low, high = -int(max_index), int(max_index)
+
                 while True:
-                    hkl = np.random.randint(-1, 2, size=3)  # -1, 0, 1
-                    if np.any(hkl):
-                        break
-                axis = np.dot(hkl, cell)
-                n = np.linalg.norm(axis)
-                if n == 0:
-                    return _random_axis_from_cell(cell)
-                return axis / n, tuple(int(x) for x in hkl)
+                    # draw randoms, respecting fixed values
+                    h = fixed_h if fixed_h is not None else np.random.randint(low, high + 1)
+                    k = fixed_k if fixed_k is not None else np.random.randint(low, high + 1)
+                    l = fixed_l if fixed_l is not None else np.random.randint(low, high + 1)
+
+                    # avoid (0,0,0)
+                    if h == 0 and k == 0 and l == 0:
+                        continue
+
+                    hkl = np.array([h, k, l], dtype=int)
+
+                    if reduce_colinear:
+                        g = np.gcd.reduce(np.abs(hkl))
+                        if g > 1:
+                            hkl = (hkl // g).astype(int)
+
+                    axis = np.dot(hkl, cell)
+                    n = np.linalg.norm(axis)
+                    if n > 0:
+                        return axis / n, (int(hkl[0]), int(hkl[1]), int(hkl[2]))
+                    # degenerate (shouldn't happen with valid cells); retry
 
 
             def _random_angle():
@@ -511,40 +572,152 @@ if st.session_state.atoms is not None:
 
             lattice_vectors = modified_atoms.get_cell()
 
+            # ---- Axis constraints (optional) ----
+            with st.expander("Axis constraints (optional): fix one or two Miller indices"):
+                # how many indices to fix?
+                fix_choice = st.radio(
+                    "Do you want to fix one or two Miller indices?",
+                    options=["No", "Fix one", "Fix two"],
+                    horizontal=True,
+                    index=0,
+                    key="axis_fix_choice"
+                )
+
+                # choose which indices to fix
+                fixed_h = fixed_k = fixed_l = None
+                max_index = st.number_input(
+                    "Max |index| for random draw (controls range [-N, N])",
+                    min_value=1, max_value=6, value=2, step=1,
+                    key="axis_max_index"
+                )
+
+                if fix_choice == "Fix one":
+                    which_one = st.selectbox("Choose index to fix", ["h", "k", "l"], key="fix_one_which")
+                    val = st.number_input("Value", min_value=-max_index, max_value=max_index, value=0, step=1,
+                                          key="fix_one_val")
+                    if which_one == "h":
+                        fixed_h = int(val)
+                    elif which_one == "k":
+                        fixed_k = int(val)
+                    else:
+                        fixed_l = int(val)
+
+                elif fix_choice == "Fix two":
+                    which_two = st.multiselect(
+                        "Choose two indices to fix",
+                        ["h", "k", "l"],
+                        max_selections=2,
+                        key="fix_two_which"
+                    )
+                    if len(which_two) == 2:
+                        v1 = st.number_input(f"Value for {which_two[0]}", min_value=-max_index, max_value=max_index,
+                                             value=0, step=1, key="fix_two_val1")
+                        v2 = st.number_input(f"Value for {which_two[1]}", min_value=-max_index, max_value=max_index,
+                                             value=0, step=1, key="fix_two_val2")
+                        if "h" in which_two:
+                            fixed_h = int(v1 if which_two[0] == "h" else v2)
+                        if "k" in which_two:
+                            fixed_k = int(v1 if which_two[0] == "k" else v2)
+                        if "l" in which_two:
+                            fixed_l = int(v1 if which_two[0] == "l" else v2)
+
             # ---------- Mode-specific selection UIs ----------
             if mode == "Symmetric Random Rotation":
                 st.markdown("Define **partner pairs** (two molecule indices per pair). "
-                            "Each pair receives equal-and-opposite rotations to preserve inversion symmetry.")
+                            "Assuming input symmetric configuration, each pair receives equal rotations to preserve symmetry.")
 
                 if "sym_pairs" not in st.session_state:
                     st.session_state.sym_pairs = []
 
                 # Pair builder UI
                 with st.form("add_partner_pair_form"):
-                    pair = st.multiselect(
-                        "Select exactly two molecule indices to form a partner pair",
-                        options=range(1, len(molecules) + 1),
-                        max_selections=2,
-                        key="sym_pair_builder"
-                    )
-                    add_pair = st.form_submit_button("Add Pair")
-                    if add_pair:
-                        if len(pair) != 2:
-                            st.warning("Please select exactly two indices.")
-                        else:
-                            p = tuple(sorted(pair))
-                            if p in st.session_state.sym_pairs:
-                                st.info(f"Pair {p} already added.")
-                            else:
-                                st.session_state.sym_pairs.append(p)
-                                st.success(f"Added pair {p}.")
+                    st.markdown("Add a **single pair** manually or **upload a CSV** with two columns of indices.")
 
-                if st.session_state.sym_pairs:
-                    st.write("**Current partner pairs:**")
-                    st.write(", ".join([f"{p}" for p in st.session_state.sym_pairs]))
-                    if st.button("Clear All Pairs"):
-                        st.session_state.sym_pairs = []
-                        st.info("Cleared all partner pairs.")
+                    c1, c2 = st.columns([1, 1])
+                    with c1:
+                        pair = st.multiselect(
+                            "Select exactly two molecule indices to form a partner pair",
+                            options=range(1, len(molecules) + 1),
+                            max_selections=2,
+                            key="sym_pair_builder",
+                        )
+                    with c2:
+                        uploaded_csv = st.file_uploader(
+                            "Or upload CSV (two columns = indices)",
+                            type=["csv"],
+                            key="sym_pair_uploader",
+                        )
+                        csv_has_header = st.checkbox("CSV has header row", value=True, key="sym_csv_has_header")
+
+                    add_pair = st.form_submit_button("Add Pair(s)")
+
+                    if add_pair:
+                        new_pairs = []
+                        issues = []
+
+                        # 1) From manual selection
+                        if len(pair) > 0:
+                            if len(pair) != 2:
+                                issues.append("Manual selection: please select exactly two indices.")
+                            elif pair[0] == pair[1]:
+                                issues.append(
+                                    f"Manual selection: indices must be different (got {pair[0]}, {pair[1]}).")
+                            elif not (1 <= pair[0] <= len(molecules) and 1 <= pair[1] <= len(molecules)):
+                                issues.append(f"Manual selection: indices out of range 1..{len(molecules)}.")
+                            else:
+                                new_pairs.append(tuple(sorted(pair)))
+
+                        # 2) From CSV (optional)
+                        if uploaded_csv is not None:
+                            try:
+                                df = pd.read_csv(uploaded_csv, header=0 if csv_has_header else None)
+                                if df.shape[1] < 2:
+                                    issues.append("CSV must have at least two columns (first two are used).")
+                                else:
+                                    idx_df = df.iloc[:, :2]
+                                    for i, row in idx_df.iterrows():
+                                        a, b = row.iloc[0], row.iloc[1]
+                                        # Try to coerce to integers
+                                        try:
+                                            a = int(a)
+                                            b = int(b)
+                                        except Exception:
+                                            issues.append(
+                                                f"Row {i + 1}: values must be integers (got {row.iloc[0]!r}, {row.iloc[1]!r}).")
+                                            continue
+                                        # Validate values
+                                        if a == b:
+                                            issues.append(f"Row {i + 1}: indices must be different (got {a}, {b}).")
+                                            continue
+                                        if not (1 <= a <= len(molecules) and 1 <= b <= len(molecules)):
+                                            issues.append(
+                                                f"Row {i + 1}: indices out of range 1..{len(molecules)} (got {a}, {b})."
+                                            )
+                                            continue
+                                        new_pairs.append(tuple(sorted((a, b))))
+                            except Exception as e:
+                                issues.append(f"Failed to read CSV: {e}")
+
+                        # De-duplicate within the submission
+                        new_pairs = list(dict.fromkeys(new_pairs))  # preserves order, removes duplicates
+
+                        # Filter out pairs already present
+                        existing = set(st.session_state.sym_pairs)
+                        to_add = [p for p in new_pairs if p not in existing]
+
+                        # Report overlaps (not added because already present)
+                        already = [p for p in new_pairs if p in existing]
+
+                        # Apply additions
+                        if to_add:
+                            st.session_state.sym_pairs.extend(to_add)
+                            st.success(f"Added {len(to_add)} new pair(s): {', '.join(map(str, to_add))}")
+
+                        if already:
+                            st.info(f"Skipped {len(already)} duplicate pair(s): {', '.join(map(str, already))}")
+
+                        if issues:
+                            st.warning("Some issues were found:\n- " + "\n- ".join(issues))
 
                 # Optional seed
                 seed_col1, seed_col2 = st.columns(2)
@@ -586,7 +759,14 @@ if st.session_state.atoms is not None:
                                 mol_a = molecules[a - 1]
                                 mol_b = molecules[b - 1]
 
-                                axis, hkl = _random_axis_from_cell(lattice_vectors)
+                                axis, hkl = _random_axis_from_cell(
+                                    lattice_vectors,
+                                    max_index=max_index,
+                                    reduce_colinear=True,
+                                    fixed_h=fixed_h,
+                                    fixed_k=fixed_k,
+                                    fixed_l=fixed_l,
+                                )
                                 angle = _random_angle()
 
                                 # signature part (rounded angle avoids float jitter)
@@ -594,7 +774,7 @@ if st.session_state.atoms is not None:
 
                                 # Apply +θ to first, −θ to second
                                 work_atoms = rotate_molecules_v2(work_atoms, mol_a, axis, angle)
-                                work_atoms = rotate_molecules_v2(work_atoms, mol_b, axis, -angle)
+                                work_atoms = rotate_molecules_v2(work_atoms, mol_b, axis, angle)
 
                                 # log both applications
                                 struct_logs.append({
@@ -607,7 +787,7 @@ if st.session_state.atoms is not None:
                                     "structure_id": s_idx, "mode": "symmetric",
                                     "molecule_index": b, "h": hkl[0], "k": hkl[1], "l": hkl[2],
                                     "axis_x": float(axis[0]), "axis_y": float(axis[1]), "axis_z": float(axis[2]),
-                                    "angle_deg": float(-angle)
+                                    "angle_deg": float(angle)
                                 })
 
                             sig = tuple(sig_parts)
@@ -690,7 +870,14 @@ if st.session_state.atoms is not None:
 
                             for idx in target_indices:
                                 molecule = molecules[idx - 1]
-                                axis, hkl = _random_axis_from_cell(lattice_vectors)
+                                axis, hkl = _random_axis_from_cell(
+                                    lattice_vectors,
+                                    max_index=max_index,
+                                    reduce_colinear=True,
+                                    fixed_h=fixed_h,
+                                    fixed_k=fixed_k,
+                                    fixed_l=fixed_l,
+                                )
                                 angle = _random_angle()
                                 work_atoms = rotate_molecules_v2(work_atoms, molecule, axis, angle)
 
@@ -1278,6 +1465,14 @@ if st.session_state.atoms is not None:
         # -------------------------------------------------------------------------
         # 5) Optionally load experimental .gr
         # -------------------------------------------------------------------------=
+        # Choose normalization method
+        norm_method = st.selectbox(
+            "Normalize y-axis before fitting using:",
+            ["Z-score (mean 0, std 1)", "Min-max [0,1]"],
+            index=0,
+            key="pdf_norm_method"
+        )
+
         exp_file = st.file_uploader("Optionally upload experimental .gr file", type=["gr"], key="gr_uploader")
         if exp_file is not None:
             content = exp_file.read().decode("utf-8", errors="ignore").splitlines()
@@ -1294,30 +1489,93 @@ if st.session_state.atoms is not None:
                 # interpolate simulation onto experimental r-grid
                 g_sim_interp = np.interp(df_exp.r, r1, g1)
 
-                # use scipy curve_fit for a linear model G_exp = a·G_sim + b
+                # -------------------------------
+                # 1) Normalize y-data for fitting
+                # -------------------------------
+                eps = 1e-12
+
+                if norm_method.startswith("Z-score"):
+                    # stats for original (needed for back-transform)
+                    mu_x, sig_x = float(np.mean(g_sim_interp)), float(np.std(g_sim_interp))
+                    mu_y, sig_y = float(np.mean(df_exp.G_exp)), float(np.std(df_exp.G_exp))
+                    sig_x = sig_x if sig_x > eps else eps
+                    sig_y = sig_y if sig_y > eps else eps
+
+                    x_norm = (g_sim_interp - mu_x) / sig_x
+                    y_norm = (df_exp.G_exp - mu_y) / sig_y
+
+
+                    # mapping from normalized fit back to original:
+                    # y_fit = mu_y + sig_y * (a * (x - mu_x)/sig_x + b)
+                    def back_transform(a_hat, b_hat, x_orig):
+                        A_eff = (sig_y * a_hat) / sig_x
+                        B_eff = mu_y + sig_y * b_hat - A_eff * mu_x
+                        return A_eff, B_eff, A_eff * x_orig + B_eff
+
+                else:  # Min-max
+                    x_min, x_max = float(np.min(g_sim_interp)), float(np.max(g_sim_interp))
+                    y_min, y_max = float(np.min(df_exp.G_exp)), float(np.max(df_exp.G_exp))
+                    x_rng = (x_max - x_min) if (x_max - x_min) > eps else eps
+                    y_rng = (y_max - y_min) if (y_max - y_min) > eps else eps
+
+                    x_norm = (g_sim_interp - x_min) / x_rng
+                    y_norm = (df_exp.G_exp - y_min) / y_rng
+
+
+                    # mapping from normalized fit back to original:
+                    # y_fit = y_min + y_rng * (a * (x - x_min)/x_rng + b)
+                    def back_transform(a_hat, b_hat, x_orig):
+                        A_eff = (y_rng * a_hat) / x_rng
+                        B_eff = y_min + y_rng * b_hat - A_eff * x_min
+                        return A_eff, B_eff, A_eff * x_orig + B_eff
+
+                # ---------------------------------------
+                # 2) Fit in normalized space: y' = a x' + b
+                # ---------------------------------------
                 from scipy.optimize import curve_fit
 
 
-                def linear_model(G_sim, a, b):
-                    return a * G_sim + b
+                def linear_model(G_sim_norm, a, b):
+                    return a * G_sim_norm + b
 
 
-                popt, pcov = curve_fit(linear_model, g_sim_interp, df_exp.G_exp, p0=[1.0, 0.0])
-                a, b = popt
-                g_fit = linear_model(g_sim_interp, a, b)
+                popt, pcov = curve_fit(linear_model, x_norm, y_norm, p0=[1.0, 0.0])
+                a_norm, b_norm = map(float, popt)
+
+                # ---------------------------------------
+                # 3) Back-transform fit to original units
+                # ---------------------------------------
+                A_eff, B_eff, g_fit = back_transform(a_norm, b_norm, g_sim_interp)
                 residual = df_exp.G_exp - g_fit
 
-                pcc_value = compute_pcc((df_exp.r, df_exp.G_exp), (df_exp.r, g_sim_interp))
+                # Compute correlations (both original and normalized, optional)
+                pcc_value_orig = compute_pcc((df_exp.r, df_exp.G_exp), (df_exp.r, g_sim_interp))
+                pcc_value_norm = compute_pcc((df_exp.r, y_norm), (df_exp.r, x_norm))
+
+                # For reference, the normalized fitted values (if you want to display)
+                g_fit_norm = linear_model(x_norm, a_norm, b_norm)
 
                 df_combined = pd.DataFrame({
                     "r (Å)": df_exp.r,
                     "G_sim": g_sim_interp,
                     "G_exp": df_exp.G_exp,
-                    "G_fit": g_fit,
-                    "Residual": residual
+                    "G_fit": g_fit,  # fit mapped back to original units
+                    "Residual": residual,
+                    "G_sim (norm)": x_norm,
+                    "G_exp (norm)": y_norm,
+                    "G_fit (norm)": g_fit_norm,
                 })
+
                 with st.expander("View combined PDF data"):
                     st.dataframe(df_combined, use_container_width=True, hide_index=True)
+
+                # Optional: show fit parameters
+                with st.expander("Fit details (normalized → original)"):
+                    st.markdown(
+                        f"- Normalized fit: y' = **{a_norm:.4f}** · x' + **{b_norm:.4f}**\n"
+                        f"- Effective original-units mapping: y ≈ **{A_eff:.4f}** · x + **{B_eff:.4f}**\n"
+                        f"- PCC (original): **{pcc_value_orig:.4f}**, PCC (normalized): **{pcc_value_norm:.4f}**"
+                    )
 
         # --- 6) Plotting: customization, trigger button, downloads, and interactive Plotly ---
         # Load saved customization if provide
@@ -1406,7 +1664,7 @@ if st.session_state.atoms is not None:
                     ax.plot(r1, g1, color=sim_color, linewidth=sim_width,
                             linestyle=sim_ls, alpha=sim_opacity, label="Simulated")
                 if exp_file and show_exp:
-                    ax.plot(df_combined["r (Å)"], df_combined["G_exp"],
+                    ax.plot(df_combined["r (Å)"], df_combined["G_exp (norm)"],
                             color=exp_color, linewidth=exp_width,
                             linestyle=exp_ls, alpha=exp_opacity, label="Experimental")
                 if exp_file and show_res:
@@ -1439,7 +1697,7 @@ if st.session_state.atoms is not None:
                 ax.set_ylabel(r"$G(r)\ (\mathrm{\AA}^{-2})$", **label_kw)
 
                 ax.annotate(
-                    f"PCC = {pcc_value:.2f}",
+                    f"PCC = {pcc_value_norm:.2f}",
                     xy=(0.82, 0.1),
                     xycoords="axes fraction",
                     ha="center",
@@ -1510,6 +1768,192 @@ if st.session_state.atoms is not None:
                     legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
                 )
                 st.plotly_chart(fig_int, use_container_width=True)
+
+    # if PDF_fit_option:
+    #
+    #     st.header("Fit simulated PDF to experimental data", divider="violet")
+    #
+    #     st.markdown(
+    #         "Upload experimental PDF data (two columns: r(Å), G(r)). "
+    #         "We'll perturb atomic coordinates to maximize Pearson correlation."
+    #     )
+    #
+    #     uploaded_exp_pdf = st.file_uploader(
+    #         "Experimental PDF file (.txt, .dat, .csv)",
+    #         type=["txt", "dat", "csv"],
+    #         accept_multiple_files=False,
+    #     )
+    #
+    #     # Reuse sliders to enforce identical r/q ranges between sim and exp
+    #     qmin_fit, qmax_fit = st.slider("q for fit (Å⁻¹)", 0, 25, (1, 20))
+    #     rmin_fit, rmax_fit = st.slider("r for fit (Å)", 0.0, 30.0, (0.1, 20.0))
+    #
+    #     # Optimization controls
+    #     max_disp = st.number_input(
+    #         "Max |Δr| per Cartesian component (Å) for refinement bounds",
+    #         min_value=0.01,
+    #         max_value=1.0,
+    #         value=0.2,
+    #         step=0.01,
+    #         help="Each x/y/z coord is allowed to move ± this amount from the starting structure.",
+    #     )
+    #
+    #     n_iter_hint = st.number_input(
+    #         "Max optimization iterations",
+    #         min_value=10,
+    #         max_value=500,
+    #         value=80,
+    #         step=10,
+    #     )
+    #
+    #     run_fit = st.button("Run PDF Fit")
+    #
+    #     if uploaded_exp_pdf is not None and run_fit:
+    #         # -------------------------------------------------
+    #         # 1) Read experimental PDF
+    #         # -------------------------------------------------
+    #         # try flexible read: CSV or whitespace
+    #         raw = uploaded_exp_pdf.read()
+    #         try:
+    #             df_exp = pd.read_csv(io.BytesIO(raw), sep=None, engine="python", header=None)
+    #         except Exception:
+    #             df_exp = pd.read_csv(io.BytesIO(raw), delim_whitespace=True, header=None)
+    #
+    #         # Expect first 2 cols: r, G(r)
+    #         df_exp = df_exp.rename(columns={0: "r (Å)", 1: "G_exp(r)"})
+    #         df_exp = df_exp.sort_values(by="r (Å)").reset_index(drop=True)
+    #
+    #         # limit to chosen r-window
+    #         df_exp_window = df_exp[(df_exp["r (Å)"] >= rmin_fit) & (df_exp["r (Å)"] <= rmax_fit)].copy()
+    #         r_exp = df_exp_window["r (Å)"].to_numpy()
+    #         g_exp = df_exp_window["G_exp(r)"].to_numpy()
+    #
+    #         # -------------------------------------------------
+    #         # 2) Set up initial structure and bounds
+    #         # -------------------------------------------------
+    #         base_atoms = modified_atoms.copy()
+    #         init_positions = base_atoms.get_positions()  # (N,3)
+    #         x0 = init_positions.flatten()  # 3N vector
+    #
+    #         # bounds: each coord ± max_disp
+    #         bounds = []
+    #         for val in x0:
+    #             bounds.append((val - max_disp, val + max_disp))
+    #
+    #         fit_settings = {
+    #             "qmin": qmin_fit,
+    #             "qmax": qmax_fit,
+    #             "rmin": rmin_fit,
+    #             "rmax": rmax_fit,
+    #             "qdamp": 0.06,
+    #             "qbroad": 0.06,
+    #             "uiso": 0.01,
+    #         }
+    #
+    #         # -------------------------------------------------
+    #         # 3) Run optimization
+    #         # -------------------------------------------------
+    #         result = minimize(
+    #             pdf_mismatch_cost,
+    #             x0,
+    #             args=(base_atoms, r_exp, g_exp, fit_settings),
+    #             method="L-BFGS-B",
+    #             bounds=bounds,
+    #             options={"maxiter": int(n_iter_hint)},
+    #         )
+    #
+    #         # -------------------------------------------------
+    #         # 4) Build refined structure from result
+    #         # -------------------------------------------------
+    #         refined_atoms = base_atoms.copy()
+    #         refined_atoms.set_positions(result.x.reshape((-1, 3)))
+    #
+    #         # Final simulated PDF from refined structure
+    #         r_fit_sim, g_fit_sim = simulate_pdf_from_atoms(
+    #             refined_atoms,
+    #             qmin=qmin_fit,
+    #             qmax=qmax_fit,
+    #             rmin=rmin_fit,
+    #             rmax=rmax_fit,
+    #             qdamp=0.06,
+    #             qbroad=0.06,
+    #             uiso=0.01,
+    #         )
+    #
+    #         # Interpolate refined sim onto experimental grid
+    #         g_fit_interp = interpolate_to_common_grid(r_exp, r_fit_sim, g_fit_sim)
+    #
+    #         # Pearson r after fit
+    #         valid_mask = np.isfinite(g_fit_interp) & np.isfinite(g_exp)
+    #         if np.count_nonzero(valid_mask) >= 5:
+    #             r_final, _ = pearsonr(g_fit_interp[valid_mask], g_exp[valid_mask])
+    #         else:
+    #             r_final = np.nan
+    #
+    #         st.subheader("Fit Results")
+    #         st.write(f"Pearson r after refinement: **{r_final:.4f}**")
+    #
+    #         # -------------------------------------------------
+    #         # 5) Plot experimental vs refined simulated
+    #         # -------------------------------------------------
+    #         fig_fit = go.Figure()
+    #
+    #         fig_fit.add_trace(go.Scatter(
+    #             x=r_exp,
+    #             y=g_exp,
+    #             mode="lines",
+    #             name="Experimental G(r)",
+    #             line=dict(width=2),
+    #         ))
+    #         fig_fit.add_trace(go.Scatter(
+    #             x=r_exp,
+    #             y=g_fit_interp,
+    #             mode="lines",
+    #             name="Refined Simulated G(r)",
+    #             line=dict(width=2, dash="dash"),
+    #         ))
+    #
+    #         fig_fit.update_layout(
+    #             xaxis_title="r (Å)",
+    #             yaxis_title="G(r)",
+    #             xaxis=dict(
+    #                 range=[rmin_fit, rmax_fit],
+    #                 tickfont=dict(size=20, color="black"),
+    #                 title_font=dict(size=20, color="black"),
+    #             ),
+    #             yaxis=dict(
+    #                 tickfont=dict(size=20, color="black"),
+    #                 title_font=dict(size=20, color="black"),
+    #             ),
+    #             font=dict(color="black"),
+    #             margin=dict(t=40, b=40, l=40, r=40),
+    #             legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8),
+    #         )
+    #
+    #         st.plotly_chart(fig_fit, use_container_width=True)
+    #
+    #         # -------------------------------------------------
+    #         # 6) Offer refined structure for download
+    #         # -------------------------------------------------
+    #         cif_bytes = atoms_to_cif_bytes(refined_atoms)
+    #         st.download_button(
+    #             label="Download refined structure (CIF)",
+    #             data=cif_bytes,
+    #             file_name="refined_structure.cif",
+    #             mime="chemical/x-cif",
+    #         )
+    #
+    #         # Optional: show final coordinates table
+    #         df_coords = pd.DataFrame(
+    #             {
+    #                 "element": refined_atoms.get_chemical_symbols(),
+    #                 "x (Å)": refined_atoms.get_positions()[:, 0],
+    #                 "y (Å)": refined_atoms.get_positions()[:, 1],
+    #                 "z (Å)": refined_atoms.get_positions()[:, 2],
+    #             }
+    #         )
+    #         with st.expander("View refined atomic coordinates"):
+    #             st.dataframe(df_coords, hide_index=True, use_container_width=True)
 
 
 
@@ -1617,6 +2061,201 @@ if st.session_state.atoms is not None:
     #                 cent_str = merge_structures(rotated_organic_structure, atoms_idl)
     #                 create_aims_download_file(cent_str, file_name, "_centric")
 
+    def _normalize_name(name: str) -> str:
+        # Convert trailing "_" on one-letter symbols (e.g., "I_") to "I"
+        if isinstance(name, str) and name.endswith("_") and len(name.rstrip("_")) == 1:
+            return name.rstrip("_")
+        return name
+
+
+    def _parse_id_field(s: str) -> list[int]:
+        """
+        Parse an ID input string like:
+          "1, 3, 4" or "5:10" or "1, 4:7, 12"
+        into a unique, ordered list of ints. Ranges are inclusive.
+        """
+        if not s or not str(s).strip():
+            return []
+        tokens = re.split(r"[,\s]+", str(s).strip())
+        out: list[int] = []
+        seen = set()
+        for tok in tokens:
+            if not tok:
+                continue
+            m = re.fullmatch(r"(\d+)\s*:\s*(\d+)", tok)
+            if m:
+                a, b = map(int, m.groups())
+                rng = range(a, b + 1) if a <= b else range(a, b - 1, -1)
+                for x in rng:
+                    if x not in seen:
+                        out.append(x);
+                        seen.add(x)
+            else:
+                try:
+                    x = int(tok)
+                    if x not in seen:
+                        out.append(x);
+                        seen.add(x)
+                except ValueError:
+                    # ignore unparseable tokens gracefully
+                    pass
+        return out
+
+
+    def _parse_bader_integrated_atomic_properties(text: str) -> pd.DataFrame:
+        """
+        Find and parse the '* Integrated atomic properties' table.
+        Returns DataFrame with columns: Id, Name, Z, Pop, PartialCharge
+        """
+        lines = text.splitlines()
+        # 1) locate the section start
+        start = None
+        for i, ln in enumerate(lines):
+            if "* Integrated atomic properties" in ln:
+                start = i
+                break
+        if start is None:
+            raise ValueError("Could not find '* Integrated atomic properties' section.")
+        # 2) locate the header (contains 'Id' and 'Pop')
+        header = None
+        for j in range(start, len(lines)):
+            if "Id" in lines[j] and "Pop" in lines[j]:
+                header = j
+                break
+        if header is None:
+            raise ValueError("Could not find the table header with 'Id' and 'Pop'.")
+        # 3) parse rows until a blank/comment/new section
+        rows = []
+        for ln in lines[header + 1:]:
+            s = ln.strip()
+            if not s or s.startswith("#") or s.startswith("*"):
+                if rows:  # stop once we’ve started and hit a non-data line
+                    break
+                else:
+                    continue
+            toks = s.split()
+            # Expected minimal columns:
+            # 0:Id 1:cp 2:ncp 3:Name 4:Z 5:mult 6:Volume 7:Pop 8:Lap
+            if len(toks) < 9:
+                break
+            try:
+                Id = int(toks[0])
+                Name = _normalize_name(toks[3])
+                Z = int(toks[4])
+                Pop = float(toks[7].replace("D", "E"))
+                rows.append({"Id": Id, "Name": Name, "Z": Z, "Pop": Pop})
+            except Exception:
+                # end of clean block or stray line—stop
+                break
+        if not rows:
+            raise ValueError("No data rows parsed from the atomic properties table.")
+        df = pd.DataFrame(rows)
+        df["PartialCharge"] = df["Z"] - df["Pop"]
+        return df
+
+
+    if charge_analysis_option:
+        st.header('Analyze charge differences', divider='violet')
+
+        uploaded = st.file_uploader("Upload Bader charge analysis output (.out)", type=["out", "txt", "dat"])
+        if uploaded is not None:
+            try:
+                text = uploaded.read().decode("utf-8", errors="ignore")
+                df_all = _parse_bader_integrated_atomic_properties(text)
+            except Exception as e:
+                st.error(f"Failed to parse file: {e}")
+                st.stop()
+
+            with st.expander("Preview parsed atomic properties", expanded=False):
+                st.dataframe(df_all, use_container_width=True, hide_index=True)
+
+            colA, colB = st.columns(2)
+            with colA:
+                ids_a_str = st.text_input(
+                    "Atom IDs – Set A",
+                    placeholder="e.g., 1, 3, 4 or 5:10",
+                    key="charge_ids_A"
+                )
+            with colB:
+                ids_b_str = st.text_input(
+                    "Atom IDs – Set B",
+                    placeholder="e.g., 2, 6:9",
+                    key="charge_ids_B"
+                )
+
+            ids_a = _parse_id_field(ids_a_str)
+            ids_b = _parse_id_field(ids_b_str)
+
+            if ids_a or ids_b:
+                # Subset
+                df_a = df_all[df_all["Id"].isin(ids_a)].copy() if ids_a else pd.DataFrame(columns=df_all.columns)
+                df_b = df_all[df_all["Id"].isin(ids_b)].copy() if ids_b else pd.DataFrame(columns=df_all.columns)
+
+                # Sums and counts
+                sum_a = float(df_a["PartialCharge"].sum()) if not df_a.empty else 0.0
+                sum_b = float(df_b["PartialCharge"].sum()) if not df_b.empty else 0.0
+                n_a = int(len(df_a))
+                n_b = int(len(df_b))
+
+                # Differences (net and normalized by group size)
+                diff_ab = sum_a - sum_b  # A - B
+                avg_a = (sum_a / n_a) if n_a > 0 else float("nan")
+                avg_b = (sum_b / n_b) if n_b > 0 else float("nan")
+                diff_avg = (avg_a - avg_b) if (n_a > 0 and n_b > 0) else float("nan")
+
+                # Per-atom view
+                df_a_view = df_a[["Id", "Name", "PartialCharge"]].copy()
+                df_a_view.insert(0, "Set", "A")
+                df_b_view = df_b[["Id", "Name", "PartialCharge"]].copy()
+                df_b_view.insert(0, "Set", "B")
+                df_view = pd.concat([df_a_view, df_b_view], ignore_index=True)
+
+                # Summary rows (keep original summary table format)
+                summary_rows = pd.DataFrame([
+                    {"Set": "A", "Id": "", "Name": "SUM(A)", "PartialCharge": sum_a},
+                    {"Set": "B", "Id": "", "Name": "SUM(B)", "PartialCharge": sum_b},
+                    {"Set": "A−B", "Id": "", "Name": "DIFF (A − B)", "PartialCharge": diff_ab},
+                    {"Set": "A¯", "Id": "", "Name": "MEAN(A)=SUM(A)/N", "PartialCharge": avg_a},
+                    {"Set": "B¯", "Id": "", "Name": "MEAN(B)=SUM(B)/N", "PartialCharge": avg_b},
+                    {"Set": "Δ¯", "Id": "", "Name": "DIFF MEAN (A − B)", "PartialCharge": diff_avg},
+                ])
+                df_out = pd.concat([df_view, summary_rows], ignore_index=True)
+
+                # Compact stats table
+                stats = pd.DataFrame([
+                    {"Set": "A", "N": n_a, "Sum": sum_a, "Mean": avg_a},
+                    {"Set": "B", "N": n_b, "Sum": sum_b, "Mean": avg_b},
+                    {"Set": "Diffs", "N": "", "Sum": diff_ab, "Mean": diff_avg},
+                ])
+
+                st.subheader("Charge summary")
+                st.dataframe(df_out, use_container_width=True, hide_index=True)
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Σ PartialCharge (A)", f"{sum_a:.6f}")
+                c2.metric("Σ PartialCharge (B)", f"{sum_b:.6f}")
+                c3.metric("Δ Net (A − B)", f"{diff_ab:.6f}")
+
+                c4, c5 = st.columns(2)
+                c4.metric("Mean(A) = ΣA / NA", f"{avg_a:.6f}" if n_a > 0 else "—")
+                c5.metric("Mean(B) = ΣB / NB", f"{avg_b:.6f}" if n_b > 0 else "—")
+
+                st.metric("Δ Mean (A − B)", f"{diff_avg:.6f}" if (n_a > 0 and n_b > 0) else "—")
+
+                with st.expander("Group stats (N, Sum, Mean)", expanded=False):
+                    st.dataframe(stats, use_container_width=True, hide_index=True)
+
+                # Download button for the results CSV (per-atom + summaries)
+                csv_bytes = df_out.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "Download results as CSV",
+                    data=csv_bytes,
+                    file_name="charge_difference_results.csv",
+                    mime="text/csv",
+                )
+            else:
+                st.info("Enter one or both ID sets above to compute charge sums, means, and their differences.")
+
     if com_option:
         st.header('Get center of mass of molecules', divider='violet')
         # scale_choice = st.checkbox("Scaled (Fractional) co-ordinates")
@@ -1672,6 +2311,8 @@ if st.session_state.atoms is not None:
         # col1.plotly_chart(fig1, use_container_width=True)
         # col2.plotly_chart(fig2, use_container_width=True)
 
+    import re
+
     if dm_option:
         st.header("Get dipole moment direction", divider='violet')
 
@@ -1687,37 +2328,230 @@ if st.session_state.atoms is not None:
         # If "Select All" is chosen, override with all indices
         if "Select All" in molecule_indices:
             molecule_indices = all_options
-        # Add widget to get camera position
+
+        # ---- Optional charge inputs ----
+        use_charges = st.checkbox(
+            "Set custom charges to compute dipole magnitude (optional)",
+            value=False,
+            help="Choose per-element or per-atom input. Unspecified atoms default to 0."
+        )
+
+        charge_input_mode = None
+        charge_map = {}  # per-element charges, e.g., {'N': +1, 'O': -1}
+        charges_by_index = None  # per-atom charges {1: q1, 2: q2, ...} 1-based per molecule
+
+        if use_charges:
+            charge_input_mode = st.radio(
+                "Charge input mode",
+                options=["Per-element (e.g., N: +1, O: -1)", "Per-atom (index, charge)"],
+                index=0,
+                help="Per-atom indices are 1-based within each selected molecule."
+            )
+
+            if charge_input_mode.startswith("Per-element"):
+                # Show which elements are present in selected molecules (for convenience)
+                if molecule_indices:
+                    selected_atoms = []
+                    for i in molecule_indices:
+                        selected_atoms.extend(get_molecule_object(modified_atoms, molecules[i - 1]))
+                    unique_elements = sorted({str(a.specie) for a in selected_atoms})
+                    st.caption(f"Elements in selected molecules: {', '.join(unique_elements)}")
+
+                charges_text = st.text_area(
+                    "Enter per-element charges (one per line, e.g., `N: +1`)",
+                    value="",
+                    help="Format: ElementSymbol: charge (e.g., H: +0.1)\nUnspecified elements default to 0."
+                )
+                if charges_text.strip():
+                    entries = re.split(r"[\n,;]+", charges_text.strip())
+                    for entry in entries:
+                        m = re.match(r"^\s*([A-Za-z][a-z]?)\s*:\s*([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)\s*$", entry)
+                        if m:
+                            elem = m.group(1)
+                            val = float(m.group(2))
+                            charge_map[elem] = val
+                        else:
+                            st.warning(f"Could not parse charge entry: '{entry.strip()}'")
+
+            else:
+                st.caption(
+                    "Provide per-atom charges using GLOBAL 1-based indices (matching the full ASE structure). "
+                    "Example:\n1 0.933196\n2 -0.614332\n3 -0.597291"
+                )
+
+                uploaded_out = st.file_uploader(
+                    "Optionally upload a .out file with charge analysis (will auto-extract from the last analysis block)",
+                    type=["out"],
+                    accept_multiple_files=False
+                )
+
+                charges_by_global_1b_text = st.text_area(
+                    "Or paste index–charge pairs (1-based global indices; whitespace/comma/tab separated per line).",
+                    value=""
+                )
+
+                global_charge_map_1b = {}
+
+
+                def _parse_pairs_1b(text: str) -> dict:
+                    m = {}
+                    for line in re.split(r"[\n;]+", text.strip()):
+                        if not line.strip():
+                            continue
+                        parts = re.split(r"[,\s]+", line.strip())
+                        if len(parts) >= 2:
+                            try:
+                                idx_1b = int(parts[0])
+                                q = float(parts[1])
+                                if idx_1b < 1 or idx_1b > len(modified_atoms):
+                                    st.warning(
+                                        f"Global atom index {idx_1b} out of range [1, {len(modified_atoms)}]; skipped.")
+                                    continue
+                                m[idx_1b] = q
+                            except ValueError:
+                                st.warning(f"Could not parse line: '{line.strip()}'")
+                        else:
+                            st.warning(f"Incomplete entry (need index and charge): '{line.strip()}'")
+                    return m
+
+
+                def _parse_out_block_from_bottom(buf) -> dict:
+                    """Search from the bottom for the last 'Summary of the per-atom charge analysis:' block and parse it."""
+                    try:
+                        content = buf.read().decode("utf-8", errors="replace")
+                    except Exception:
+                        st.error("Failed to read uploaded .out file as UTF-8.")
+                        return {}
+
+                    lines = content.splitlines()
+                    start = None
+                    # scan upward so the FIRST hit is the last block in the file
+                    for i in range(len(lines) - 1, -1, -1):
+                        if "Summary of the per-atom charge analysis:" in lines[i]:
+                            start = i
+                            break
+                    if start is None:
+                        st.warning("No 'Summary of the per-atom charge analysis:' block found in the uploaded file.")
+                        return {}
+
+                    charges = {}
+                    # parse forward from header; rows look like: "|    1   electrons   charge  l=0 ..."
+                    row_re = re.compile(
+                        r"^\s*\|\s*(\d+)\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
+                    )
+                    for line in lines[start + 1:]:
+                        if re.match(r"^\s*\|\s*Total\b", line):
+                            break
+                        m = row_re.match(line)
+                        if m:
+                            idx_1b = int(m.group(1))
+                            charge = float(m.group(3))  # third numeric column is 'charge'
+                            if 1 <= idx_1b <= len(modified_atoms):
+                                charges[idx_1b] = charge
+                        # tolerate header/blank/separator lines; continue until Total or end
+                    if not charges:
+                        st.warning("Found the analysis block, but could not parse any per-atom charges.")
+                    return charges
+
+                # Build the 1-based global charge map (upload takes precedence if both given)
+                if uploaded_out is not None:
+                    global_charge_map_1b = _parse_out_block_from_bottom(uploaded_out)
+                    # Reset file pointer in case you need to re-read elsewhere
+                    uploaded_out.seek(0)
+                    with st.expander("see extracted charges"):
+                        if global_charge_map_1b:
+                            rows = []
+                            for idx_1b, charge in sorted(global_charge_map_1b.items()):
+                                # ASE atoms are 0-based, so subtract 1
+                                symbol = modified_atoms[idx_1b - 1].symbol
+                                rows.append((idx_1b, symbol, charge))
+
+                            charges_df = pd.DataFrame(rows, columns=["Atom Index (1-based)", "Element", "Charge (e)"])
+                            st.subheader("Extracted per-atom charges", divider="gray")
+                            st.dataframe(charges_df, hide_index=True, use_container_width=True)
+                        else:
+                            st.info("No per-atom charges were parsed from the uploaded file.")
+                elif charges_by_global_1b_text.strip():
+                    global_charge_map_1b = _parse_pairs_1b(charges_by_global_1b_text.strip())
+
+        # Camera position
         x_pos = st.number_input("Camera X position", value=0.0)
         y_pos = st.number_input("Camera Y position", value=0.0)
         z_pos = st.number_input("Camera Z position", value=0.0)
 
         if st.button("Get direction"):
             chosen_molecules = [molecules[i - 1] for i in molecule_indices]
-            direction_dict = []
+            direction_records = []
 
-            # Construct the molecule object and calculate the dipole moment directions
-            for mol_index, molecules in zip(molecule_indices, chosen_molecules):
-                mol_obj = get_molecule_object(modified_atoms, molecules)
-                dm_vector, com = get_dm_direction(mol_obj)
+            for mol_index, mol_atoms in zip(molecule_indices, chosen_molecules):
+                mol_obj = get_molecule_object(modified_atoms, mol_atoms)
 
-                # crystal_dir = get_perpendicular_crystal_directions(dm_vector, modified_atoms)     # direction perpendicular to the dipole moment
+                dipole_moment_debye = None
+
+                if use_charges:
+                    if use_charges and charge_input_mode.startswith("Per-atom") and global_charge_map_1b:
+                        # 'mol_atoms' is the list of GLOBAL indices (0-based) for this molecule
+                        # Convert to per-atom charges aligned to mol_obj by looking up (gidx + 1)
+                        per_atom_charges = [float(global_charge_map_1b.get(gidx + 1, 0.0)) for gidx in mol_atoms]
+
+                        # Optional info for visibility
+                        missing = [g for g in mol_atoms if (g + 1) not in global_charge_map_1b]
+                        if global_charge_map_1b and missing:
+                            st.info(f"[Mol {mol_index}] {len(missing)} atoms had no provided charge; defaulted to 0.0.")
+
+                        dm_vector, dipole_moment_debye, com = get_dm_direction(mol_obj, charges=per_atom_charges)
+
+                    elif charge_input_mode and charge_input_mode.startswith("Per-element") and len(charge_map) > 0:
+                        # Per-element charges, default 0 for unspecified elements
+                        per_atom_charges = [float(charge_map.get(str(atom.specie), 0.0)) for atom in mol_obj]
+                        dm_vector, dipole_moment_debye, com = get_dm_direction(mol_obj, charges=per_atom_charges)
+
+                    else:
+                        # Charges requested but none parsed: fall back to direction-only
+                        dm_vector, com = get_dm_direction(mol_obj)
+
+                else:
+                    # Original behavior (no charges)
+                    dm_vector, com = get_dm_direction(mol_obj)
+
+                # Crystal direction
                 crystal_dir, fract_com = get_crystal_direction(dm_vector, modified_atoms, com)
-                direction_dict.append((mol_index, com, dm_vector, crystal_dir))
 
-            # Convert the direction_dict list to a pandas DataFrame
-            direction_df = pd.DataFrame(direction_dict,
-                                        columns=['Molecule Index', 'Center of Mass', 'Dipole Moment Vector',
-                                                 'Crystal Direction'])
+                rec = {
+                    'Molecule Index': mol_index,
+                    'Center of Mass': com,
+                    'Dipole Moment Vector': dm_vector,
+                    'Crystal Direction': crystal_dir
+                }
+                if dipole_moment_debye is not None:
+                    rec['Dipole Moment (Debye)'] = dipole_moment_debye
 
-            # Display the DataFrame using Streamlit
+                direction_records.append(rec)
+
+            # DataFrame + display
+            direction_df = pd.DataFrame(direction_records)
             st.dataframe(direction_df, hide_index=True, use_container_width=True)
-            # if st.button("Set camera"):
+
+            # Plot
             camera_pos = [x_pos, y_pos, z_pos]
             dm_plot = plot_dipole_moment_vectors(direction_df, modified_atoms, chosen_molecules, camera_pos)
             st.plotly_chart(dm_plot)
 
-            #
+            png_buffer = io.BytesIO()
+
+            png_bytes = pio.to_image(dm_plot, format="png", scale=3)  # higher resolution
+
+            png_buffer.write(png_bytes)
+
+            png_buffer.seek(0)
+
+            base_name = os.path.splitext(file_name)[0]
+            st.download_button(
+                label="📥 Download as PNG",
+                data=png_buffer,
+                file_name=f"{base_name}.png",
+                mime="image/png",
+            )
 
     if distance_option:
         st.header("Calculate atomic distances", divider='violet')
@@ -2164,7 +2998,7 @@ if plot_bs_option:
 
         if remove_button:
             st.session_state["file_uploader_key"] += 1
-            st.experimental_rerun()
+            st.rerun()
 
 
 

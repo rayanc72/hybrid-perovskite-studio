@@ -356,19 +356,57 @@ def join_fragments(mol_graph):
 from itertools import combinations
 from pymatgen.core import Element
 
-def get_dm_direction(molecule):
-    total_dipole_moment = np.zeros(3)
+def get_dm_direction(molecule, charges=None):
+    """
+    Calculate dipole direction, and optionally dipole magnitude in Debye.
+
+    Parameters
+    ----------
+    molecule : structure-like object
+        Must support iteration over atoms with `.coords` and `.specie` attributes,
+        and have `.center_of_mass` property.
+    charges : array-like or None, optional
+        Partial charges in units of elementary charge (e). If provided,
+        dipole moment will be calculated in Debye. Length must match number of atoms.
+
+    Returns
+    -------
+    tuple
+        (dm_direction, com) if charges is None
+        (dm_direction, dipole_moment_debye, com) if charges is provided
+    """
     com = molecule.center_of_mass
 
-    for atom1, atom2 in combinations(molecule, 2):
-        electronegativity_difference = Element(atom1.specie).X - Element(atom2.specie).X
-        position_difference = atom2.coords - atom1.coords
-        dipole_moment = electronegativity_difference * position_difference
+    if charges is not None:
+        # --- Physically meaningful dipole using charges ---
+        total_dipole = np.zeros(3)
+        for atom, q in zip(molecule, charges):
+            position_vector = atom.coords - com
+            total_dipole += q * position_vector
 
-        total_dipole_moment += dipole_moment
+        norm = np.linalg.norm(total_dipole)
+        if norm == 0:
+            dm_direction = np.zeros(3)
+            dipole_moment_debye = 0.0
+        else:
+            dm_direction = total_dipole / norm
+            # Convert e·Å to Debye
+            dipole_moment_debye = norm * 4.80320427
 
-    dm_direction = total_dipole_moment / np.linalg.norm(total_dipole_moment)
-    return dm_direction, com
+        return dm_direction, dipole_moment_debye, com
+
+    else:
+        # --- Fallback: heuristic dipole direction using electronegativity differences ---
+        total_dipole = np.zeros(3)
+        for atom1, atom2 in combinations(molecule, 2):
+            en_diff = Element(atom1.specie).X - Element(atom2.specie).X
+            pos_diff = atom2.coords - atom1.coords
+            total_dipole += en_diff * pos_diff
+
+        norm = np.linalg.norm(total_dipole)
+        dm_direction = total_dipole / norm if norm != 0 else np.zeros(3)
+
+        return dm_direction, com
 
 def get_crystal_direction(direction_vector, atoms, com):
     # Convert the direction vector to fractional coordinates
@@ -644,7 +682,7 @@ def plot_dipole_moment_vectors(direction_df, atoms, chosen_molecules, camera_pos
             atom_color = atom_colors.get(atom_type, cone_color)
 
             # Set opacity and size based on atom type
-            atom_opacity = 0.5 if atom_type == 'C' else 1
+            atom_opacity = 0 if atom_type == 'C' else 0
             atom_size = 5 if atom_type == 'C' else 6 if atom_type == 'F' else 7
 
             fig.add_trace(
@@ -657,7 +695,7 @@ def plot_dipole_moment_vectors(direction_df, atoms, chosen_molecules, camera_pos
             )
 
     # Set axis labels
-    fig.update_layout(scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z',xaxis=dict(tickfont=dict(size=15)),
+    fig.update_layout(scene=dict(xaxis_title='X (Å)', yaxis_title='Y (Å)', zaxis_title='Z (Å)',xaxis=dict(tickfont=dict(size=15)),
         yaxis=dict(tickfont=dict(size=15)),
         zaxis=dict(tickfont=dict(size=15))),font=dict(size=18))
 
@@ -665,26 +703,6 @@ def plot_dipole_moment_vectors(direction_df, atoms, chosen_molecules, camera_pos
     fig.update_layout(height=900, width= 1600)
     fig.layout.scene.camera = {'eye': {'x': camera_pos[0], 'y': camera_pos[1], 'z': camera_pos[2]}}
     fig.layout.scene.camera.projection.type = "orthographic"
-
-    # # Set the camera position for each frame of the animation
-    # camera_positions = [{'eye': {'x': np.cos(angle), 'y': np.sin(angle), 'z': 0.5}} for angle in
-    #                     np.linspace(0, 2 * np.pi, 90)]
-    #
-    # # Add frames for the animation
-    # frames = [go.Frame(layout=dict(scene=dict(camera=position))) for position in camera_positions]
-    # fig.frames = frames
-    #
-    # # Add a slider to control the rotation
-    # steps = [dict(method='animate', args=[[f'frame{i}'], dict(frame=dict(duration=0, redraw=True), fromcurrent=True,
-    #                                                           transition=dict(duration=0))], label=f'{i}') for i in
-    #          range(len(frames))]
-    # sliders = [dict(currentvalue=dict(visible=False), pad=dict(t=40), steps=steps)]
-    # fig.update_layout(updatemenus=[dict(type='buttons', showactive=False, buttons=[dict(label='Play', method='animate',
-    #                                                                                     args=[None, dict(
-    #                                                                                         frame=dict(duration=100,
-    #                                                                                                    redraw=True),
-    #                                                                                         fromcurrent=True)])])],
-    #                   sliders=sliders)
 
     # Show the 3D plot using Streamlit
     return fig
@@ -1535,7 +1553,7 @@ def find_local_indices(molecule, selected_global_indices):
     return [molecule.index(global_idx) for global_idx in selected_global_indices]
 
 
-def filter_atoms_by_symbols_and_extend(atoms, A, B, A2=None):
+def filter_atoms_by_symbols_and_extend(atoms, A, B, A2=None, s_size=3):
     A2_indices = []
 
     # If A2 is provided, change labels of A2 atoms to A and record A2 indices
@@ -1557,7 +1575,7 @@ def filter_atoms_by_symbols_and_extend(atoms, A, B, A2=None):
     new_atoms = Atoms(symbols=new_symbols, positions=new_positions, cell=atoms.cell, pbc=atoms.pbc)
 
     # Create a supercell
-    new_atoms_ext = new_atoms * (3, 3, 3)  # Extending from -1.5 to 1.5 in all directions
+    new_atoms_ext = new_atoms * (s_size, s_size, s_size)  # Extending from -1.5 to 1.5 in all directions
 
     # Convert to Cartesian coordinates if not already
     new_atoms_ext.set_positions(new_atoms_ext.get_positions(wrap=True))
@@ -2632,3 +2650,6 @@ def calculate_in_out_planes(AB_groups, atoms_obj, atom_dict=None,b =0, A2_indice
     plane_components = calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj)
 
     return plane_components
+
+
+

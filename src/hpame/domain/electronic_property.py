@@ -496,7 +496,7 @@ def parse_out_file(out_file):
     return df
 
 
-from scan_CBM import Input, Band
+from hpame.tools.scan_cbm import Band, Input
 
 def get_file_uploads(num_data_sets, default_colors):
 

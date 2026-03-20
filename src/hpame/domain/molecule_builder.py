@@ -1,4 +1,6 @@
+from importlib import import_module
 
+import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.io.babel import BabelMolAdaptor
 from pymatgen.io.cif import CifWriter
@@ -9,16 +11,26 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from pymatgen.symmetry.groups import SpaceGroup
-from pymatgen.analysis.dimensionality import *
 from pymatgen.core.structure import Molecule, IStructure
 from pymatgen.analysis.graphs import MoleculeGraph
-from pymatgen.analysis.local_env import *
 from pymatgen.core.operations import SymmOp
-from pymatgen.analysis.local_env import *
 from pymatgen.analysis.graphs import MoleculeGraph, ConnectedSite
 from pymatgen.util.coord import find_in_coord_list
 import matplotlib.pyplot as plt
 import networkx as nx
+
+
+def _inject_public_names(module):
+    for name in dir(module):
+        if not name.startswith("_"):
+            globals().setdefault(name, getattr(module, name))
+
+
+for _module_name in (
+    "pymatgen.analysis.dimensionality",
+    "pymatgen.analysis.local_env",
+):
+    _inject_public_names(import_module(_module_name))
 
 def save_molecule_to_xyz(molecule, filename):
     with open(filename, 'w') as f:

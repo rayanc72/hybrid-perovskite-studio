@@ -1,4 +1,5 @@
 import hashlib
+from importlib import import_module
 import os
 from io import StringIO
 import numpy as np
@@ -32,25 +33,35 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from pymatgen.symmetry.groups import SpaceGroup
-from pymatgen.analysis.dimensionality import *
 from pymatgen.core.structure import Molecule
 from pymatgen.core.structure import Structure
 from pymatgen.analysis.graphs import MoleculeGraph
-from pymatgen.analysis.local_env import *
 from pymatgen.core.operations import SymmOp
-from pymatgen.analysis.local_env import *
 from pymatgen.analysis.graphs import MoleculeGraph, ConnectedSite
 from pymatgen.util.coord import find_in_coord_list
 import networkx as nx
-from molecule_builder import *
 from bokeh.models import ColumnDataSource
 from bokeh.models.tools import HoverTool
 from bokeh.layouts import row, gridplot
 from bokeh.plotting import figure, show
-from scipy.interpolate import *
 from typing import List, Tuple
 from io import BytesIO
 import re
+
+
+def _inject_public_names(module):
+    for name in dir(module):
+        if not name.startswith("_"):
+            globals().setdefault(name, getattr(module, name))
+
+
+for _module_name in (
+    "pymatgen.analysis.dimensionality",
+    "pymatgen.analysis.local_env",
+    "scipy.interpolate",
+    "hpame.domain.molecule_builder",
+):
+    _inject_public_names(import_module(_module_name))
 
 def image_to_base64(image_path):
     with open(image_path, "rb") as img_file:
@@ -1024,17 +1035,28 @@ def create_labelled_download_file(atoms, file_name, output_suffix):
         write_modified_aims_file(atoms, output_labelled_file.name)
         output_labelled_file.seek(0)
         output_labelled_content = output_labelled_file.read()
-        st.markdown(
-            get_download_link(f"{os.path.splitext(file_name)[0]}{output_suffix}_labelled.in",
-                              output_labelled_content), unsafe_allow_html=True)
+        download_name = f"{os.path.splitext(file_name)[0]}{output_suffix}_labelled.in"
+        st.download_button(
+            label=f"Download {download_name}",
+            data=output_labelled_content,
+            file_name=download_name,
+            mime="text/plain",
+            key=f"download_labelled_{download_name}",
+        )
 
 def create_aims_download_file(atoms, file_name, output_suffix):
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".in", delete=False) as output_file:
         write(output_file.name, atoms, format='aims')
         output_file.seek(0)
         output_content = output_file.read()
-        st.markdown(get_download_link(f"{os.path.splitext(file_name)[0]}{output_suffix}.in",
-                                      output_content), unsafe_allow_html=True)
+        download_name = f"{os.path.splitext(file_name)[0]}{output_suffix}.in"
+        st.download_button(
+            label=f"Download {download_name}",
+            data=output_content,
+            file_name=download_name,
+            mime="text/plain",
+            key=f"download_aims_{download_name}",
+        )
 
 def get_download_link(file_name, content):
     if isinstance(content, str):
@@ -2650,6 +2672,4 @@ def calculate_in_out_planes(AB_groups, atoms_obj, atom_dict=None,b =0, A2_indice
     plane_components = calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj)
 
     return plane_components
-
-
 

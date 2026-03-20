@@ -1,6 +1,7 @@
 
 import streamlit as st
 import subprocess
+from hpame.io.paths import REPO_ROOT
 from MDAnalysis import Universe
 from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
@@ -208,7 +209,7 @@ from natsort import natsorted
 
 
 def run_perl_script(input_files):
-    perl_script_path = './create_geometry_zip.pl'
+    perl_script_path = str(REPO_ROOT / 'create_geometry_zip.pl')
     joined_file_name = 'joined_file.out'
 
     # Create a new file by joining all input files in natural order

@@ -1,14 +1,45 @@
+import copy
 
-from structure_manager import *
+from hpame.domain import pdf_analysis as pdf_analysis_module
+from hpame.domain import electronic_property as electronic_property_module
+from hpame.domain import md_analysis as md_analysis_module
+from hpame.domain import molecule_builder as molecule_builder_module
+from hpame.domain import structure_manager as structure_manager_module
+from hpame.io.paths import APP_TMP_DIR
+
+
+def _inject_public_names(module):
+    for name in dir(module):
+        if not name.startswith("_"):
+            globals().setdefault(name, getattr(module, name))
+
+
+def _debug_log(message):
+    APP_TMP_DIR.mkdir(exist_ok=True)
+    with open(APP_TMP_DIR / "upload_debug.log", "a", encoding="utf-8") as fh:
+        fh.write(f"{message}\n")
+
+
+_debug_log("startup: entered hpame.ui.app_main")
+
+
+for _module in (
+    structure_manager_module,
+    molecule_builder_module,
+    electronic_property_module,
+    md_analysis_module,
+    pdf_analysis_module,
+):
+    _inject_public_names(_module)
+
+_debug_log("startup: injected public names from packaged modules")
+
 import plotly.express as px
-from molecule_builder import *
-from electronic_property import *
+import plotly.io as pio
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.io.cif import CifWriter
 from pymatgen.core.structure import Structure
 from contextlib import redirect_stdout
-from MD_analysis import *
-from PDFAnalysis import *
 import streamlit as st
 import subprocess
 import os
@@ -26,7 +57,6 @@ from streamlit_extras.jupyterlite import jupyterlite
 import matplotlib as mpl
 from itertools import combinations_with_replacement
 import matplotlib.pyplot as plt
-# import plotly.io as pio
 # import io
 # import numpy as np
 # import pandas as pd
@@ -64,9 +94,11 @@ def email_link():
     )
     st.write(f"{inline_mention}", unsafe_allow_html=True)
 
-st.set_page_config(page_title="hPAME", layout="wide")
+st.set_page_config(page_title="Hybrid Perovskite Studio", layout="wide")
+_debug_log("startup: page config set")
 
-st.title("hybrid :red[Perovskite Analysis and Modeling Engine]")
+st.title("Hybrid :red[Perovskite Studio]")
+_debug_log("startup: title rendered")
 
 # col1, col2, col3 = st.columns([30,0.5,0.5])
 # with col2:
@@ -237,19 +269,20 @@ st.subheader("Upload a structure file (:blue[aims geometry] or :blue[CIF]) to ge
 
 
 file_buffer = st.file_uploader("Something", type=[".in", ".cif", ".next_step"], label_visibility='hidden')
+_debug_log("startup: file_uploader rendered")
 
-atoms = None
-molecules = None
-if 'atoms' not in st.session_state:
-    st.session_state.atoms = None
-
+current_atoms = None
+current_molecules = None
+current_modified_symbols = None
 if 'file_name' not in st.session_state:
     st.session_state.file_name = None
 
 
 if file_buffer is not None:
+    _debug_log("upload: file_buffer present")
     file_name = file_buffer.name
     file_format = get_file_format(file_name)
+    _debug_log(f"upload: initial format resolved file={file_name} format={file_format}")
 
     if file_buffer is not None:
         file_name = file_buffer.name
@@ -265,47 +298,75 @@ if file_buffer is not None:
             #     st.write("If you see two atoms that should not be bonded (e.g., strong organic-inorganic interaction, type the atom names below")
             #     exception_list = st.text_input('Enter a comma-separated list of atom names:', 'I, F')
             #     exception_atom_list = [atom_name.strip() for atom_name in  exception_list.split(',')]
-            if 'atoms' not in st.session_state or st.session_state.file_name != file_name:
-                try:
-                    file_format = get_file_format(file_buffer.name)
-                    atoms, molecules, modified_symbols = initialize_structure(file_buffer, file_format=file_format,
-                                                                              file_name=file_buffer.name, exceptions=[("F", "I")],b_p=0)
-                    st.session_state.atoms = copy.deepcopy(atoms)
-                    st.session_state.molecules = molecules
-                    st.session_state.modified_symbols = modified_symbols
-                    st.session_state.file_name = file_name
-                except Exception as e:
-                    st.error(f"Error loading the file: {str(e)}")
-                    # raise StopExecution
+            try:
+                _debug_log(f"upload: before initialize_structure file={file_buffer.name}")
+                file_format = get_file_format(file_buffer.name)
+                current_atoms, current_molecules, current_modified_symbols = initialize_structure(
+                    file_buffer,
+                    file_format=file_format,
+                    file_name=file_buffer.name,
+                    exceptions=[("F", "I")],
+                    b_p=0,
+                )
+                st.session_state.file_name = file_name
+                _debug_log(
+                    f"upload: after initialize_structure atoms={len(current_atoms)} molecules={len(current_molecules)}"
+                )
+            except Exception as e:
+                _debug_log(f"upload: exception {type(e).__name__}: {e}")
+                st.error(f"Error loading the file: {str(e)}")
+                st.stop()
+
+            if current_atoms is None or current_molecules is None or current_modified_symbols is None:
+                st.warning("Structure upload did not complete successfully.")
+                st.stop()
 
             output_suffix = ""
-            with st.expander("Get labelled atoms"):
-                create_labelled_download_file(st.session_state.atoms, file_name, output_suffix)
+            st.success(
+                f"Loaded structure with {len(current_atoms)} atoms and "
+                f"{len(current_molecules)} detected molecule groups."
+            )
 
-            space_group = print_space_group(st.session_state.atoms)
-            with st.expander("See symmetry information"):
-                st.markdown(f"```\n{space_group}\n```")
+            show_upload_details = st.checkbox(
+                "Show structure details and downloads",
+                value=False,
+                key="show_upload_details",
+            )
 
-            # extended_space_group_info = extended_symmetry_info(st.session_state.atoms)
-            # with st.expander("See extended symmetry information"):
-            #     st.markdown(f"```\n{extended_space_group_info}\n```")
+            if show_upload_details:
+                with st.expander("Get labelled atoms"):
+                    create_labelled_download_file(current_atoms, file_name, output_suffix)
 
+                space_group = print_space_group(current_atoms)
+                with st.expander("See symmetry information"):
+                    st.markdown(f"```\n{space_group}\n```")
 
-            molecule_list = []
-            for i, molecule in enumerate(st.session_state.molecules, 1):
-                molecule_labels = [st.session_state.modified_symbols[mol_atom] for mol_atom in molecule]
-                molecule_list.append(f"Molecule {i}: {', '.join(molecule_labels)}")
+                molecule_list = []
+                for i, molecule in enumerate(current_molecules, 1):
+                    molecule_labels = [current_modified_symbols[mol_atom] for mol_atom in molecule]
+                    molecule_list.append(f"Molecule {i}: {', '.join(molecule_labels)}")
 
-            molecule_list_formatted = "\n".join(molecule_list)
+                molecule_list_formatted = "\n".join(molecule_list)
 
-            with st.expander("See detected molecules"):
-                st.markdown(f"```\n{molecule_list_formatted}\n```")
+                with st.expander("See detected molecules"):
+                    st.markdown(f"```\n{molecule_list_formatted}\n```")
 
-            with st.expander("Get geometry.in"):
-                create_aims_download_file(st.session_state.atoms, file_name, output_suffix)
+                with st.expander("Get geometry.in"):
+                    create_aims_download_file(current_atoms, file_name, output_suffix)
 
             with st.expander("See structure"):
-                atoms_to_speck(st.session_state.atoms, "initialization")
+                load_structure_viewer = st.checkbox(
+                    "Load 3D structure viewer",
+                    value=False,
+                    key="load_initial_structure_viewer",
+                )
+                if load_structure_viewer:
+                    try:
+                        atoms_to_speck(current_atoms, "initialization")
+                    except Exception as e:
+                        st.error(f"Error rendering structure viewer: {str(e)}")
+                else:
+                    st.caption("3D structure viewer is disabled by default during upload debugging.")
 
             # except Exception as e:
             #     st.error(f"Error: {e}")
@@ -368,10 +429,10 @@ with st.sidebar:
 
 
 
-if st.session_state.atoms is not None:
+if current_atoms is not None:
 
-    modified_atoms = st.session_state.atoms.copy()
-    molecules = st.session_state.molecules.copy()
+    modified_atoms = current_atoms.copy()
+    molecules = current_molecules.copy()
 
 
 
@@ -1768,6 +1829,180 @@ if st.session_state.atoms is not None:
                     legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
                 )
                 st.plotly_chart(fig_int, use_container_width=True)
+
+        st.divider()
+        st.subheader("Optional: Convert Reduced PDF to g(r)")
+
+        exp_file2 = st.file_uploader(
+            "Upload experimental .gr file",
+            type=["gr"],
+            key="gr_uploader2",
+        )
+
+        if exp_file2 is not None:
+            content = exp_file2.read().decode("utf-8", errors="ignore").splitlines()
+            idx = next((i for i, L in enumerate(content) if L.strip().startswith("#### start data")), None)
+
+            if idx is None:
+                st.error("Couldn't find '#### start data' in the .gr file.")
+            else:
+                data_lines = content[idx + 3:]
+
+                try:
+                    df_exp2 = pd.read_csv(
+                        io.StringIO("\n".join(data_lines)),
+                        sep=r"\s+",
+                        header=None,
+                        names=["r", "G_exp"],
+                    ).pipe(lambda d: d[(d.r >= rmin) & (d.r <= rmax)].reset_index(drop=True))
+
+                    fig_pdf = px.line(
+                        df_exp2,
+                        x="r",
+                        y="G_exp",
+                        labels={"r": "r (Å)", "G_exp": "G(r)"},
+                        title="Uploaded Reduced PDF",
+                    )
+                    fig_pdf.update_layout(
+                        height=450,
+                        template="plotly_white",
+                        margin=dict(l=20, r=20, t=50, b=20),
+                    )
+                    fig_pdf.update_traces(line=dict(width=2))
+                    st.plotly_chart(fig_pdf, use_container_width=True)
+
+                    st.markdown("### Number density, ρ₀")
+
+                    cif_file = st.file_uploader(
+                        "Optional: Upload CIF file to infer ρ₀ automatically",
+                        type=["cif"],
+                        key="cif_uploader_rho0",
+                    )
+
+                    rho0_auto = None
+                    if cif_file is not None:
+                        try:
+                            rho0_auto, n_atoms, volume = infer_rho0_from_cif(cif_file.read())
+                            st.success(
+                                f"Inferred from CIF: ρ₀ = {rho0_auto:.6f} atoms/Å³ "
+                                f"(N = {n_atoms}, V = {volume:.3f} Å³)"
+                            )
+                        except Exception as e:
+                            st.warning(f"Could not infer ρ₀ from CIF: {e}")
+
+                    use_auto_rho0 = st.checkbox(
+                        "Use CIF-inferred ρ₀",
+                        value=rho0_auto is not None,
+                        disabled=rho0_auto is None,
+                        key="use_auto_rho0_checkbox",
+                    )
+
+                    rho0_manual = st.number_input(
+                        "Manual ρ₀ (atoms/Å³)",
+                        min_value=0.0,
+                        value=float(rho0_auto) if rho0_auto is not None else 0.05,
+                        step=0.001,
+                        format="%.6f",
+                        key="rho0_input",
+                    )
+
+                    rho0 = rho0_auto if (use_auto_rho0 and rho0_auto is not None) else rho0_manual
+                    st.info(f"Using ρ₀ = {rho0:.6f} atoms/Å³")
+
+                    if st.button("Convert reduced PDF to g(r)", key="convert_pdf_to_gr"):
+                        st.session_state["df_gr_converted"] = reduced_pdf_to_gr(df_exp2, rho0)
+                        st.session_state["rho0_used_for_gr"] = rho0
+
+                    if "df_gr_converted" in st.session_state:
+                        df_gr = st.session_state["df_gr_converted"]
+                        rho0_used = st.session_state.get("rho0_used_for_gr", rho0)
+
+                        fig_gr = px.line(
+                            df_gr,
+                            x="r",
+                            y="g_r",
+                            labels={"r": "r (Å)", "g_r": "g(r)"},
+                            title="Converted Radial Distribution Function",
+                        )
+                        fig_gr.update_layout(
+                            height=450,
+                            template="plotly_white",
+                            margin=dict(l=20, r=20, t=50, b=20),
+                        )
+                        fig_gr.update_traces(line=dict(width=2))
+                        st.plotly_chart(fig_gr, use_container_width=True)
+
+                        st.markdown("### Integrate g(r) over an r-window")
+
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            r_int_min = st.number_input(
+                                "Integration r min (Å)",
+                                min_value=float(df_gr["r"].min()),
+                                max_value=float(df_gr["r"].max()),
+                                value=float(df_gr["r"].min()),
+                                step=0.1,
+                                key="gr_int_min",
+                            )
+                        with c2:
+                            r_int_max = st.number_input(
+                                "Integration r max (Å)",
+                                min_value=float(df_gr["r"].min()),
+                                max_value=float(df_gr["r"].max()),
+                                value=min(float(df_gr["r"].min()) + 2.0, float(df_gr["r"].max())),
+                                step=0.1,
+                                key="gr_int_max",
+                            )
+
+                        if st.button("Integrate g(r)", key="integrate_gr_button"):
+                            if r_int_max <= r_int_min:
+                                st.warning("Integration r max must be greater than r min.")
+                            else:
+                                res = integrate_gr_window(df_gr, r_int_min, r_int_max, rho0=rho0_used)
+                                if res is None:
+                                    st.warning("Not enough points in the selected r-window for integration.")
+                                else:
+                                    st.write(
+                                        f"**∫ g(r) dr** from {r_int_min:.3f} to {r_int_max:.3f} Å = "
+                                        f"{res['integral_gdr']:.6f}"
+                                    )
+                                    st.write(
+                                        f"**4πρ₀ ∫ r²g(r) dr** from {r_int_min:.3f} to {r_int_max:.3f} Å = "
+                                        f"{res['coordination_like']:.6f}"
+                                    )
+
+                                    fig_window = px.line(
+                                        df_gr,
+                                        x="r",
+                                        y="g_r",
+                                        labels={"r": "r (Å)", "g_r": "g(r)"},
+                                        title="g(r) with Integration Window",
+                                    )
+                                    fig_window.add_vrect(
+                                        x0=r_int_min,
+                                        x1=r_int_max,
+                                        opacity=0.2,
+                                        line_width=0,
+                                    )
+                                    fig_window.update_layout(
+                                        height=450,
+                                        template="plotly_white",
+                                        margin=dict(l=20, r=20, t=50, b=20),
+                                    )
+                                    fig_window.update_traces(line=dict(width=2))
+                                    st.plotly_chart(fig_window, use_container_width=True)
+
+                        csv_data = df_gr.to_csv(index=False).encode("utf-8")
+                        st.download_button(
+                            "Download g(r) as CSV",
+                            data=csv_data,
+                            file_name="converted_gr.csv",
+                            mime="text/csv",
+                            key="download_gr_csv",
+                        )
+
+                except Exception as e:
+                    st.error(f"Failed to parse or convert file: {e}")
 
     # if PDF_fit_option:
     #
@@ -3630,6 +3865,8 @@ def modify_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 if xy_plot_option:
     st.header("Plot Generator")
+    import matplotlib as mpl
+    mpl.rcParams["pdf.fonttype"] = 42
 
     # 1) upload (allow any text table)
     uploaded_file = st.file_uploader("Upload Data File", type=None)
@@ -3802,18 +4039,18 @@ if xy_plot_option:
                 y_min = st.number_input(
                     "Y min",
                     value=config_data.get("y_min", float(df[dataset_info[0]["y"]].min())) if config_data else float(
-                        df[dataset_info[0]["y"]].min())
+                        df[dataset_info[0]["y"]].min()), format="%0.4f"
                 )
                 y_max = st.number_input(
                     "Y max",
                     value=config_data.get("y_max", float(df[dataset_info[0]["y"]].max())) if config_data else float(
-                        df[dataset_info[0]["y"]].max())
+                        df[dataset_info[0]["y"]].max()), format="%0.4f"
                 )
                 y_tick_gap = st.number_input(
                     "Y-axis Tick Interval",
                     min_value=0.0,
                     value=config_data.get("y_tick_gap", 1.0) if config_data else 1.0,
-                    step=0.1
+                    step=0.001, format="%0.4f"
                 )
 
             with st.expander("🖋️ Text Customization"):
@@ -3969,8 +4206,3 @@ if xy_plot_option:
 
         except Exception as e:
             st.error(f"Failed to read file: {e}")
-
-
-
-
-

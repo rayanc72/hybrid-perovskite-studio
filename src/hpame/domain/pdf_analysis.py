@@ -8,6 +8,52 @@ import pandas as pd
 # from pymatgen.io.cif import CifWriter
 
 
+import io
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+from pymatgen.core import Structure
+
+
+def reduced_pdf_to_gr(df, rho0, g_col="G_exp", r_col="r", r_min=1e-6):
+    out = df.copy()
+    r = out[r_col].to_numpy()
+    G = out[g_col].to_numpy()
+
+    g = np.ones_like(G, dtype=float)
+    mask = r > r_min
+    g[mask] = 1 + G[mask] / (4 * np.pi * r[mask] * rho0)
+
+    out["g_r"] = g
+    return out
+
+
+def infer_rho0_from_cif(cif_bytes):
+    structure = Structure.from_str(cif_bytes.decode("utf-8", errors="ignore"), fmt="cif")
+    n_atoms = len(structure)
+    volume = structure.lattice.volume
+    rho0 = n_atoms / volume
+    return rho0, n_atoms, volume
+
+
+def integrate_gr_window(df, r1, r2, r_col="r", g_col="g_r", rho0=None):
+    w = df[(df[r_col] >= r1) & (df[r_col] <= r2)].copy()
+    if len(w) < 2:
+        return None
+
+    r = w[r_col].to_numpy()
+    g = w[g_col].to_numpy()
+
+    integral_gr = np.trapz(g, r)
+    result = {"integral_gdr": integral_gr}
+
+    if rho0 is not None:
+        coord_like = 4 * np.pi * rho0 * np.trapz((r ** 2) * g, r)
+        result["coordination_like"] = coord_like
+
+    return result
+
 def calculate_pdf(
         diffpy_structure,
         diffpy_structure_attributes={"Uisoequiv": 0.01},

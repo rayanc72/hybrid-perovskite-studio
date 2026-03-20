@@ -19,18 +19,11 @@ fig.set_size_inches(10, 6)
 linewidth = 1
 black_bands = 1
 special_line = 3
-#energyshift = float(sys.argv[1])
-ymax = float(sys.argv[3])
-ymin = float(sys.argv[2])
-color = sys.argv[5]
-
 inorghomo = []
 orghomo = []
 # orghomo.append(int(sys.argv[4]))
 orglumo = []
 inorglumo = []
-energyshift = float(sys.argv[1])
-filename = sys.argv[4]
 
 
 def process_geometry_file(filename='geometry.in'):
@@ -154,8 +147,23 @@ def parse_output_files(path='.', energyshift=None):
 
     return bands_all_files
 
-def plot_bands(bands_all_files, xvals=None, band_len_tot=None, k_label_reduce=None, ymin=None, ymax=None, filename=None,
-               orghomo=None, inorghomo=None, orglumo=None, inorglumo=None, special_line=None, solid=None, black_bands=None):
+def plot_bands(
+    bands_all_files,
+    xvals=None,
+    band_len_tot=None,
+    k_label_reduce=None,
+    ymin=None,
+    ymax=None,
+    filename=None,
+    orghomo=None,
+    inorghomo=None,
+    orglumo=None,
+    inorglumo=None,
+    special_line=None,
+    solid=None,
+    black_bands=None,
+    color="k",
+):
     for file_id, bands in enumerate(bands_all_files):
         for band_id, band in enumerate(bands):
             if band_id in orghomo:
@@ -185,11 +193,33 @@ def plot_bands(bands_all_files, xvals=None, band_len_tot=None, k_label_reduce=No
     plt.axis([0, max([abs(i) for i in xvals[-1]]), ymin, ymax])
     plt.savefig(filename, dpi = 300, bbox_inches='tight')
 
+def main(argv=None):
+    argv = sys.argv if argv is None else argv
+    energyshift = float(argv[1])
+    ymin = float(argv[2])
+    ymax = float(argv[3])
+    filename = argv[4]
+    color = argv[5]
+
+    k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot = process_control_file(filename='control.in')
+    bands_all_files = parse_output_files(energyshift=energyshift)
+    plot_bands(
+        bands_all_files,
+        xvals=xvals,
+        band_len_tot=band_len_tot,
+        k_label_reduce=k_label_reduce,
+        ymin=ymin,
+        ymax=ymax,
+        filename=filename,
+        orghomo=orghomo,
+        inorghomo=inorghomo,
+        orglumo=orglumo,
+        inorglumo=inorglumo,
+        special_line=special_line,
+        black_bands=black_bands,
+        color=color,
+    )
 
 
-k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot = process_control_file(filename='control.in')
-bands_all_files = parse_output_files(energyshift=energyshift)
-plot_bands(bands_all_files, xvals=xvals, band_len_tot=band_len_tot, k_label_reduce=k_label_reduce,
-           ymin=ymin, ymax=ymax, filename=filename, orghomo=orghomo, inorghomo=inorghomo,
-           orglumo=orglumo, inorglumo=inorglumo, special_line=special_line,
-           black_bands=black_bands)
+if __name__ == "__main__":
+    main()

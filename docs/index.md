@@ -1,32 +1,36 @@
 # Hybrid Perovskite Studio Docs
 
-This documentation set is organized so each major app capability has its own Markdown file. The goal is to make future updates small, local, and easy to review when a feature changes.
+This documentation set is organized around the current workspace-based UI. The goal is to help someone understand the app quickly, then drill into the relevant workspace and tool family.
 
-## Start here
+## Start Here
 
 - [Getting Started](user-guide/getting-started.md)
-- [Documentation Workflow](reference/documentation-workflow.md)
+- [Navigation and Workspaces](user-guide/navigation-and-workspaces.md)
 - [Architecture](architecture.md)
+- [Documentation Workflow](reference/documentation-workflow.md)
 - [Changelog](changelog.md)
 
-## Feature guides
+## Workspace Guides
 
-- [Structure Upload and Initialization](features/structure-upload.md)
-- [Structure Analysis](features/structure-analysis.md)
-- [Structure Transformations](features/structure-transformations.md)
-- [Electronic Analysis](features/electronic-analysis.md)
-- [Dynamics Analysis](features/dynamics-analysis.md)
-- [Experimental and Utility Tools](features/experimental-tools.md)
+- [Structure Workspace](features/structure-workspace.md)
+- [Electronic Workspace](features/electronic-workspace.md)
+- [Dynamics Workspace](features/dynamics-workspace.md)
+- [Utilities Workspace](features/utilities-workspace.md)
 
-## Documentation model
+## What The Docs Cover
 
-Each feature doc follows the same pattern:
+The docs focus on:
 
-- What it does
-- Where it appears in the UI
-- Inputs
-- Outputs
-- How to use it
-- Known limitations
-- Code touchpoints
-- Last verified against code
+- how the current UI is organized
+- what each workspace does
+- the major tools available in each workspace
+- what inputs and outputs each workspace expects
+- where the active code lives
+
+## Source Of Truth For Navigation
+
+The current workspace map and feature tree are defined in:
+
+- [src/hpame/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/navigation.py)
+
+If the visible navigation changes, that file and the matching workspace doc should be updated together.

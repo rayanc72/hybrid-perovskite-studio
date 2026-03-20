@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hybrid Perovskite Studio is a Streamlit app for hybrid perovskite structure analysis, transformations, electronic-property workflows, molecular-dynamics analysis, and several experimental utilities.
+Hybrid Perovskite Studio is a Streamlit app for hybrid perovskite structure analysis, structure transformation, electronic-output visualization, molecular-dynamics workflows, and utility-style plotting or scripting tools.
 
 ## Run the app
 
@@ -13,20 +13,27 @@ pip install -e ".[full]"
 streamlit run src/hpame/app.py
 ```
 
-## Initial workflow
+## First-Time Workflow
 
 1. Start the app.
-2. Upload a structure file in `aims geometry`, `CIF`, or `.next_step` format.
-3. Use the sidebar to enable one feature area at a time.
-4. Inspect plots, tables, and download buttons produced by each tool.
+2. On the landing page, choose a workspace from the top card row.
+3. If you are working with structures, open `Structure`.
+4. In `Structure -> Overview`, upload a structure file in `.in`, `.cif`, or `.next_step` format.
+5. Use the `Current Structure` card to inspect summary information and export geometry files.
+6. Move into `Analysis` or `Transformations` as needed.
 
-## Main feature areas
+## Workspaces
 
-- Structure Analysis
-- Structure Transformations
-- Electronic Analysis
-- Dynamics Analysis
-- Experimental
+- `Structure`: upload, inspect, analyze, transform, and export structures
+- `Electronic`: plot polarization, DOS, bandstructure, spin texture, and absorption outputs
+- `Dynamics`: process MD outputs and perform trajectory analysis
+- `Utilities`: open JupyterLite or use generic plotting/data helpers
+
+## Navigation Notes
+
+- The app starts on a minimal landing page instead of opening directly into a workflow.
+- The `Browse feature map` expander shows the full tool tree when needed.
+- The visible workspace selectors and feature map are generated from a shared registry in [src/hpame/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/navigation.py).
 
 ## Runtime notes
 

@@ -8,7 +8,7 @@ Keep documentation changes scoped to the exact functionality that changed so fea
 
 - `docs/index.md`: top-level docs navigation
 - `docs/user-guide/`: onboarding and cross-feature usage guidance
-- `docs/features/`: one file per major feature area
+- `docs/features/`: one file per major workspace
 - `docs/reference/`: process docs, conventions, and technical references
 - `docs/changelog.md`: user-visible changes
 
@@ -17,13 +17,14 @@ Keep documentation changes scoped to the exact functionality that changed so fea
 When a feature changes:
 
 1. Update the matching file in `docs/features/`.
-2. Update `docs/changelog.md` if behavior, UI labels, dependencies, or outputs changed.
-3. Update `docs/index.md` if a new feature doc is added or removed.
-4. Update `docs/architecture.md` only if package structure, module ownership, or runtime boundaries changed.
+2. Update [src/hpame/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/navigation.py) if the visible navigation or feature tree changed.
+3. Update `docs/changelog.md` if behavior, UI labels, dependencies, or outputs changed.
+4. Update `docs/index.md` if a workspace doc is added or removed.
+5. Update `docs/architecture.md` only if package structure, module ownership, or runtime boundaries changed.
 
-## Recommended feature-doc style
+## Recommended workspace-doc style
 
-Each feature file should include:
+Each workspace file should include:
 
 - What it does
 - Where it appears in the UI
@@ -38,7 +39,8 @@ Each feature file should include:
 
 Before merging a feature change:
 
-- Confirm the described sidebar labels still match the app.
+- Confirm the described workspace labels still match the app.
+- Confirm the feature tree still matches [src/hpame/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/navigation.py).
 - Confirm the described outputs still exist.
 - Confirm the listed code touchpoints still point to the active implementation.
 - Add a short entry to `docs/changelog.md` if users will notice the change.

@@ -15,6 +15,7 @@ The transition is intentionally incremental:
 After the first cutover:
 
 - `src/hpame/ui/app_main.py` contains the packaged app implementation copied from the legacy entrypoint
+- `src/hpame/ui/navigation.py` is the single source of truth for workspace names, workspace descriptions, and the feature-map tree
 - `src/hpame/domain/pdf_analysis.py` contains the packaged PDF analysis implementation copied from the legacy module
 - archived compatibility shims now live under `legacy_shims/`
 
@@ -23,6 +24,11 @@ After the first cutover:
 ### UI layer
 
 Files under `src/hpame/ui/` should contain Streamlit rendering logic, labels, and user-facing messaging.
+
+Navigation-specific guidance:
+
+- [src/hpame/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/navigation.py) should be updated when workspace structure changes
+- [src/hpame/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/app_main.py) should consume that registry rather than redefining the same tree by hand
 
 ### Service layer
 

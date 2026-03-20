@@ -6,6 +6,15 @@ from hpame.domain import md_analysis as md_analysis_module
 from hpame.domain import molecule_builder as molecule_builder_module
 from hpame.domain import structure_manager as structure_manager_module
 from hpame.io.paths import APP_TMP_DIR
+from hpame.ui.navigation import (
+    build_feature_tree,
+    group_names,
+    render_tree_lines,
+    tool_options,
+    view_names,
+    workspace_descriptions,
+    workspace_names,
+)
 
 
 def _inject_public_names(module):
@@ -312,66 +321,8 @@ MDanalysis_option = False
 script_option = False
 xy_plot_option = False
 
-workspace_descriptions = {
-    "Structure": "Upload structures, inspect geometry, run transformations, and access <strong>PDF analysis</strong>.",
-    "Electronic": "Explore polarization, DOS, bands, spin, and optical outputs.",
-    "Dynamics": "Review molecular dynamics outputs and trajectory-derived metrics.",
-    "Utilities": "Use supporting scripts and general plotting tools.",
-}
-
-workspace_tree = {
-    "Structure": {
-        "Overview": ["Upload structure", "Review loaded structure", "Remove current structure"],
-        "Analysis": {
-            "Symmetry": [
-                "Symmetrize structure",
-                "Anisotropic displacement parameters",
-                "Calculate polarization direction",
-            ],
-            "Molecules": [
-                "Find center of mass",
-                "Calculate dipole moment",
-                "Charge analysis",
-            ],
-            "Structure Metrics": [
-                "Calculate atomic distances",
-                "Calculate octahedral distortions",
-                "Calculate percentage deviation",
-            ],
-            "PDF Analysis": ["PDF analysis"],
-        },
-        "Transformations": {
-            "Molecule Operations": ["Rotation", "Reflection", "Translation", "Deletion"],
-            "Lattice Operations": ["Translation", "Interpolation"],
-        },
-    },
-    "Electronic": {
-        "Polarization and DOS": ["Plot polarization", "Plot partial density of states (PDOS)"],
-        "Bands and Spin": ["Plot bandstructure", "Plot spin texture", "Plot 3D spin texture"],
-        "Optical": ["Plot absorption spectra"],
-    },
-    "Dynamics": {
-        "MD Analysis": ["Analyze AIMS MD output"],
-        "Trajectory Tools": ["Trajectory analysis"],
-    },
-    "Utilities": {
-        "Run your own script": [],
-        "Plot Data": [],
-    },
-}
-
-
-def render_tree_lines(tree, indent=0):
-    lines = []
-    prefix = "  " * indent
-    if isinstance(tree, dict):
-        for key, value in tree.items():
-            lines.append(f"{prefix}- {key}")
-            lines.extend(render_tree_lines(value, indent + 1))
-    elif isinstance(tree, list):
-        for item in tree:
-            lines.append(f"{prefix}- {item}")
-    return lines
+workspace_descriptions = workspace_descriptions()
+workspace_tree = build_feature_tree()
 
 st.markdown(
     """
@@ -616,7 +567,7 @@ if primary_section is None:
     )
 
 workspace_columns = st.columns(4)
-for column, workspace_name in zip(workspace_columns, workspace_descriptions):
+for column, workspace_name in zip(workspace_columns, workspace_names()):
     card_class = (
         "workspace-card active"
         if workspace_name == primary_section
@@ -678,7 +629,7 @@ if primary_section is not None:
 if primary_section == "Structure":
     structure_mode = st.radio(
         "View",
-        options=["Overview", "Analysis", "Transformations"],
+        options=view_names("Structure"),
         horizontal=True,
     )
 
@@ -709,41 +660,29 @@ if primary_section == "Structure":
     elif structure_mode == "Analysis":
         analysis_group = st.radio(
             "Group",
-            options=["Symmetry", "Molecules", "Structure Metrics", "PDF Analysis"],
+            options=group_names("Structure", "Analysis"),
             horizontal=True,
         )
 
         if analysis_group == "Symmetry":
             analysis_tool = st.selectbox(
                 "Tool",
-                options=[
-                    "Symmetrize structure",
-                    "Anisotropic displacement parameters",
-                    "Calculate polarization direction",
-                ],
+                options=tool_options("Structure", "Analysis", analysis_group),
             )
         elif analysis_group == "Molecules":
             analysis_tool = st.selectbox(
                 "Tool",
-                options=[
-                    "Find center of mass",
-                    "Calculate dipole moment",
-                    "Charge analysis",
-                ],
+                options=tool_options("Structure", "Analysis", analysis_group),
             )
         elif analysis_group == "Structure Metrics":
             analysis_tool = st.selectbox(
                 "Tool",
-                options=[
-                    "Calculate atomic distances",
-                    "Calculate octahedral distortions",
-                    "Calculate percentage deviation",
-                ],
+                options=tool_options("Structure", "Analysis", analysis_group),
             )
         else:
             st.markdown("**PDF Analysis**")
             st.caption("Run pair distribution function analysis for the currently loaded structure.")
-            analysis_tool = "PDF analysis"
+            analysis_tool = tool_options("Structure", "Analysis", analysis_group)[0]
 
         symmetry_option = analysis_tool == "Symmetrize structure"
         com_option = analysis_tool == "Find center of mass"
@@ -759,27 +698,13 @@ if primary_section == "Structure":
     elif structure_mode == "Transformations":
         transform_group = st.radio(
             "Group",
-            options=["Molecule Operations", "Lattice Operations"],
+            options=group_names("Structure", "Transformations"),
             horizontal=True,
         )
-        if transform_group == "Molecule Operations":
-            transform_tool = st.selectbox(
-                "Tool",
-                options=[
-                    "Rotation",
-                    "Reflection",
-                    "Translation",
-                    "Deletion",
-                ],
-            )
-        else:
-            transform_tool = st.selectbox(
-                "Tool",
-                options=[
-                    "Translation",
-                    "Interpolation",
-                ],
-            )
+        transform_tool = st.selectbox(
+            "Tool",
+            options=tool_options("Structure", "Transformations", transform_group),
+        )
         rotate_option = transform_tool == "Rotation"
         reflect_option = transform_tool == "Reflection"
         translation_option = transform_tool == "Translation"
@@ -791,33 +716,13 @@ if primary_section == "Structure":
 elif primary_section == "Electronic":
     electronic_group = st.radio(
         "View",
-        options=["Polarization and DOS", "Bands and Spin", "Optical"],
+        options=view_names("Electronic"),
         horizontal=True,
     )
-    if electronic_group == "Polarization and DOS":
-        electronic_tool = st.selectbox(
-            "Tool",
-            options=[
-                "Plot polarization",
-                "Plot partial density of states (PDOS)",
-            ],
-        )
-    elif electronic_group == "Bands and Spin":
-        electronic_tool = st.selectbox(
-            "Tool",
-            options=[
-                "Plot bandstructure",
-                "Plot spin texture",
-                "Plot 3D spin texture",
-            ],
-        )
-    else:
-        electronic_tool = st.selectbox(
-            "Tool",
-            options=[
-                "Plot absorption spectra",
-            ],
-        )
+    electronic_tool = st.selectbox(
+        "Tool",
+        options=tool_options("Electronic", electronic_group),
+    )
     plot_polarization_option = electronic_tool == "Plot polarization"
     plot_pdos_option = electronic_tool == "Plot partial density of states (PDOS)"
     plot_bs_option = electronic_tool == "Plot bandstructure"
@@ -828,10 +733,7 @@ elif primary_section == "Electronic":
 elif primary_section == "Dynamics":
     dynamics_tool = st.radio(
         "View",
-        options=[
-            "Analyze AIMS MD output",
-            "Trajectory analysis",
-        ],
+        options=view_names("Dynamics"),
         horizontal=True,
     )
     MD_option = dynamics_tool == "Analyze AIMS MD output"
@@ -840,10 +742,7 @@ elif primary_section == "Dynamics":
 elif primary_section == "Utilities":
     utility_tool = st.radio(
         "View",
-        options=[
-            "Run your own script",
-            "Plot Data",
-        ],
+        options=view_names("Utilities"),
         horizontal=True,
     )
     script_option = utility_tool == "Run your own script"

@@ -87,16 +87,11 @@ def read_structure_file(fileobj, file_format='aims'):
     return atoms
 
 def initialize_structure(uploaded_data, file_format, file_name, exceptions=None,b_p=0):
-    name_base = os.path.splitext(file_name)[0]
-
     atoms = read_structure_file(uploaded_data, file_format=file_format)
 
     print_space_group(atoms)
     molecules = detect_molecules(atoms, exceptions=exceptions, b=b_p)
     modified_symbols = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(atoms)]
-    write_modified_aims_file(atoms, name_base + '_labelled.in')
-    # modified_atoms = atoms.copy()
-    # output_suffix = ""
     return atoms, molecules, modified_symbols
 
 from fractions import Fraction
@@ -149,6 +144,19 @@ def initialize_structure_v2(uploaded_data, file_format):
 def write_modified_aims_file(atoms, file_name):
     symbols = atoms.get_chemical_symbols()
     modified_symbols = [f"{symbol}{i+1}" for i, symbol in enumerate(symbols)]
+
+    if hasattr(file_name, "write"):
+        f = file_name
+        if atoms.get_pbc().any():
+            f.write("# Lattice_vectors\n")
+            for vec in atoms.get_cell():
+                f.write(f"lattice_vector {vec[0]} {vec[1]} {vec[2]}\n")
+            f.write("\n")
+
+        f.write("# Atoms\n")
+        for i, atom in enumerate(atoms):
+            f.write(f"atom {atom.position[0]} {atom.position[1]} {atom.position[2]} {modified_symbols[i]}\n")
+        return
 
     with open(file_name, 'w') as f:
         if atoms.get_pbc().any():
@@ -1031,32 +1039,36 @@ def find_twofold_rotation_axes(initial_space_group, final_space_group):
 
     return twofold_rotation_axes
 def create_labelled_download_file(atoms, file_name, output_suffix):
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".in", delete=False) as output_labelled_file:
-        write_modified_aims_file(atoms, output_labelled_file.name)
-        output_labelled_file.seek(0)
-        output_labelled_content = output_labelled_file.read()
-        download_name = f"{os.path.splitext(file_name)[0]}{output_suffix}_labelled.in"
-        st.download_button(
-            label=f"Download {download_name}",
-            data=output_labelled_content,
-            file_name=download_name,
-            mime="text/plain",
-            key=f"download_labelled_{download_name}",
-        )
+    output_labelled_buffer = io.StringIO()
+    write_modified_aims_file(atoms, output_labelled_buffer)
+    output_labelled_content = output_labelled_buffer.getvalue()
+    download_name = f"{os.path.splitext(file_name)[0]}{output_suffix}_labelled.in"
+    st.download_button(
+        label=f"Download {download_name}",
+        data=output_labelled_content,
+        file_name=download_name,
+        mime="text/plain",
+        key=f"download_labelled_{download_name}",
+    )
 
 def create_aims_download_file(atoms, file_name, output_suffix):
     with tempfile.NamedTemporaryFile(mode="w+", suffix=".in", delete=False) as output_file:
-        write(output_file.name, atoms, format='aims')
-        output_file.seek(0)
-        output_content = output_file.read()
-        download_name = f"{os.path.splitext(file_name)[0]}{output_suffix}.in"
-        st.download_button(
-            label=f"Download {download_name}",
-            data=output_content,
-            file_name=download_name,
-            mime="text/plain",
-            key=f"download_aims_{download_name}",
-        )
+        try:
+            write(output_file.name, atoms, format='aims')
+            output_file.seek(0)
+            output_content = output_file.read()
+        finally:
+            output_file.close()
+            os.unlink(output_file.name)
+
+    download_name = f"{os.path.splitext(file_name)[0]}{output_suffix}.in"
+    st.download_button(
+        label=f"Download {download_name}",
+        data=output_content,
+        file_name=download_name,
+        mime="text/plain",
+        key=f"download_aims_{download_name}",
+    )
 
 def get_download_link(file_name, content):
     if isinstance(content, str):
@@ -2672,4 +2684,3 @@ def calculate_in_out_planes(AB_groups, atoms_obj, atom_dict=None,b =0, A2_indice
     plane_components = calculate_plane_components(perp_planes, unique_angles_dict, atoms_obj)
 
     return plane_components
-

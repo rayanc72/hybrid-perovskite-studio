@@ -520,6 +520,31 @@ st.markdown(
         color: var(--hp-text-muted);
         max-width: 44rem;
     }
+    .landing-copy a,
+    .feature-map-panel a {
+        color: var(--hp-accent);
+        font-weight: 600;
+        text-decoration: none;
+        border-bottom: 1px solid rgba(12, 135, 122, 0.28);
+    }
+    .landing-copy a:hover,
+    .feature-map-panel a:hover {
+        border-bottom-color: rgba(12, 135, 122, 0.65);
+    }
+    .feature-map-panel {
+        border-radius: var(--hp-radius-lg);
+        padding: 1.35rem 1.45rem;
+        margin: 0.35rem 0 1.1rem 0;
+        border: 1px solid var(--hp-border);
+        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(246, 249, 250, 0.98));
+        box-shadow: var(--hp-shadow-lg);
+    }
+    .feature-map-title {
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: var(--hp-text);
+        margin-bottom: 0.35rem;
+    }
     div[data-testid="stExpander"] details {
         border-radius: var(--hp-radius-sm);
         border: 1px solid var(--hp-border);
@@ -549,8 +574,25 @@ def clear_loaded_structure():
     st.session_state.show_structure_details = False
     st.session_state.load_initial_structure_viewer = False
 
+feature_map_view = st.query_params.get("view") == "feature-map"
 primary_section = st.session_state.primary_section
 start_page_clicked = False
+
+if feature_map_view:
+    st.markdown(
+        """
+        <div class="feature-map-panel">
+            <div class="landing-eyebrow">Feature Map</div>
+            <div class="feature-map-title">Hybrid Perovskite Studio Feature Map</div>
+            <div class="landing-copy">
+                This page shows the current workspace and tool tree. <a href="?" target="_self">Return to the main app</a>.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("\n".join(render_tree_lines(workspace_tree)))
+    st.stop()
 
 if primary_section is None:
     st.markdown(
@@ -559,7 +601,7 @@ if primary_section is None:
             <div class="landing-eyebrow">Start Here</div>
             <div class="landing-title">Pick the workspace that matches your task.</div>
             <div class="landing-copy">
-                Start with Structure when you need to upload or prepare a model. Electronic, Dynamics, and Utilities stay available once you want to move into plotting, trajectory analysis, or supporting tools.
+                Start with Structure when you need to upload or prepare a model. Electronic, Dynamics, and Utilities stay available once you want to move into plotting, trajectory analysis, or supporting tools. You can also open the <a href="?view=feature-map" target="_blank">feature map</a> in a new tab for a full tree view.
             </div>
         </div>
         """,
@@ -597,11 +639,6 @@ for column, workspace_name in zip(workspace_columns, workspace_names()):
             primary_section = workspace_name
             st.session_state.primary_section = workspace_name
             st.rerun()
-
-with st.expander("Browse feature map", expanded=False):
-    st.caption("Open this tree view when you want a compact overview of everything available in the app.")
-    tree_markdown = "\n".join(render_tree_lines(workspace_tree))
-    st.markdown(tree_markdown)
 
 toolbar_col1, toolbar_col2 = st.columns([6, 1.4])
 with toolbar_col1:

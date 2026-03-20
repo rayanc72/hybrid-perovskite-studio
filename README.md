@@ -63,6 +63,12 @@ Linting:
 ruff check src tests
 ```
 
+## Documentation
+
+- Docs home: [docs/index.md](docs/index.md)
+- Feature docs: `docs/features/`
+- Documentation maintenance workflow: [docs/reference/documentation-workflow.md](docs/reference/documentation-workflow.md)
+
 ## Notes
 
 - Preferred entrypoint: `streamlit run src/hpame/app.py`

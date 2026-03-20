@@ -99,56 +99,6 @@ _debug_log("startup: page config set")
 
 st.markdown(
     """
-    <style>
-    .app-brand-wrap {
-        text-align: center;
-        padding: 0.25rem 0 1.1rem 0;
-    }
-    .app-brand-title {
-        font-size: 2.45rem;
-        font-weight: 700;
-        letter-spacing: -0.03em;
-        color: #16202a;
-        line-height: 1.05;
-    }
-    .app-brand-title span {
-        color: #0c877a;
-    }
-    .app-brand-subtitle {
-        margin: 0.6rem auto 0 auto;
-        max-width: 48rem;
-        font-size: 1rem;
-        line-height: 1.55;
-        color: #556371;
-    }
-    .landing-panel {
-        border-radius: 24px;
-        padding: 1.35rem 1.45rem;
-        margin: 0.35rem 0 1.1rem 0;
-        border: 1px solid rgba(49, 51, 63, 0.1);
-        background: linear-gradient(135deg, rgba(252, 253, 255, 1), rgba(241, 247, 246, 1));
-        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
-    }
-    .landing-eyebrow {
-        font-size: 0.78rem;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        color: #5f6d7c;
-        margin-bottom: 0.35rem;
-    }
-    .landing-title {
-        font-size: 1.35rem;
-        font-weight: 700;
-        color: #16202a;
-        margin-bottom: 0.35rem;
-    }
-    .landing-copy {
-        font-size: 0.98rem;
-        line-height: 1.6;
-        color: #556371;
-        max-width: 44rem;
-    }
-    </style>
     <div class="app-brand-wrap">
         <div class="app-brand-title">Hybrid <span>Perovskite Studio</span></div>
         <div class="app-brand-subtitle">
@@ -333,6 +283,8 @@ if "uploaded_structure_name" not in st.session_state:
     st.session_state.uploaded_structure_name = None
 if "uploaded_structure_bytes" not in st.session_state:
     st.session_state.uploaded_structure_bytes = None
+if "structure_uploader_key" not in st.session_state:
+    st.session_state.structure_uploader_key = 0
 
 symmetry_option = False
 com_option = False
@@ -361,34 +313,160 @@ script_option = False
 xy_plot_option = False
 
 workspace_descriptions = {
-    "Structure": "Upload structures, inspect geometry, and run transformations.",
+    "Structure": "Upload structures, inspect geometry, run transformations, and access <strong>PDF analysis</strong>.",
     "Electronic": "Explore polarization, DOS, bands, spin, and optical outputs.",
     "Dynamics": "Review molecular dynamics outputs and trajectory-derived metrics.",
     "Utilities": "Use supporting scripts and general plotting tools.",
 }
 
+workspace_tree = {
+    "Structure": {
+        "Overview": ["Upload structure", "Review loaded structure", "Remove current structure"],
+        "Analysis": {
+            "Symmetry": [
+                "Symmetrize structure",
+                "Anisotropic displacement parameters",
+                "Calculate polarization direction",
+            ],
+            "Molecules": [
+                "Find center of mass",
+                "Calculate dipole moment",
+                "Charge analysis",
+            ],
+            "Structure Metrics": [
+                "Calculate atomic distances",
+                "Calculate octahedral distortions",
+                "Calculate percentage deviation",
+            ],
+            "PDF Analysis": ["PDF analysis"],
+        },
+        "Transformations": {
+            "Molecule Operations": ["Rotation", "Reflection", "Translation", "Deletion"],
+            "Lattice Operations": ["Translation", "Interpolation"],
+        },
+    },
+    "Electronic": {
+        "Polarization and DOS": ["Plot polarization", "Plot partial density of states (PDOS)"],
+        "Bands and Spin": ["Plot bandstructure", "Plot spin texture", "Plot 3D spin texture"],
+        "Optical": ["Plot absorption spectra"],
+    },
+    "Dynamics": {
+        "MD Analysis": ["Analyze AIMS MD output"],
+        "Trajectory Tools": ["Trajectory analysis"],
+    },
+    "Utilities": {
+        "Run your own script": [],
+        "Plot Data": [],
+    },
+}
+
+
+def render_tree_lines(tree, indent=0):
+    lines = []
+    prefix = "  " * indent
+    if isinstance(tree, dict):
+        for key, value in tree.items():
+            lines.append(f"{prefix}- {key}")
+            lines.extend(render_tree_lines(value, indent + 1))
+    elif isinstance(tree, list):
+        for item in tree:
+            lines.append(f"{prefix}- {item}")
+    return lines
+
 st.markdown(
     """
     <style>
+    :root {
+        --hp-bg-soft: #f5f8f9;
+        --hp-surface: rgba(255, 255, 255, 0.96);
+        --hp-surface-strong: rgba(255, 255, 255, 0.99);
+        --hp-text: #16202a;
+        --hp-text-muted: #556371;
+        --hp-text-subtle: #677787;
+        --hp-border: rgba(49, 51, 63, 0.12);
+        --hp-border-strong: rgba(12, 135, 122, 0.4);
+        --hp-accent: #0c877a;
+        --hp-accent-soft: rgba(12, 135, 122, 0.1);
+        --hp-shadow-sm: 0 8px 20px rgba(15, 23, 42, 0.05);
+        --hp-shadow-md: 0 14px 30px rgba(15, 23, 42, 0.07);
+        --hp-shadow-lg: 0 18px 38px rgba(15, 23, 42, 0.08);
+        --hp-radius-sm: 14px;
+        --hp-radius-md: 18px;
+        --hp-radius-lg: 24px;
+    }
+    .block-container {
+        padding-top: 3.5rem;
+        padding-bottom: 2.5rem;
+    }
+    .app-brand-wrap {
+        width: 100%;
+        max-width: 56rem;
+        text-align: center;
+        padding: 0.85rem 1rem 1.35rem 1rem;
+        margin: 0 auto;
+        box-sizing: border-box;
+        overflow: hidden;
+    }
+    .app-brand-title {
+        display: block;
+        width: 100%;
+        font-size: clamp(1.65rem, 3.4vw, 2.45rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--hp-text);
+        line-height: 1.18;
+        max-width: 100%;
+        margin: 0 auto;
+        white-space: normal;
+        overflow-wrap: break-word;
+        word-break: normal;
+        box-sizing: border-box;
+    }
+    .app-brand-title span {
+        color: var(--hp-accent);
+    }
+    .app-brand-subtitle {
+        margin: 0.65rem auto 0 auto;
+        max-width: 48rem;
+        font-size: 1rem;
+        line-height: 1.55;
+        color: var(--hp-text-muted);
+    }
+    h2, h3 {
+        letter-spacing: -0.02em;
+        color: var(--hp-text);
+    }
+    div[data-testid="stMarkdownContainer"] p {
+        color: var(--hp-text-muted);
+    }
+    div[data-testid="stCaptionContainer"] {
+        color: var(--hp-text-subtle);
+    }
+    div[data-testid="stAlert"] {
+        border-radius: var(--hp-radius-sm);
+        border: 1px solid var(--hp-border);
+        box-shadow: var(--hp-shadow-sm);
+    }
     div[data-testid="stRadio"] > label[data-testid="stWidgetLabel"] p {
         font-size: 0.95rem;
         font-weight: 600;
         letter-spacing: 0.01em;
+        color: var(--hp-text);
     }
     div[data-testid="stRadio"] div[role="radiogroup"] {
         gap: 0.65rem;
         padding: 0.25rem 0 0.1rem 0;
     }
     div[data-testid="stRadio"] div[role="radiogroup"] > label {
-        border: 1px solid rgba(49, 51, 63, 0.16);
+        border: 1px solid var(--hp-border);
         border-radius: 999px;
         padding: 0.55rem 1rem;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 247, 250, 0.95));
-        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(245, 247, 250, 0.95));
+        box-shadow: var(--hp-shadow-sm);
         transition: all 0.2s ease;
     }
     div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
-        border-color: rgba(12, 135, 122, 0.35);
+        border-color: var(--hp-border-strong);
         box-shadow: 0 10px 22px rgba(12, 135, 122, 0.12);
     }
     div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
@@ -396,13 +474,46 @@ st.markdown(
         border-color: rgba(12, 135, 122, 0.65);
         box-shadow: 0 12px 26px rgba(12, 135, 122, 0.18);
     }
+    div[data-testid="stSelectbox"] > label p,
+    div[data-testid="stFileUploader"] > label p,
+    div[data-testid="stTextInput"] > label p,
+    div[data-testid="stNumberInput"] > label p,
+    div[data-testid="stMultiSelect"] > label p,
+    div[data-testid="stCheckbox"] label p {
+        color: var(--hp-text);
+        font-weight: 600;
+    }
+    div[data-testid="stFileUploader"] section,
+    div[data-testid="stSelectbox"] > div[data-baseweb="select"],
+    div[data-testid="stTextInput"] input,
+    div[data-testid="stNumberInput"] input,
+    div[data-testid="stTextArea"] textarea {
+        border-radius: var(--hp-radius-sm);
+    }
+    div[data-testid="stButton"] > button,
+    div[data-testid="stDownloadButton"] > button {
+        border-radius: 999px;
+        border: 1px solid var(--hp-border);
+        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(244, 247, 249, 0.98));
+        color: var(--hp-text);
+        font-weight: 600;
+        box-shadow: var(--hp-shadow-sm);
+        transition: all 0.18s ease;
+    }
+    div[data-testid="stButton"] > button:hover,
+    div[data-testid="stDownloadButton"] > button:hover {
+        border-color: var(--hp-border-strong);
+        color: var(--hp-accent);
+        transform: translateY(-1px);
+        box-shadow: var(--hp-shadow-md);
+    }
     .workspace-card {
-        border-radius: 18px;
+        border-radius: var(--hp-radius-md);
         padding: 1rem 1rem 0.95rem 1rem;
         min-height: 8.6rem;
-        border: 1px solid rgba(49, 51, 63, 0.12);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 248, 251, 0.96));
-        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        border: 1px solid var(--hp-border);
+        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(246, 248, 251, 0.96));
+        box-shadow: var(--hp-shadow-md);
     }
     .workspace-card.active {
         border-color: rgba(12, 135, 122, 0.55);
@@ -413,46 +524,63 @@ st.markdown(
         font-size: 1rem;
         font-weight: 700;
         margin-bottom: 0.35rem;
-        color: #11212d;
+        color: var(--hp-text);
     }
     .workspace-card-body {
         font-size: 0.9rem;
         line-height: 1.45;
-        color: #4a5565;
+        color: var(--hp-text-muted);
+    }
+    .workspace-card-body strong {
+        color: var(--hp-accent);
+        font-weight: 700;
     }
     .workspace-header {
         font-size: 0.82rem;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        color: #5c6b78;
+        color: var(--hp-text-subtle);
         margin-bottom: 0.15rem;
     }
     .landing-panel {
-        border-radius: 24px;
+        border-radius: var(--hp-radius-lg);
         padding: 1.35rem 1.45rem;
         margin: 0.35rem 0 1.1rem 0;
-        border: 1px solid rgba(49, 51, 63, 0.1);
+        border: 1px solid var(--hp-border);
         background: linear-gradient(135deg, rgba(252, 253, 255, 1), rgba(241, 247, 246, 1));
-        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+        box-shadow: var(--hp-shadow-lg);
     }
     .landing-eyebrow {
         font-size: 0.78rem;
         text-transform: uppercase;
         letter-spacing: 0.1em;
-        color: #5f6d7c;
+        color: var(--hp-text-subtle);
         margin-bottom: 0.35rem;
     }
     .landing-title {
         font-size: 1.35rem;
         font-weight: 700;
-        color: #16202a;
+        color: var(--hp-text);
         margin-bottom: 0.35rem;
     }
     .landing-copy {
         font-size: 0.98rem;
         line-height: 1.6;
-        color: #556371;
+        color: var(--hp-text-muted);
         max-width: 44rem;
+    }
+    div[data-testid="stExpander"] details {
+        border-radius: var(--hp-radius-sm);
+        border: 1px solid var(--hp-border);
+        background: linear-gradient(180deg, var(--hp-surface), rgba(247, 249, 251, 0.98));
+        box-shadow: var(--hp-shadow-sm);
+    }
+    div[data-testid="stMetric"] {
+        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(247, 249, 251, 0.98));
+        border: 1px solid var(--hp-border);
+        border-radius: var(--hp-radius-sm);
+        padding: 0.85rem 1rem;
+        box-shadow: var(--hp-shadow-sm);
     }
     </style>
     """,
@@ -461,6 +589,14 @@ st.markdown(
 
 if "primary_section" not in st.session_state:
     st.session_state.primary_section = None
+
+def clear_loaded_structure():
+    st.session_state.uploaded_structure_name = None
+    st.session_state.uploaded_structure_bytes = None
+    st.session_state.file_name = None
+    st.session_state.structure_uploader_key += 1
+    st.session_state.show_structure_details = False
+    st.session_state.load_initial_structure_viewer = False
 
 primary_section = st.session_state.primary_section
 start_page_clicked = False
@@ -509,6 +645,12 @@ for column, workspace_name in zip(workspace_columns, workspace_descriptions):
         ):
             primary_section = workspace_name
             st.session_state.primary_section = workspace_name
+            st.rerun()
+
+with st.expander("Browse feature map", expanded=False):
+    st.caption("Open this tree view when you want a compact overview of everything available in the app.")
+    tree_markdown = "\n".join(render_tree_lines(workspace_tree))
+    st.markdown(tree_markdown)
 
 toolbar_col1, toolbar_col2 = st.columns([6, 1.4])
 with toolbar_col1:
@@ -536,7 +678,7 @@ if primary_section is not None:
 if primary_section == "Structure":
     structure_mode = st.radio(
         "View",
-        options=["Overview", "Analysis", "Transformations", "Interpolation"],
+        options=["Overview", "Analysis", "Transformations"],
         horizontal=True,
     )
 
@@ -545,7 +687,7 @@ if primary_section == "Structure":
         structure_upload = st.file_uploader(
             "Upload a structure file (aims geometry, CIF, or next_step)",
             type=["in", "cif", "next_step"],
-            key="structure_workspace_uploader",
+            key=f"structure_workspace_uploader_{st.session_state.structure_uploader_key}",
         )
         _debug_log("structure overview: file_uploader rendered")
         if structure_upload is not None:
@@ -560,11 +702,14 @@ if primary_section == "Structure":
             st.caption("No structure loaded yet.")
         else:
             st.caption(f"Current structure: `{st.session_state.uploaded_structure_name}`")
+            if st.button("Remove current structure", key="remove_structure_overview"):
+                clear_loaded_structure()
+                st.rerun()
 
     elif structure_mode == "Analysis":
         analysis_group = st.radio(
             "Group",
-            options=["Symmetry", "Molecules", "Structure Metrics", "Advanced"],
+            options=["Symmetry", "Molecules", "Structure Metrics", "PDF Analysis"],
             horizontal=True,
         )
 
@@ -596,12 +741,9 @@ if primary_section == "Structure":
                 ],
             )
         else:
-            analysis_tool = st.selectbox(
-                "Tool",
-                options=[
-                    "PDF analysis",
-                ],
-            )
+            st.markdown("**PDF Analysis**")
+            st.caption("Run pair distribution function analysis for the currently loaded structure.")
+            analysis_tool = "PDF analysis"
 
         symmetry_option = analysis_tool == "Symmetrize structure"
         com_option = analysis_tool == "Find center of mass"
@@ -635,17 +777,16 @@ if primary_section == "Structure":
                 "Tool",
                 options=[
                     "Translation",
-                    "Deletion",
+                    "Interpolation",
                 ],
             )
         rotate_option = transform_tool == "Rotation"
         reflect_option = transform_tool == "Reflection"
         translation_option = transform_tool == "Translation"
         delete_option = transform_tool == "Deletion"
-
-    elif structure_mode == "Interpolation":
-        st.caption("Interpolation is isolated here because it uses its own file-upload workflow.")
-        interpolate_option = True
+        if transform_tool == "Interpolation":
+            st.caption("Interpolation uses its own file-upload workflow inside lattice operations.")
+        interpolate_option = transform_tool == "Interpolation"
 
 elif primary_section == "Electronic":
     electronic_group = st.radio(
@@ -782,11 +923,15 @@ if current_atoms is not None and primary_section == "Structure":
         meta_col3.metric("Atoms", len(current_atoms))
         meta_col4.metric("Molecule Groups", len(current_molecules))
 
-        action_col1, action_col2 = st.columns(2)
+        action_col1, action_col2, action_col3 = st.columns(3)
         with action_col1:
             create_aims_download_file(current_atoms, st.session_state.file_name, output_suffix)
         with action_col2:
             create_labelled_download_file(current_atoms, st.session_state.file_name, output_suffix)
+        with action_col3:
+            if st.button("Remove current structure", key="remove_structure_context", use_container_width=True):
+                clear_loaded_structure()
+                st.rerun()
 
         show_structure_details = st.checkbox(
             "Show structure details",

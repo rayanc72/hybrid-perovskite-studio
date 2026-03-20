@@ -33,6 +33,8 @@ Compatibility install:
 pip install -r requirements.txt
 ```
 
+Local secrets should go in `.streamlit/secrets.toml`. A safe template is provided in `.streamlit/secrets.example.toml`.
+
 ## Package layout
 
 ```text

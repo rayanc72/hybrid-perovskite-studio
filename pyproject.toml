@@ -1,0 +1,103 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hybrid-perovskite-studio"
+version = "0.1.0"
+description = "Packaged entrypoint and dependency management for Hybrid Perovskite Studio."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "streamlit>=1.33",
+]
+
+[project.optional-dependencies]
+core = [
+  "ase",
+  "matplotlib",
+  "natsort",
+  "networkx",
+  "numpy",
+  "pandas",
+  "pillow",
+  "plotly",
+  "pymatgen",
+  "pyyaml",
+  "requests",
+  "scipy",
+  "spglib",
+]
+md = [
+  "MDAnalysis",
+  "seaborn",
+]
+pdf = [
+  "diffpy.pdffit2",
+  "diffpy.structure",
+]
+viz = [
+  "bokeh",
+  "colorcet",
+  "holoviews",
+  "ipyspeck",
+  "mpld3",
+  "streamlit-bokeh-events",
+  "streamlit-extras",
+  "streamlit-ketcher",
+  "streamlit-lottie",
+]
+auth = [
+  "streamlit-authenticator",
+]
+full = [
+  "ase",
+  "bokeh",
+  "colorcet",
+  "diffpy.pdffit2",
+  "diffpy.structure",
+  "holoviews",
+  "ipyspeck",
+  "matplotlib",
+  "MDAnalysis",
+  "mpld3",
+  "natsort",
+  "networkx",
+  "numpy",
+  "pandas",
+  "pillow",
+  "plotly",
+  "pymatgen",
+  "pyyaml",
+  "requests",
+  "scipy",
+  "seaborn",
+  "spglib",
+  "streamlit-authenticator",
+  "streamlit-bokeh-events",
+  "streamlit-extras",
+  "streamlit-ketcher",
+  "streamlit-lottie",
+]
+dev = [
+  "pytest",
+  "ruff",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+  "__pycache__",
+  "output",
+  "tmp",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

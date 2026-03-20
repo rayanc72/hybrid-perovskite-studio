@@ -1,45 +1,48 @@
-# Feature Name
+# Workspace Or Feature Name
 
-## What It Does
+## Overview
 
-Short description of the feature and the problem it solves.
+Short description of the workspace or feature and the problem it solves.
 
-## Where It Appears in the UI
+## Where It Appears In The UI
 
-- Sidebar section:
-- Main header:
-- Related expanders or sub-sections:
+- Workspace:
+- View:
+- Group:
+- Tool:
 
 ## Inputs
 
-- Required inputs:
-- Optional inputs:
+- Required:
+- Optional:
 - Supported file types:
 
 ## Outputs
 
-- Tables:
+- Tables and summaries:
 - Plots:
 - Downloadable files:
 
 ## How To Use It
 
-1. Open the relevant sidebar toggle.
+1. Open the relevant workspace.
 2. Provide the required inputs.
-3. Configure any optional settings.
-4. Run the action and inspect the outputs.
+3. Select the relevant view/group/tool if applicable.
+4. Configure any optional settings.
+5. Run the action and inspect the outputs.
 
-## Known Limitations
+## Notes And Limitations
 
 - List current limitations based on repo evidence only.
 
 ## Code Touchpoints
 
 - UI:
+- Navigation registry:
 - Domain logic:
 - Tooling/helpers:
 
-## Last Verified Against Code
+## Last Verified
 
 - Date:
 - Files reviewed:

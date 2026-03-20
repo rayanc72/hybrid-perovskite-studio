@@ -44,7 +44,7 @@ src/hpame/
   io/               Shared path/runtime directory helpers
   legacy/           Compatibility loader for the flat-file app
   services/         Dependency and runtime coordination
-  ui/               Bootstrap page and sidebar catalog
+  ui/               Landing page, workspace UI, and navigation registry
 ```
 
 The current scientific implementation is being migrated into the package incrementally. The old compatibility shims now live under `legacy_shims/`; the packaged entrypoint and packaged PDF module are the primary runtime path.
@@ -66,7 +66,9 @@ ruff check src tests
 ## Documentation
 
 - Docs home: [docs/index.md](docs/index.md)
-- Feature docs: `docs/features/`
+- Getting started: [docs/user-guide/getting-started.md](docs/user-guide/getting-started.md)
+- Navigation guide: [docs/user-guide/navigation-and-workspaces.md](docs/user-guide/navigation-and-workspaces.md)
+- Workspace docs: `docs/features/`
 - Documentation maintenance workflow: [docs/reference/documentation-workflow.md](docs/reference/documentation-workflow.md)
 
 ## Notes
@@ -74,4 +76,5 @@ ruff check src tests
 - Preferred entrypoint: `streamlit run src/hpame/app.py`
 - Legacy compatibility shims live under `legacy_shims/`
 - Runtime output directories are standardized under `output/` and `tmp/`
+- Workspace navigation and the feature map are defined in `src/hpame/ui/navigation.py`
 - See [docs/architecture.md](docs/architecture.md) for the package boundaries and migration model

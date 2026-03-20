@@ -97,7 +97,67 @@ def email_link():
 st.set_page_config(page_title="Hybrid Perovskite Studio", layout="wide")
 _debug_log("startup: page config set")
 
-st.title("Hybrid :red[Perovskite Studio]")
+st.markdown(
+    """
+    <style>
+    .app-brand-wrap {
+        text-align: center;
+        padding: 0.25rem 0 1.1rem 0;
+    }
+    .app-brand-title {
+        font-size: 2.45rem;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        color: #16202a;
+        line-height: 1.05;
+    }
+    .app-brand-title span {
+        color: #0c877a;
+    }
+    .app-brand-subtitle {
+        margin: 0.6rem auto 0 auto;
+        max-width: 48rem;
+        font-size: 1rem;
+        line-height: 1.55;
+        color: #556371;
+    }
+    .landing-panel {
+        border-radius: 24px;
+        padding: 1.35rem 1.45rem;
+        margin: 0.35rem 0 1.1rem 0;
+        border: 1px solid rgba(49, 51, 63, 0.1);
+        background: linear-gradient(135deg, rgba(252, 253, 255, 1), rgba(241, 247, 246, 1));
+        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+    }
+    .landing-eyebrow {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #5f6d7c;
+        margin-bottom: 0.35rem;
+    }
+    .landing-title {
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #16202a;
+        margin-bottom: 0.35rem;
+    }
+    .landing-copy {
+        font-size: 0.98rem;
+        line-height: 1.6;
+        color: #556371;
+        max-width: 44rem;
+    }
+    </style>
+    <div class="app-brand-wrap">
+        <div class="app-brand-title">Hybrid <span>Perovskite Studio</span></div>
+        <div class="app-brand-subtitle">
+            Analyze, transform, and visualize hybrid perovskite structures and simulation outputs in one workspace.
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 _debug_log("startup: title rendered")
 
 # col1, col2, col3 = st.columns([30,0.5,0.5])
@@ -263,181 +323,511 @@ _debug_log("startup: title rendered")
 
 
 
-# st.divider()
-
-st.subheader("Upload a structure file (:blue[aims geometry] or :blue[CIF]) to get started: ")
-
-
-file_buffer = st.file_uploader("Something", type=[".in", ".cif", ".next_step"], label_visibility='hidden')
-_debug_log("startup: file_uploader rendered")
-
 current_atoms = None
 current_molecules = None
 current_modified_symbols = None
-if 'file_name' not in st.session_state:
+
+if "file_name" not in st.session_state:
     st.session_state.file_name = None
+if "uploaded_structure_name" not in st.session_state:
+    st.session_state.uploaded_structure_name = None
+if "uploaded_structure_bytes" not in st.session_state:
+    st.session_state.uploaded_structure_bytes = None
 
+symmetry_option = False
+com_option = False
+dm_option = False
+polarization_option = False
+distance_option = False
+distortion_option = False
+deviation_calculation_option = False
+ADP_table_option = False
+PDF_option = False
+charge_analysis_option = False
+rotate_option = False
+reflect_option = False
+translation_option = False
+delete_option = False
+interpolate_option = False
+plot_polarization_option = False
+plot_pdos_option = False
+plot_bs_option = False
+plot_spin_option = False
+plot_spin_v2_option = False
+plot_absorption_option = False
+MD_option = False
+MDanalysis_option = False
+script_option = False
+xy_plot_option = False
 
-if file_buffer is not None:
-    _debug_log("upload: file_buffer present")
-    file_name = file_buffer.name
-    file_format = get_file_format(file_name)
-    _debug_log(f"upload: initial format resolved file={file_name} format={file_format}")
+workspace_descriptions = {
+    "Structure": "Upload structures, inspect geometry, and run transformations.",
+    "Electronic": "Explore polarization, DOS, bands, spin, and optical outputs.",
+    "Dynamics": "Review molecular dynamics outputs and trajectory-derived metrics.",
+    "Utilities": "Use supporting scripts and general plotting tools.",
+}
 
-    if file_buffer is not None:
-        file_name = file_buffer.name
-        file_format = get_file_format(file_name)
+st.markdown(
+    """
+    <style>
+    div[data-testid="stRadio"] > label[data-testid="stWidgetLabel"] p {
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"] {
+        gap: 0.65rem;
+        padding: 0.25rem 0 0.1rem 0;
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"] > label {
+        border: 1px solid rgba(49, 51, 63, 0.16);
+        border-radius: 999px;
+        padding: 0.55rem 1rem;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(245, 247, 250, 0.95));
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+        transition: all 0.2s ease;
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
+        border-color: rgba(12, 135, 122, 0.35);
+        box-shadow: 0 10px 22px rgba(12, 135, 122, 0.12);
+    }
+    div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
+        background: linear-gradient(135deg, rgba(230, 246, 243, 1), rgba(214, 240, 236, 1));
+        border-color: rgba(12, 135, 122, 0.65);
+        box-shadow: 0 12px 26px rgba(12, 135, 122, 0.18);
+    }
+    .workspace-card {
+        border-radius: 18px;
+        padding: 1rem 1rem 0.95rem 1rem;
+        min-height: 8.6rem;
+        border: 1px solid rgba(49, 51, 63, 0.12);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 248, 251, 0.96));
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    }
+    .workspace-card.active {
+        border-color: rgba(12, 135, 122, 0.55);
+        background: linear-gradient(135deg, rgba(232, 247, 244, 1), rgba(220, 241, 237, 1));
+        box-shadow: 0 16px 30px rgba(12, 135, 122, 0.14);
+    }
+    .workspace-card-title {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 0.35rem;
+        color: #11212d;
+    }
+    .workspace-card-body {
+        font-size: 0.9rem;
+        line-height: 1.45;
+        color: #4a5565;
+    }
+    .workspace-header {
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #5c6b78;
+        margin-bottom: 0.15rem;
+    }
+    .landing-panel {
+        border-radius: 24px;
+        padding: 1.35rem 1.45rem;
+        margin: 0.35rem 0 1.1rem 0;
+        border: 1px solid rgba(49, 51, 63, 0.1);
+        background: linear-gradient(135deg, rgba(252, 253, 255, 1), rgba(241, 247, 246, 1));
+        box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+    }
+    .landing-eyebrow {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: #5f6d7c;
+        margin-bottom: 0.35rem;
+    }
+    .landing-title {
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #16202a;
+        margin-bottom: 0.35rem;
+    }
+    .landing-copy {
+        font-size: 0.98rem;
+        line-height: 1.6;
+        color: #556371;
+        max-width: 44rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-        if file_buffer is not None:
-            # with st.expander ("Modify bonding rules"):
-            #     st.write('''
-            #     Ensure the connectivities in "See detected molecules" look okay!\n
-            #     If you see isolated inorganic framework that you think should be a layer or a chain, increase the bond distance limit.
-            #                                              ''')
-            #     b_param = st.number_input("Enter value (Å) for relaxing the bond distance limit:", value=0.00)
-            #     st.write("If you see two atoms that should not be bonded (e.g., strong organic-inorganic interaction, type the atom names below")
-            #     exception_list = st.text_input('Enter a comma-separated list of atom names:', 'I, F')
-            #     exception_atom_list = [atom_name.strip() for atom_name in  exception_list.split(',')]
-            try:
-                _debug_log(f"upload: before initialize_structure file={file_buffer.name}")
-                file_format = get_file_format(file_buffer.name)
-                current_atoms, current_molecules, current_modified_symbols = initialize_structure(
-                    file_buffer,
-                    file_format=file_format,
-                    file_name=file_buffer.name,
-                    exceptions=[("F", "I")],
-                    b_p=0,
-                )
-                st.session_state.file_name = file_name
-                _debug_log(
-                    f"upload: after initialize_structure atoms={len(current_atoms)} molecules={len(current_molecules)}"
-                )
-            except Exception as e:
-                _debug_log(f"upload: exception {type(e).__name__}: {e}")
-                st.error(f"Error loading the file: {str(e)}")
-                st.stop()
+if "primary_section" not in st.session_state:
+    st.session_state.primary_section = None
 
-            if current_atoms is None or current_molecules is None or current_modified_symbols is None:
-                st.warning("Structure upload did not complete successfully.")
-                st.stop()
+primary_section = st.session_state.primary_section
+start_page_clicked = False
 
-            output_suffix = ""
-            st.success(
-                f"Loaded structure with {len(current_atoms)} atoms and "
-                f"{len(current_molecules)} detected molecule groups."
+if primary_section is None:
+    st.markdown(
+        """
+        <div class="landing-panel">
+            <div class="landing-eyebrow">Start Here</div>
+            <div class="landing-title">Pick the workspace that matches your task.</div>
+            <div class="landing-copy">
+                Start with Structure when you need to upload or prepare a model. Electronic, Dynamics, and Utilities stay available once you want to move into plotting, trajectory analysis, or supporting tools.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+workspace_columns = st.columns(4)
+for column, workspace_name in zip(workspace_columns, workspace_descriptions):
+    card_class = (
+        "workspace-card active"
+        if workspace_name == primary_section
+        else "workspace-card"
+    )
+    with column:
+        st.markdown(
+            f"""
+            <div class="{card_class}">
+                <div class="workspace-card-title">{workspace_name}</div>
+                <div class="workspace-card-body">{workspace_descriptions[workspace_name]}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        button_label = (
+            f"Open {workspace_name}"
+            if primary_section != workspace_name
+            else f"{workspace_name} Selected"
+        )
+        if st.button(
+            button_label,
+            key=f"workspace_select_{workspace_name.lower()}",
+            use_container_width=True,
+            disabled=primary_section == workspace_name,
+        ):
+            primary_section = workspace_name
+            st.session_state.primary_section = workspace_name
+
+toolbar_col1, toolbar_col2 = st.columns([6, 1.4])
+with toolbar_col1:
+    st.markdown('<div class="workspace-header">Navigation</div>', unsafe_allow_html=True)
+    if primary_section is None:
+        st.subheader("Choose a Workspace")
+    else:
+        st.subheader(f"{primary_section} Workspace")
+with toolbar_col2:
+    if primary_section is not None:
+        st.write("")
+        start_page_clicked = st.button(
+            "Start Page",
+            use_container_width=True,
+            key="workspace_back_to_start",
+        )
+
+if start_page_clicked:
+    primary_section = None
+    st.session_state.primary_section = None
+
+if primary_section is not None:
+    st.caption("Switch workspaces at any time, or return to the start page for a clean overview.")
+
+if primary_section == "Structure":
+    structure_mode = st.radio(
+        "View",
+        options=["Overview", "Analysis", "Transformations", "Interpolation"],
+        horizontal=True,
+    )
+
+    if structure_mode == "Overview":
+        st.info("Upload a structure here, review its summary, and then move into analysis or transformations.")
+        structure_upload = st.file_uploader(
+            "Upload a structure file (aims geometry, CIF, or next_step)",
+            type=["in", "cif", "next_step"],
+            key="structure_workspace_uploader",
+        )
+        _debug_log("structure overview: file_uploader rendered")
+        if structure_upload is not None:
+            st.session_state.uploaded_structure_name = structure_upload.name
+            st.session_state.uploaded_structure_bytes = structure_upload.getvalue()
+            st.session_state.file_name = structure_upload.name
+            _debug_log(
+                f"structure overview: stored upload file={structure_upload.name} bytes={len(st.session_state.uploaded_structure_bytes)}"
+            )
+            st.success(f"Loaded `{structure_upload.name}` into the current workspace.")
+        elif st.session_state.uploaded_structure_name is None:
+            st.caption("No structure loaded yet.")
+        else:
+            st.caption(f"Current structure: `{st.session_state.uploaded_structure_name}`")
+
+    elif structure_mode == "Analysis":
+        analysis_group = st.radio(
+            "Group",
+            options=["Symmetry", "Molecules", "Structure Metrics", "Advanced"],
+            horizontal=True,
+        )
+
+        if analysis_group == "Symmetry":
+            analysis_tool = st.selectbox(
+                "Tool",
+                options=[
+                    "Symmetrize structure",
+                    "Anisotropic displacement parameters",
+                    "Calculate polarization direction",
+                ],
+            )
+        elif analysis_group == "Molecules":
+            analysis_tool = st.selectbox(
+                "Tool",
+                options=[
+                    "Find center of mass",
+                    "Calculate dipole moment",
+                    "Charge analysis",
+                ],
+            )
+        elif analysis_group == "Structure Metrics":
+            analysis_tool = st.selectbox(
+                "Tool",
+                options=[
+                    "Calculate atomic distances",
+                    "Calculate octahedral distortions",
+                    "Calculate percentage deviation",
+                ],
+            )
+        else:
+            analysis_tool = st.selectbox(
+                "Tool",
+                options=[
+                    "PDF analysis",
+                ],
             )
 
-            show_upload_details = st.checkbox(
-                "Show structure details and downloads",
+        symmetry_option = analysis_tool == "Symmetrize structure"
+        com_option = analysis_tool == "Find center of mass"
+        dm_option = analysis_tool == "Calculate dipole moment"
+        polarization_option = analysis_tool == "Calculate polarization direction"
+        distance_option = analysis_tool == "Calculate atomic distances"
+        distortion_option = analysis_tool == "Calculate octahedral distortions"
+        deviation_calculation_option = analysis_tool == "Calculate percentage deviation"
+        ADP_table_option = analysis_tool == "Anisotropic displacement parameters"
+        PDF_option = analysis_tool == "PDF analysis"
+        charge_analysis_option = analysis_tool == "Charge analysis"
+
+    elif structure_mode == "Transformations":
+        transform_group = st.radio(
+            "Group",
+            options=["Molecule Operations", "Lattice Operations"],
+            horizontal=True,
+        )
+        if transform_group == "Molecule Operations":
+            transform_tool = st.selectbox(
+                "Tool",
+                options=[
+                    "Rotation",
+                    "Reflection",
+                    "Translation",
+                    "Deletion",
+                ],
+            )
+        else:
+            transform_tool = st.selectbox(
+                "Tool",
+                options=[
+                    "Translation",
+                    "Deletion",
+                ],
+            )
+        rotate_option = transform_tool == "Rotation"
+        reflect_option = transform_tool == "Reflection"
+        translation_option = transform_tool == "Translation"
+        delete_option = transform_tool == "Deletion"
+
+    elif structure_mode == "Interpolation":
+        st.caption("Interpolation is isolated here because it uses its own file-upload workflow.")
+        interpolate_option = True
+
+elif primary_section == "Electronic":
+    electronic_group = st.radio(
+        "View",
+        options=["Polarization and DOS", "Bands and Spin", "Optical"],
+        horizontal=True,
+    )
+    if electronic_group == "Polarization and DOS":
+        electronic_tool = st.selectbox(
+            "Tool",
+            options=[
+                "Plot polarization",
+                "Plot partial density of states (PDOS)",
+            ],
+        )
+    elif electronic_group == "Bands and Spin":
+        electronic_tool = st.selectbox(
+            "Tool",
+            options=[
+                "Plot bandstructure",
+                "Plot spin texture",
+                "Plot 3D spin texture",
+            ],
+        )
+    else:
+        electronic_tool = st.selectbox(
+            "Tool",
+            options=[
+                "Plot absorption spectra",
+            ],
+        )
+    plot_polarization_option = electronic_tool == "Plot polarization"
+    plot_pdos_option = electronic_tool == "Plot partial density of states (PDOS)"
+    plot_bs_option = electronic_tool == "Plot bandstructure"
+    plot_spin_option = electronic_tool == "Plot spin texture"
+    plot_spin_v2_option = electronic_tool == "Plot 3D spin texture"
+    plot_absorption_option = electronic_tool == "Plot absorption spectra"
+
+elif primary_section == "Dynamics":
+    dynamics_tool = st.radio(
+        "View",
+        options=[
+            "Analyze AIMS MD output",
+            "Trajectory analysis",
+        ],
+        horizontal=True,
+    )
+    MD_option = dynamics_tool == "Analyze AIMS MD output"
+    MDanalysis_option = dynamics_tool == "Trajectory analysis"
+
+elif primary_section == "Utilities":
+    utility_tool = st.radio(
+        "View",
+        options=[
+            "Run your own script",
+            "Plot Data",
+        ],
+        horizontal=True,
+    )
+    script_option = utility_tool == "Run your own script"
+    xy_plot_option = utility_tool == "Plot Data"
+
+
+uploaded_structure_name = st.session_state.uploaded_structure_name
+uploaded_structure_bytes = st.session_state.uploaded_structure_bytes
+if uploaded_structure_name and uploaded_structure_bytes is not None:
+    structure_buffer = io.BytesIO(uploaded_structure_bytes)
+    structure_buffer.name = uploaded_structure_name
+    try:
+        _debug_log(f"upload: before initialize_structure file={uploaded_structure_name}")
+        current_atoms, current_molecules, current_modified_symbols = initialize_structure(
+            structure_buffer,
+            file_format=get_file_format(uploaded_structure_name),
+            file_name=uploaded_structure_name,
+            exceptions=[("F", "I")],
+            b_p=0,
+        )
+        _debug_log(
+            f"upload: after initialize_structure atoms={len(current_atoms)} molecules={len(current_molecules)}"
+        )
+    except Exception as e:
+        _debug_log(f"upload: exception {type(e).__name__}: {e}")
+        st.error(f"Error loading the current structure: {str(e)}")
+        current_atoms = None
+        current_molecules = None
+        current_modified_symbols = None
+
+structure_tool_selected = any(
+    [
+        symmetry_option,
+        com_option,
+        dm_option,
+        polarization_option,
+        distance_option,
+        distortion_option,
+        deviation_calculation_option,
+        ADP_table_option,
+        PDF_option,
+        charge_analysis_option,
+        rotate_option,
+        reflect_option,
+        translation_option,
+        delete_option,
+        interpolate_option,
+    ]
+)
+if current_atoms is None and structure_tool_selected:
+    st.warning("Load a structure from Structure -> Overview before using structure-dependent tools.")
+    symmetry_option = False
+    com_option = False
+    dm_option = False
+    polarization_option = False
+    distance_option = False
+    distortion_option = False
+    deviation_calculation_option = False
+    ADP_table_option = False
+    PDF_option = False
+    charge_analysis_option = False
+    rotate_option = False
+    reflect_option = False
+    translation_option = False
+    delete_option = False
+    interpolate_option = False
+
+
+if current_atoms is not None and primary_section == "Structure":
+    output_suffix = ""
+    context_box = st.container()
+    with context_box:
+        st.markdown("### Current Structure")
+        meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4)
+        meta_col1.metric("File", st.session_state.file_name)
+        meta_col2.metric("Format", get_file_format(st.session_state.file_name))
+        meta_col3.metric("Atoms", len(current_atoms))
+        meta_col4.metric("Molecule Groups", len(current_molecules))
+
+        action_col1, action_col2 = st.columns(2)
+        with action_col1:
+            create_aims_download_file(current_atoms, st.session_state.file_name, output_suffix)
+        with action_col2:
+            create_labelled_download_file(current_atoms, st.session_state.file_name, output_suffix)
+
+        show_structure_details = st.checkbox(
+            "Show structure details",
+            value=False,
+            key="show_structure_details",
+        )
+        if show_structure_details:
+            space_group = print_space_group(current_atoms)
+            with st.expander("Symmetry information", expanded=False):
+                st.markdown(f"```\n{space_group}\n```")
+
+            molecule_list = []
+            for i, molecule in enumerate(current_molecules, 1):
+                molecule_labels = [current_modified_symbols[mol_atom] for mol_atom in molecule]
+                molecule_list.append(f"Molecule {i}: {', '.join(molecule_labels)}")
+
+            molecule_list_formatted = "\n".join(molecule_list)
+            with st.expander("Detected molecules", expanded=False):
+                st.markdown(f"```\n{molecule_list_formatted}\n```")
+
+        with st.expander("3D structure viewer", expanded=False):
+            load_structure_viewer = st.checkbox(
+                "Load 3D structure viewer",
                 value=False,
-                key="show_upload_details",
+                key="load_initial_structure_viewer",
             )
+            if load_structure_viewer:
+                try:
+                    atoms_to_speck(current_atoms, "initialization")
+                except Exception as e:
+                    st.error(f"Error rendering structure viewer: {str(e)}")
+            else:
+                st.caption("Enable the viewer only when needed.")
 
-            if show_upload_details:
-                with st.expander("Get labelled atoms"):
-                    create_labelled_download_file(current_atoms, file_name, output_suffix)
-
-                space_group = print_space_group(current_atoms)
-                with st.expander("See symmetry information"):
-                    st.markdown(f"```\n{space_group}\n```")
-
-                molecule_list = []
-                for i, molecule in enumerate(current_molecules, 1):
-                    molecule_labels = [current_modified_symbols[mol_atom] for mol_atom in molecule]
-                    molecule_list.append(f"Molecule {i}: {', '.join(molecule_labels)}")
-
-                molecule_list_formatted = "\n".join(molecule_list)
-
-                with st.expander("See detected molecules"):
-                    st.markdown(f"```\n{molecule_list_formatted}\n```")
-
-                with st.expander("Get geometry.in"):
-                    create_aims_download_file(current_atoms, file_name, output_suffix)
-
-            with st.expander("See structure"):
-                load_structure_viewer = st.checkbox(
-                    "Load 3D structure viewer",
-                    value=False,
-                    key="load_initial_structure_viewer",
-                )
-                if load_structure_viewer:
-                    try:
-                        atoms_to_speck(current_atoms, "initialization")
-                    except Exception as e:
-                        st.error(f"Error rendering structure viewer: {str(e)}")
-                else:
-                    st.caption("3D structure viewer is disabled by default during upload debugging.")
-
-            # except Exception as e:
-            #     st.error(f"Error: {e}")
-
-
-with st.sidebar:
-    st.sidebar.header("Structure Analysis")
-
-
-
-    #Section 1 - general structure analysis
-    symmetry_option = st.sidebar.checkbox("Symmetrize structure", value=False)
-    com_option = st.sidebar.checkbox("Find center of mass", value=False)
-    dm_option = st.sidebar.checkbox("Calculate dipole moment", value=False)
-    polarization_option = st.sidebar.checkbox("Calculate polarization direction", value=False)
-    distance_option = st.sidebar.checkbox("Calculate atomic distances", value=False)
-    distortion_option = st.sidebar.checkbox("Calculate octahedral distortions", value=False)
-    deviation_calculation_option = st.sidebar.checkbox("Calculate percentage deviation", value=False)
-    ADP_table_option = st.sidebar.checkbox("Anisotropic displacement parameters", value=False)
-    PDF_option = st.sidebar.checkbox("PDF analysis", value=False)
-    charge_analysis_option = st.sidebar.checkbox("Charge analysis", value=False)
-
-    st.divider()
-
-    st.sidebar.header("Structure Transformations")
-    #Section 2 - operations
-    rotate_option = st.sidebar.checkbox("Rotation", value=False)
-    reflect_option = st.sidebar.checkbox("Reflection", value=False)
-    translation_option = st.sidebar.checkbox("Translation", value=False)
-    delete_option = st.sidebar.checkbox("Deletion", value=False)
-    # create_cent_option = st.sidebar.checkbox("Create centrosymmetric structure", value=False, label_visibility='collapsed')
-    interpolate_option = st.sidebar.checkbox("Standard interpolation", value=False)
-    # trans_rotate_option = st.sidebar.checkbox("Interpolation by Translation + Rotation", value=False)
-
-
-    st.divider()
-
-    st.sidebar.header("Electronic Analysis")
-    #Section 3 - data analysis
-    plot_polarization_option = st.sidebar.checkbox("Plot polarization", value=False)
-    plot_pdos_option = st.sidebar.checkbox("Plot partial density of states (PDOS)", value=False)
-    plot_bs_option = st.sidebar.checkbox("Plot bandstructure", value=False)
-    plot_spin_option = st.sidebar.checkbox("Plot spin texture", value=False)
-    plot_spin_v2_option = st.sidebar.checkbox("Plot 3D spin texture", value=False)
-
-    plot_absorption_option = st.sidebar.checkbox("Plot absorption spectra", value=False)
-    # plot_mul_bs_option = st.sidebar.checkbox("Plot Mulliken Bandstructure", value=False)
-
-    st.divider()
-
-    st.sidebar.header("Dynamics Analysis")
-    MD_option = st.sidebar.checkbox("Analyze AIMS MD output", value=False)
-    MDanalysis_option = st.sidebar.checkbox("Trajectory analysis", value=False)
-
-    st.divider()
-
-    st.sidebar.header("Experimental")
-    script_option=st.sidebar.checkbox("Run your own script", value=False)
-    xy_plot_option=st.sidebar.checkbox("Plot Data", value=False)
-
-
-
-if current_atoms is not None:
+        st.divider()
 
     modified_atoms = current_atoms.copy()
     molecules = current_molecules.copy()
-
-
-
-
-
+if current_atoms is not None:
+    modified_atoms = current_atoms.copy()
+    molecules = current_molecules.copy()
     if rotate_option:
         st.header("Rotation", divider='violet')
 

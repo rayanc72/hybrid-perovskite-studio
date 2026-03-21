@@ -1,36 +1,12 @@
-from importlib import import_module
-
 import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
-from pymatgen.io.babel import BabelMolAdaptor
-from pymatgen.io.cif import CifWriter
-from pymatgen.analysis.structure_matcher import StructureMatcher
-import zipfile
-import tempfile
 import pandas as pd
-import streamlit as st
-import plotly.graph_objects as go
-from pymatgen.symmetry.groups import SpaceGroup
-from pymatgen.core.structure import Molecule, IStructure
-from pymatgen.analysis.graphs import MoleculeGraph
-from pymatgen.core.operations import SymmOp
-from pymatgen.analysis.graphs import MoleculeGraph, ConnectedSite
-from pymatgen.util.coord import find_in_coord_list
+from pymatgen.core.structure import Molecule, Structure
+from pymatgen.analysis.graphs import MoleculeGraph, StructureGraph
+from pymatgen.analysis.local_env import CovalentBondNN, JmolNN
 import matplotlib.pyplot as plt
 import networkx as nx
 
-
-def _inject_public_names(module):
-    for name in dir(module):
-        if not name.startswith("_"):
-            globals().setdefault(name, getattr(module, name))
-
-
-for _module_name in (
-    "pymatgen.analysis.dimensionality",
-    "pymatgen.analysis.local_env",
-):
-    _inject_public_names(import_module(_module_name))
 
 def save_molecule_to_xyz(molecule, filename):
     with open(filename, 'w') as f:
@@ -42,34 +18,20 @@ def save_molecule_to_xyz(molecule, filename):
 def draw_molecule_graph(mol_graph):
     fig, ax = plt.subplots()
     nx.draw(mol_graph.graph, with_labels=True, ax=ax)
-    st.pyplot(fig)
+    return fig
+
+
+def _distance_matrix_from_coords(coords):
+    coords = np.asarray(coords, dtype=float)
+    deltas = coords[:, None, :] - coords[None, :, :]
+    return np.linalg.norm(deltas, axis=-1)
 
 def create_distance_matrix(updated_coords):
-    num_atoms = len(updated_coords)
-    distance_matrix = np.zeros((num_atoms, num_atoms))
-
-    for i in range(num_atoms):
-        for j in range(i+1, num_atoms):
-            distance = np.linalg.norm(updated_coords[i] - updated_coords[j])
-            distance_matrix[i, j] = distance
-            distance_matrix[j, i] = distance
-
-    distance_df = pd.DataFrame(distance_matrix)
-    return distance_df
+    return pd.DataFrame(_distance_matrix_from_coords(updated_coords))
 
 def create_distance_matrix_from_structure_graph(structure_graph):
-    num_atoms = len(structure_graph.structure.sites)
     coords = np.array([site.coords for site in structure_graph.structure.sites])
-    distance_matrix = np.zeros((num_atoms, num_atoms))
-
-    for i in range(num_atoms):
-        for j in range(i + 1, num_atoms):
-            distance = np.linalg.norm(coords[i] - coords[j])
-            distance_matrix[i, j] = distance
-            distance_matrix[j, i] = distance
-
-    distance_df = pd.DataFrame(distance_matrix)
-    return distance_df
+    return pd.DataFrame(_distance_matrix_from_coords(coords))
 #
 # def find_large_distance_indices(distance_df, cut_off=None):
 #     if cut_off is None:
@@ -107,31 +69,23 @@ def create_distance_matrix_from_structure_graph(structure_graph):
 #
 #     return min_distance_periodic_images
 
-
-
 def update_coordinates_function(structure):
+    """Translate sites to connected periodic images for a molecular fragment."""
 
-    # Create a new StructureGraph using the new_structure
     jnn = JmolNN()
     new_structure_graph = StructureGraph.with_local_env_strategy(structure, jnn)
-
-    # Initialize a set to store indices of atoms that need their coordinates updated
     indices_need_update = set()
-    # Extract the lattice matrix from the input structure
     lattice_vectors = structure.lattice.matrix
 
-    # Extract the adjacency matrix from the structure graph dictionary
     new_structure_graph_dict = new_structure_graph.as_dict()
     adj_mat = new_structure_graph_dict["graphs"]["adjacency"]
 
-    # Find the indices of atoms connected to periodic images and add them to the set
     indices_need_update.update(
         (adj_mat[i][j]["id"], tuple(adj_mat[i][j]["to_jimage"]))
         for i in range(len(adj_mat))
         for j in range(len(adj_mat[i]))
         if any(adj != 0 for adj in adj_mat[i][j]["to_jimage"])
     )
-    # Add the indices of atoms that are connected to the atoms outside the unit cell
     temp_indices = set(
         (adj_mat[i][j]["id"], tuple(k))
         for i, k in indices_need_update
@@ -140,16 +94,11 @@ def update_coordinates_function(structure):
     )
     indices_need_update.update(temp_indices)
 
-    # Extract the Cartesian coordinates of all atoms in the input structure
     mol_coords = structure.cart_coords
-    # Create a copy of the Cartesian coordinates to store the updated coordinates
     updated_coords = mol_coords.copy()
 
-    # Update the coordinates of the atoms that need to be connected to their periodic images
     for site, direction in indices_need_update:
-        # Compute the translation vector based on the lattice vectors and direction
         translation = np.dot(direction, lattice_vectors)
-        # Update the coordinates of the atom by adding the translation vector
         updated_coords[site] = structure[site].coords + translation
 
     return updated_coords, new_structure_graph
@@ -181,58 +130,39 @@ def update_coordinates_function(structure):
 #
 #     return updated_coords
 
-
-
 def test_connectivity_in_molecule(species, coords):
     test_mol = Molecule(species, coords)
     cnn = CovalentBondNN(tol=0.2)
     test_mol_graph = MoleculeGraph.with_local_env_strategy(test_mol, cnn)
     disconnected_fragment = test_mol_graph.get_disconnected_fragments()
 
-
-    # Check if all the atoms in the molecule are connected
-    all_connected = True
-
-    for i in range(len(test_mol)):
-        connected_sites = test_mol_graph.get_connected_sites(i)
-        if not connected_sites:
-            all_connected = False
-            break
-
-    if not all_connected or len(disconnected_fragment) > 1:
-        return False
-    else:
-        return True
+    all_connected = all(test_mol_graph.get_connected_sites(i) for i in range(len(test_mol)))
+    return all_connected and len(disconnected_fragment) <= 1
 
 
 def get_connected_coordinates(mol_structure, max_iterations=10):
+    if max_iterations < 0:
+        raise ValueError("max_iterations must be non-negative")
 
-    # Extract the species, lattice, and initial coordinates from the input mol_structure object
     species = [site.specie for site in mol_structure.sites]
     lattice = mol_structure.lattice
     current_coords = mol_structure.cart_coords
+    connectivity = test_connectivity_in_molecule(species, current_coords)
 
-    # Initialize iteration counter
+    if connectivity:
+        return current_coords
+
     iteration = 0
-
-    # Perform the loop
     while iteration < max_iterations:
-        # Check the connectivity of the current molecular structure using the test_connectivity_in_molecule function
         connectivity = test_connectivity_in_molecule(species, current_coords)
-
-        # If the connectivity test returns True, break the loop
         if connectivity:
             break
 
-        # If the connectivity test returns False, update the coordinates and create a structure graph using the update_coordinates_function
         new_structure = Structure(lattice, species, current_coords, coords_are_cartesian=True)
         updated_coords, _ = update_coordinates_function(new_structure)
-
-        # Update the current coordinates and increase the iteration counter
         current_coords = updated_coords
         iteration += 1
 
-    # If the connectivity is still False after max_iterations, return None
     if not connectivity:
         return None
 
@@ -241,12 +171,11 @@ def get_connected_coordinates(mol_structure, max_iterations=10):
 
 def get_molecule_object(atoms, molecule):
     molecule_atoms = atoms[molecule]
-
     mol_structure = AseAtomsAdaptor().get_structure(molecule_atoms)
-
     joined_coords = get_connected_coordinates(mol_structure)
 
+    if joined_coords is None:
+        raise ValueError("Could not construct a connected molecule within the maximum number of iterations")
 
     mol = Molecule(mol_structure.species, joined_coords)
-
     return mol

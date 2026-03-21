@@ -71,11 +71,11 @@ This view expects a zipped trajectory directory and a timestep value. Once loade
 ## Code Touchpoints
 
 - UI:
-  [src/hpame/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/app_main.py)
+  [src/hps/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hps/ui/app_main.py)
 - Navigation registry:
-  [src/hpame/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/navigation.py)
+  [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py)
 - MD logic:
-  [src/hpame/domain/md_analysis.py](/Users/rayanchakraborty/hPAME/src/hpame/domain/md_analysis.py)
+  [src/hps/domain/md_analysis.py](/Users/rayanchakraborty/hPAME/src/hps/domain/md_analysis.py)
 - Helper script:
   [create_geometry_zip.pl](/Users/rayanchakraborty/hPAME/create_geometry_zip.pl)
 

@@ -133,22 +133,22 @@ The PDF workflow also exposes optional RDF generation and optional comparison wi
 
 ## Notes And Limitations
 
-- Several tools remain implemented directly inside [src/hpame/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/app_main.py), so UI and scientific logic are still closely coupled.
+- Several tools remain implemented directly inside [src/hps/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hps/ui/app_main.py), so UI and scientific logic are still closely coupled.
 - PDF analysis still creates temporary files during calculation, but upload itself no longer leaves labelled structure files in the repo root.
 - The 3D viewer is opt-in and can be heavier than the basic export paths.
 
 ## Code Touchpoints
 
 - UI and routing:
-  [src/hpame/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/app_main.py)
+  [src/hps/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hps/ui/app_main.py)
 - Navigation registry:
-  [src/hpame/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/navigation.py)
+  [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py)
 - Structure logic:
-  [src/hpame/domain/structure_manager.py](/Users/rayanchakraborty/hPAME/src/hpame/domain/structure_manager.py)
+  [src/hps/domain/structure_manager.py](/Users/rayanchakraborty/hPAME/src/hps/domain/structure_manager.py)
 - Molecule helpers:
-  [src/hpame/domain/molecule_builder.py](/Users/rayanchakraborty/hPAME/src/hpame/domain/molecule_builder.py)
+  [src/hps/domain/molecule_builder.py](/Users/rayanchakraborty/hPAME/src/hps/domain/molecule_builder.py)
 - PDF logic:
-  [src/hpame/domain/pdf_analysis.py](/Users/rayanchakraborty/hPAME/src/hpame/domain/pdf_analysis.py)
+  [src/hps/domain/pdf_analysis.py](/Users/rayanchakraborty/hPAME/src/hps/domain/pdf_analysis.py)
 
 ## Last Verified
 

@@ -54,14 +54,14 @@ Capabilities in the current implementation include:
 ## Notes And Limitations
 
 - Utility workflows are broader and less constrained than the domain-specific workspaces.
-- Some helpers still live directly in [src/hpame/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/app_main.py).
+- Some helpers still live directly in [src/hps/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hps/ui/app_main.py).
 
 ## Code Touchpoints
 
 - UI:
-  [src/hpame/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/app_main.py)
+  [src/hps/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hps/ui/app_main.py)
 - Navigation registry:
-  [src/hpame/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/navigation.py)
+  [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py)
 
 ## Last Verified
 

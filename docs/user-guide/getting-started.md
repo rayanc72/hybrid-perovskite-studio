@@ -10,7 +10,7 @@ Hybrid Perovskite Studio is a Streamlit app for hybrid perovskite structure anal
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[full]"
-streamlit run src/hpame/app.py
+streamlit run src/hps/app.py
 ```
 
 ## First-Time Workflow
@@ -33,7 +33,7 @@ streamlit run src/hpame/app.py
 
 - The app starts on a minimal landing page instead of opening directly into a workflow.
 - The `Browse feature map` expander shows the full tool tree when needed.
-- The visible workspace selectors and feature map are generated from a shared registry in [src/hpame/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hpame/ui/navigation.py).
+- The visible workspace selectors and feature map are generated from a shared registry in [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py).
 
 ## Runtime notes
 

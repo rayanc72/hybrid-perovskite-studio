@@ -22,7 +22,6 @@ streamlit run src/hps/app.py
 - [Getting Started](docs/user-guide/getting-started.md)
 - [Feature Map](docs/feature-map.md)
 - [Workspace Guides](docs/index.md)
-- [Screenshots Guide](docs/user-guide/screenshots.md)
 
 ## Gallery
 

@@ -13,18 +13,6 @@ pip install -e ".[full]"
 streamlit run src/hps/app.py
 ```
 
-If you need the PDF-analysis workflow, install the PDF extra separately:
-
-```bash
-pip install -e ".[pdf]"
-```
-
-On macOS, the PDF extra may also require:
-
-```bash
-brew install gsl
-```
-
 ## First-Time Workflow
 
 1. Start the app.

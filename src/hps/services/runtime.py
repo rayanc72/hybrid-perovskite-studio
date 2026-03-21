@@ -81,7 +81,10 @@ DEPENDENCY_GROUPS: tuple[DependencyGroup, ...] = (
 
 
 def _is_available(module_name: str) -> bool:
-    return find_spec(module_name) is not None
+    try:
+        return find_spec(module_name) is not None
+    except ModuleNotFoundError:
+        return False
 
 
 def grouped_missing_modules() -> dict[str, list[str]]:

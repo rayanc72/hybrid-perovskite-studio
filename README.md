@@ -16,6 +16,17 @@ streamlit run src/hpame/app.py
 - [Getting Started](docs/user-guide/getting-started.md)
 - [Feature Map](docs/feature-map.md)
 - [Workspace Guides](docs/index.md)
+- [Screenshots Guide](docs/user-guide/screenshots.md)
+
+## Gallery
+
+![Landing Page](docs/images/screenshots/landing-page.png)
+
+![Structure Workspace](docs/images/screenshots/structure-workspace.png)
+
+![Band Structure Studio](docs/images/screenshots/band-structure-studio.png)
+
+![Dynamics Workspace](docs/images/screenshots/dynamics-workspace.png)
 
 ## Notes
 

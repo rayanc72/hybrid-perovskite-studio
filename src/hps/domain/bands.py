@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from hpame.tools import plot_band as _plot_band
-from hpame.tools import scan_cbm as _scan_cbm
+from hps.tools import plot_band as _plot_band
+from hps.tools import scan_cbm as _scan_cbm
 
 
 def plot_band_module():

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from hpame.services.runtime import dependency_status_by_group, full_install_command
-from hpame.ui.sidebar import SIDEBAR_SECTIONS
+from hps.services.runtime import dependency_status_by_group, full_install_command
+from hps.ui.sidebar import SIDEBAR_SECTIONS
 
 
 def render_bootstrap_page() -> None:
@@ -37,5 +37,5 @@ def render_bootstrap_page() -> None:
             st.write(f"- {item}")
 
     st.info(
-        "Run `streamlit run src/hpame/app.py` after installing `.[full]` to execute the complete legacy interface."
+        "Run `streamlit run src/hps/app.py` after installing `.[full]` to execute the complete legacy interface."
     )

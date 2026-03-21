@@ -34,6 +34,6 @@ The docs focus on:
 
 The current workspace map and feature tree are defined in:
 
-- [src/hpame/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hpame/ui/navigation.py)
+- [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 
 If the visible navigation changes, that file and the matching workspace doc should be updated together.

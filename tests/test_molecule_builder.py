@@ -15,7 +15,7 @@ import numpy as np
 try:
     from pymatgen.core import Lattice
     from pymatgen.core.structure import Structure
-    from hpame.domain import molecule_builder
+    from hps.domain import molecule_builder
 except ModuleNotFoundError as exc:  # pragma: no cover - environment dependent
     molecule_builder = None
     _IMPORT_ERROR = exc

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hpame.domain import pdf_analysis as _impl
+from hps.domain import pdf_analysis as _impl
 
 
 def calculate_pdf(*args, **kwargs):

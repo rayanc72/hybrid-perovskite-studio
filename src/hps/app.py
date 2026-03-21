@@ -10,8 +10,8 @@ from pathlib import Path
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from hpame.services.runtime import legacy_app_is_runnable
-from hpame.ui import render_bootstrap_page
+from hps.services.runtime import legacy_app_is_runnable
+from hps.ui import render_bootstrap_page
 
 
 def _patch_streamlit_watcher() -> None:
@@ -39,7 +39,7 @@ def main() -> None:
     os.environ.setdefault("STREAMLIT_SERVER_FILE_WATCHER_TYPE", "none")
     _patch_streamlit_watcher()
     if legacy_app_is_runnable():
-        module_name = "hpame.ui.app_main"
+        module_name = "hps.ui.app_main"
         if module_name in sys.modules:
             importlib.reload(sys.modules[module_name])
         else:

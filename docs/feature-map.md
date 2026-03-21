@@ -73,4 +73,4 @@
 
 ## Source Of Truth
 
-The live navigation tree is defined in [src/hpame/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hpame/ui/navigation.py). Update that file if the app navigation changes.
+The live navigation tree is defined in [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py). Update that file if the app navigation changes.

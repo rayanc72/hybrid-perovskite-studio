@@ -682,7 +682,7 @@ def parse_out_file(out_file):
     return df
 
 
-from hpame.tools.scan_cbm import Band
+from hps.tools.scan_cbm import Band
 
 
 def build_k_label_reduce(k_label):

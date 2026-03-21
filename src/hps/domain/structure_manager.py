@@ -59,7 +59,7 @@ for _module_name in (
     "pymatgen.analysis.dimensionality",
     "pymatgen.analysis.local_env",
     "scipy.interpolate",
-    "hpame.domain.molecule_builder",
+    "hps.domain.molecule_builder",
 ):
     _inject_public_names(import_module(_module_name))
 

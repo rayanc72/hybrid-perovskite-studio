@@ -8,7 +8,7 @@ Hybrid Perovskite Studio is a Streamlit app for structure analysis, transformati
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[full]"
-streamlit run src/hpame/app.py
+streamlit run src/hps/app.py
 ```
 
 ## Docs
@@ -30,6 +30,6 @@ streamlit run src/hpame/app.py
 
 ## Notes
 
-- Main entrypoint: `streamlit run src/hpame/app.py`
+- Main entrypoint: `streamlit run src/hps/app.py`
 - Runtime files belong under `tmp/` and `output/`
-- Navigation is defined in `src/hpame/ui/navigation.py`
+- Navigation is defined in `src/hps/ui/navigation.py`

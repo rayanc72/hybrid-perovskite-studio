@@ -1,12 +1,12 @@
 import copy
 
-from hpame.domain import pdf_analysis as pdf_analysis_module
-from hpame.domain import electronic_property as electronic_property_module
-from hpame.domain import md_analysis as md_analysis_module
-from hpame.domain import molecule_builder as molecule_builder_module
-from hpame.domain import structure_manager as structure_manager_module
-from hpame.io.paths import APP_TMP_DIR
-from hpame.ui.navigation import (
+from hps.domain import pdf_analysis as pdf_analysis_module
+from hps.domain import electronic_property as electronic_property_module
+from hps.domain import md_analysis as md_analysis_module
+from hps.domain import molecule_builder as molecule_builder_module
+from hps.domain import structure_manager as structure_manager_module
+from hps.io.paths import APP_TMP_DIR
+from hps.ui.navigation import (
     build_feature_tree,
     group_names,
     render_tree_lines,
@@ -29,7 +29,7 @@ def _debug_log(message):
         fh.write(f"{message}\n")
 
 
-_debug_log("startup: entered hpame.ui.app_main")
+_debug_log("startup: entered hps.ui.app_main")
 
 
 for _module in (

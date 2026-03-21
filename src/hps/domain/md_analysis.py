@@ -28,7 +28,7 @@ from MDAnalysis.transformations import nojump
 from natsort import natsorted
 from scipy.ndimage import gaussian_filter
 
-from hpame.io.paths import APP_TMP_DIR, REPO_ROOT
+from hps.io.paths import APP_TMP_DIR, REPO_ROOT
 
 
 def try_float_conversion(value):

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hpame.domain import electronic_property as _impl
+from hps.domain import electronic_property as _impl
 
 
 def plot_pdos_streamlit(*args, **kwargs):

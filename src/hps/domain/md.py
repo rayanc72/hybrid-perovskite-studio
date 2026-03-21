@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hpame.domain import md_analysis as _impl
+from hps.domain import md_analysis as _impl
 
 
 def process_streams(*args, **kwargs):

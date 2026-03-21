@@ -10,7 +10,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from hpame.io.paths import (
+from hps.io.paths import (
     APP_OUTPUT_DIR,
     APP_TMP_DIR,
     REPO_ROOT,

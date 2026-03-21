@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hpame.domain import structure_manager as _impl
+from hps.domain import structure_manager as _impl
 
 
 def detect_molecules(atoms, exceptions=None, b=0):

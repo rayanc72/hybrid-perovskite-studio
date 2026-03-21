@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from hpame.domain import structure_manager as _impl
+from hps.domain import structure_manager as _impl
 
 
 def get_file_format(file_name: str):

@@ -71,11 +71,11 @@ This view expects a zipped trajectory directory and a timestep value. Once loade
 ## Code Touchpoints
 
 - UI:
-  [src/hpame/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hpame/ui/app_main.py)
+  [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py)
 - Navigation registry:
-  [src/hpame/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hpame/ui/navigation.py)
+  [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 - MD logic:
-  [src/hpame/domain/md_analysis.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hpame/domain/md_analysis.py)
+  [src/hps/domain/md_analysis.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/md_analysis.py)
 - Helper script:
   [create_geometry_zip.pl](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/create_geometry_zip.pl)
 

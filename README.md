@@ -17,8 +17,7 @@ Beyond structure chemistry, HPS also provides tools for analyzing computational 
 
 HPS is an active research software project and is still evolving. 
 It grew out of a longer collection of notebook-based and script-based workflows developed for hybrid-perovskite research, 
-and is gradually being consolidated into a more structured, reusable application.  
-While the codebase is already useful for day-to-day analysis, some workflows remain under active refinement and 
+and is gradually being consolidated into a more structured, reusable application.While the codebase is already useful for day-to-day analysis, some workflows remain under active refinement and 
 edge cases may still appear. The broader goal is to continue expanding HPS into a flexible and maintainable platform for 
 hybrid perovskite modelling, analysis, and visualization.
 

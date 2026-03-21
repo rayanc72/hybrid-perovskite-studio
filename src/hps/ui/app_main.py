@@ -274,9 +274,9 @@ st.markdown(
         --hp-text-muted: #556371;
         --hp-text-subtle: #677787;
         --hp-border: rgba(49, 51, 63, 0.12);
-        --hp-border-strong: rgba(12, 135, 122, 0.4);
-        --hp-accent: #0c877a;
-        --hp-accent-soft: rgba(12, 135, 122, 0.1);
+        --hp-border-strong: rgba(0, 83, 155, 0.38);
+        --hp-accent: #00539B;
+        --hp-accent-soft: rgba(0, 83, 155, 0.1);
         --hp-shadow-sm: 0 8px 20px rgba(15, 23, 42, 0.05);
         --hp-shadow-md: 0 14px 30px rgba(15, 23, 42, 0.07);
         --hp-shadow-lg: 0 18px 38px rgba(15, 23, 42, 0.08);
@@ -357,12 +357,12 @@ st.markdown(
     }
     div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
         border-color: var(--hp-border-strong);
-        box-shadow: 0 10px 22px rgba(12, 135, 122, 0.12);
+        box-shadow: 0 10px 22px rgba(0, 83, 155, 0.12);
     }
     div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
-        background: linear-gradient(135deg, rgba(230, 246, 243, 1), rgba(214, 240, 236, 1));
-        border-color: rgba(12, 135, 122, 0.65);
-        box-shadow: 0 12px 26px rgba(12, 135, 122, 0.18);
+        background: linear-gradient(135deg, rgba(233, 243, 252, 1), rgba(219, 234, 248, 1));
+        border-color: rgba(0, 83, 155, 0.62);
+        box-shadow: 0 12px 26px rgba(0, 83, 155, 0.16);
     }
     div[data-testid="stSelectbox"] > label p,
     div[data-testid="stFileUploader"] > label p,
@@ -406,9 +406,9 @@ st.markdown(
         box-shadow: var(--hp-shadow-md);
     }
     .workspace-card.active {
-        border-color: rgba(12, 135, 122, 0.55);
-        background: linear-gradient(135deg, rgba(232, 247, 244, 1), rgba(220, 241, 237, 1));
-        box-shadow: 0 16px 30px rgba(12, 135, 122, 0.14);
+        border-color: rgba(0, 83, 155, 0.52);
+        background: linear-gradient(135deg, rgba(236, 244, 252, 1), rgba(223, 235, 248, 1));
+        box-shadow: 0 16px 30px rgba(0, 83, 155, 0.14);
     }
     .workspace-card-title {
         font-size: 1rem;
@@ -464,11 +464,11 @@ st.markdown(
         color: var(--hp-accent);
         font-weight: 600;
         text-decoration: none;
-        border-bottom: 1px solid rgba(12, 135, 122, 0.28);
+        border-bottom: 1px solid rgba(0, 83, 155, 0.28);
     }
     .landing-copy a:hover,
     .feature-map-panel a:hover {
-        border-bottom-color: rgba(12, 135, 122, 0.65);
+        border-bottom-color: rgba(0, 83, 155, 0.65);
     }
     .feature-map-panel {
         border-radius: var(--hp-radius-lg);

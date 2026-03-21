@@ -1,5 +1,8 @@
 import hashlib
+from functools import lru_cache
 from importlib import import_module
+from importlib.resources import files
+import json
 import os
 from io import StringIO
 import numpy as np
@@ -21,7 +24,6 @@ from ase.io import read
 from pymatgen.core import Structure
 import shutil
 from shutil import make_archive
-from ipyspeck import stspeck
 from ase.io import write
 from ase.spacegroup import get_spacegroup
 from pymatgen.io.ase import AseAtomsAdaptor
@@ -31,6 +33,7 @@ import zipfile
 import tempfile
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import plotly.graph_objects as go
 import warnings
 from pymatgen.symmetry.groups import SpaceGroup
@@ -1415,11 +1418,29 @@ def generate_key(seed, suffix):
 class StopExecution(Exception):
     def _render_traceback_(self):
         pass
+
+
+def _atoms_to_xyz(atoms):
+    formula = atoms.get_chemical_formula().format()
+    lines = [str(len(atoms)), formula]
+    for atom in atoms:
+        lines.append(
+            f"{atom.symbol} {atom.position[0]:.6f} {atom.position[1]:.6f} {atom.position[2]:.6f}"
+        )
+    return "\n".join(lines)
+
+
+@lru_cache(maxsize=1)
+def _load_3dmol_script() -> str:
+    asset = files("hps.ui").joinpath("assets/3Dmol-min.js")
+    return asset.read_text(encoding="utf-8")
+
+
 def atoms_to_speck(atoms, seed):
     key_x = generate_key(seed, 'supercell_x')
     key_y = generate_key(seed, 'supercell_y')
     key_z = generate_key(seed, 'supercell_z')
-    key_sp_obj = generate_key(seed, 'sp_obj')
+    key_viewer = generate_key(seed, 'viewer')
 
     supercell_x = st.slider("Supercell size in x direction:", 1, 3, 1, key=key_x)
     supercell_y = st.slider("Supercell size in y direction:", 1, 3, 1, key=key_y)
@@ -1427,27 +1448,39 @@ def atoms_to_speck(atoms, seed):
 
     scaling_matrix = [[supercell_x, 0, 0], [0, supercell_y, 0], [0, 0, supercell_z]]
     supercell_atoms = make_supercell(atoms, scaling_matrix)
+    xyz_data = _atoms_to_xyz(supercell_atoms)
+    escaped_xyz = json.dumps(xyz_data)
+    viewer_id = f"molviewer-{key_viewer}"
+    moljs_source = _load_3dmol_script()
 
-    formula = supercell_atoms.get_chemical_formula().format()
-    num_atoms = len(supercell_atoms)
-
-    output = f"{num_atoms}\n{formula}\n"
-
-    for atom in supercell_atoms:
-        output += f"{atom.symbol}    {atom.position[0]:.6f}    {atom.position[1]:.6f}    {atom.position[2]:.6f}\n"
-
-    sp_obj = stspeck.Speck(
-        data=output,
-        brightness=0.55,
-        atomShade=0.2,
-        dofStrength=0.2,
-        width="900px",
-        height="800px",
-        key=key_sp_obj
+    components.html(
+        f"""
+        <div id="{viewer_id}" style="width: 100%; height: 800px; border-radius: 18px; overflow: hidden; border: 1px solid rgba(0, 83, 155, 0.14);"></div>
+        <script>{moljs_source}</script>
+        <script>
+            const container = document.getElementById("{viewer_id}");
+            container.innerHTML = "";
+            const viewer = $3Dmol.createViewer(container, {{
+                backgroundColor: "white"
+            }});
+            const modelData = {escaped_xyz};
+            viewer.addModel(modelData, "xyz");
+            viewer.setStyle({{}}, {{
+                stick: {{
+                    radius: 0.18,
+                    colorscheme: "Jmol"
+                }},
+                sphere: {{
+                    scale: 0.32,
+                    colorscheme: "Jmol"
+                }}
+            }});
+            viewer.zoomTo();
+            viewer.render();
+        </script>
+        """,
+        height=820,
     )
-
-
-    return sp_obj
 
 def create_zip_with_rotated_structures(rotated_atoms_list, file_name):
     output_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".zip", delete=False)

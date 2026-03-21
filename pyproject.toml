@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hybrid-perovskite-studio"
-version = "0.1.2"
+version = "0.1.4"
 description = "Workspace-oriented Streamlit toolkit for hybrid perovskite modeling, analysis, and visualization."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -70,7 +70,6 @@ viz = [
   "bokeh",
   "colorcet",
   "holoviews",
-  "ipyspeck",
   "mpld3",
   "streamlit-bokeh-events",
   "streamlit-extras",
@@ -85,7 +84,6 @@ full = [
   "bokeh",
   "colorcet",
   "holoviews",
-  "ipyspeck",
   "matplotlib",
   "MDAnalysis",
   "mpld3",
@@ -117,6 +115,9 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"hps.ui" = ["assets/*.js"]
 
 [tool.ruff]
 line-length = 100

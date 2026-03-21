@@ -1800,13 +1800,18 @@ if current_atoms is not None:
         st.write(miller_direction)
 
     if PDF_option:
-        render_section_header("Simulate pair distribution function", kicker="Structure Workspace")
+        render_section_header(
+            "Simulate pair distribution function",
+            kicker="Structure Workspace",
+            subtitle="Generate a simulated PDF for the loaded structure. This tool uses the optional PDF analysis stack.",
+        )
 
         if not PDF_ANALYSIS_AVAILABLE:
             st.warning(
-                "PDF analysis requires the optional PDF dependencies. Install them with "
-                "`pip install \"hybrid-perovskite-studio[pdf]\"`."
+                "PDF Analysis is available in this workspace, but the optional PDF dependencies are not installed in the current environment."
             )
+            st.code('pip install "hybrid-perovskite-studio[pdf]"', language="bash")
+            st.info("After installing the PDF extra, restart the app and reopen this tool.")
             st.stop()
 
         # -------------------------------------------------------------------------

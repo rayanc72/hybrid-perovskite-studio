@@ -61,7 +61,6 @@ DEPENDENCY_GROUPS: tuple[DependencyGroup, ...] = (
             "bokeh": "bokeh",
             "colorcet": "colorcet",
             "holoviews": "holoviews",
-            "ipyspeck": "ipyspeck",
             "mpld3": "mpld3",
             "streamlit_bokeh_events": "streamlit-bokeh-events",
             "streamlit_extras": "streamlit-extras",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hybrid-perovskite-studio"
-version = "0.1.1"
+version = "0.1.2"
 description = "Workspace-oriented Streamlit toolkit for hybrid perovskite modeling, analysis, and visualization."
 readme = "README.md"
 requires-python = ">=3.11"

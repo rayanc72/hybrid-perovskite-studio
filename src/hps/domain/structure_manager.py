@@ -32,6 +32,7 @@ import tempfile
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
+import warnings
 from pymatgen.symmetry.groups import SpaceGroup
 from pymatgen.core.structure import Molecule
 from pymatgen.core.structure import Structure
@@ -82,9 +83,43 @@ def read_structure_file(fileobj, file_format='aims'):
     with tempfile.NamedTemporaryFile(mode='w+b', suffix=f'.{file_format}', delete=False) as temp_file:
         temp_file.write(fileobj.getvalue())
         temp_file.flush()
-        atoms = read(temp_file.name, format=file_format)
+        if file_format == "cif":
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=r"crystal system '.*' is not interpreted for space group .*",
+                    category=UserWarning,
+                    module=r"ase\.io\.cif",
+                )
+                atoms = read(temp_file.name, format=file_format)
+        else:
+            atoms = read(temp_file.name, format=file_format)
     os.unlink(temp_file.name)  # Remove the temporary file
     return atoms
+
+
+def _spglib_cell(atoms):
+    return (
+        atoms.cell.array,
+        atoms.get_scaled_positions(),
+        atoms.get_atomic_numbers(),
+    )
+
+
+def _spacegroup_dataset(atoms, symprec=1e-3):
+    dataset = spglib.get_symmetry_dataset(_spglib_cell(atoms), symprec=symprec)
+    if dataset is None:
+        raise ValueError("Space group could not be determined for the given structure.")
+    return dataset
+
+
+def _suppress_spglib_dict_deprecation() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        message=r"dict interface \(SpglibDataset\['.*'\]\) is deprecated.*",
+        category=DeprecationWarning,
+        module=r"spglib\.spglib",
+    )
 
 def initialize_structure(uploaded_data, file_format, file_name, exceptions=None,b_p=0):
     atoms = read_structure_file(uploaded_data, file_format=file_format)
@@ -911,8 +946,11 @@ def find_translation_to_restore_symmetry(df_centroids, lattice_vectors, threshol
 
 
 def print_space_group(atoms, symprec=1e-3):
-    space_group = get_spacegroup(atoms, symprec=symprec)
-    formatted_space_group = f"Space Group: {space_group}"
+    dataset = _spacegroup_dataset(atoms, symprec=symprec)
+    international = dataset.international
+    number = dataset.number
+    hall = dataset.hall
+    formatted_space_group = f"Space Group: {international} (No. {number}, Hall: {hall})"
     return formatted_space_group
 
 # def write_cif_with_higher_symmetry(atoms, symprec_lower, symprec_upper, selected_option):
@@ -946,9 +984,11 @@ def calculate_space_groups(atoms, symprec_lower, symprec_upper, angle_tol):
     for symprec in symprec_list:
         try:
             structure = AseAtomsAdaptor.get_structure(atoms)
-            space_group_an = SpacegroupAnalyzer(structure, symprec=symprec, angle_tolerance=angle_tol)
-            space_group_symbol = space_group_an.get_space_group_symbol()
-            point_group_symbol = space_group_an.get_point_group_symbol()
+            with warnings.catch_warnings():
+                _suppress_spglib_dict_deprecation()
+                space_group_an = SpacegroupAnalyzer(structure, symprec=symprec, angle_tolerance=angle_tol)
+                space_group_symbol = space_group_an.get_space_group_symbol()
+                point_group_symbol = space_group_an.get_point_group_symbol()
             if space_group_symbol is not None:
                 space_groups.append((space_group_symbol, point_group_symbol))
             else:
@@ -974,8 +1014,10 @@ def extract_symprec_from_string(selected_string):
 
 def generate_symmetrized_structure(atoms, symprec, angle_tol):
     structure = AseAtomsAdaptor.get_structure(atoms)
-    space_group_analyzer = SpacegroupAnalyzer(structure, symprec=symprec, angle_tolerance=angle_tol)
-    return space_group_analyzer.get_symmetrized_structure()
+    with warnings.catch_warnings():
+        _suppress_spglib_dict_deprecation()
+        space_group_analyzer = SpacegroupAnalyzer(structure, symprec=symprec, angle_tolerance=angle_tol)
+        return space_group_analyzer.get_symmetrized_structure()
 
 
 
@@ -1316,7 +1358,7 @@ def interpolate_inorganic_lattice(atoms1, atoms2, n):
     return interpolated_atoms_list
 
 def extended_symmetry_info(atoms, symprec=1e-3):
-    space_group_no = get_spacegroup(atoms, symprec=symprec).no
+    space_group_no = _spacegroup_dataset(atoms, symprec=symprec).number
     space_group_info = SpaceGroup.from_int_number(space_group_no)
     space_group_info_lst = {}
     for idx, op in enumerate(space_group_info):

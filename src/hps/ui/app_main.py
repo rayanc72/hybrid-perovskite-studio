@@ -59,7 +59,6 @@ from diffpy.pdffit2 import PdfFit
 import requests
 from PIL import Image
 from streamlit_lottie import st_lottie
-import streamlit_authenticator as stauth
 # from streamlit_ketcher import st_ketcher
 from streamlit_extras.mention import mention
 from streamlit_extras.jupyterlite import jupyterlite
@@ -78,31 +77,8 @@ import matplotlib.pyplot as plt
 # from diffpy.srreal.structureadapter import loadStructure
 # from diffpy.srreal.pdfcalculator import DebyePDFCalculator
 # from pymatgen.io.cif import CifWriter
-
-
-
-
 mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
-
-import yaml
-def twitter_link():
-    twitter_mention = mention(
-        label="",
-        icon="twitter",
-        url="https://www.twitter.com/padfoot_c4",
-        write=False,
-    )
-    st.write(f"{twitter_mention}", unsafe_allow_html=True)
-def email_link():
-    inline_mention = mention(
-        label="",
-        icon="✉️",
-        url="mailto:rayan.chakraborty@duke.edu",
-        write=False,
-    )
-    st.write(f"{inline_mention}", unsafe_allow_html=True)
-
 
 def render_section_header(title, kicker=None, subtitle=None):
     kicker_html = f'<div class="section-kicker">{kicker}</div>' if kicker else ""
@@ -134,58 +110,6 @@ st.markdown(
 )
 _debug_log("startup: title rendered")
 
-# col1, col2, col3 = st.columns([30,0.5,0.5])
-# with col2:
-#     email_link()
-# with col3:
-#     twitter_link()
-
-
-# from yaml.loader import SafeLoader
-# with open('./login_info.yaml') as file:
-#     config = yaml.load(file, Loader=SafeLoader)
-#
-#
-#
-# authenticator = stauth.Authenticate(
-#     config['credentials'],
-#     config['cookie']['name'],
-#     config['cookie']['key'],
-#     config['cookie']['expiry_days'],
-#     config['preauthorized']
-# )
-#
-# name, authentication_status, username = authenticator.login('Login', 'sidebar')
-#
-#
-#
-# if st.session_state["authentication_status"]:
-#     authenticator.logout('Logout', 'sidebar', key='unique_key')
-#     st.write(f'Welcome, *{st.session_state["name"]}*')
-# elif st.session_state["authentication_status"] is False:
-#     st.error('Username/password is incorrect')
-#     with st.expander("Register"):
-#         try:
-#             if authenticator.register_user('Register user', preauthorization=False):
-#                 st.success('User registered successfully')
-#                 with open('./login_info.yaml', 'w') as file:
-#                     yaml.dump(config, file, default_flow_style=False)
-#         except Exception as e:
-#             st.error(e)
-#     st.stop()
-# elif st.session_state["authentication_status"] is None:
-#     st.warning('Expand sidebar to login')
-#     with st.expander("Register"):
-#         try:
-#             if authenticator.register_user('Register user', preauthorization=False):
-#                 st.success('User registered successfully')
-#                 with open('./login_info.yaml', 'w') as file:
-#                     yaml.dump(config, file, default_flow_style=False)
-#         except Exception as e:
-#             st.error(e)
-#     st.stop()
-
-
 # st.divider()
 # st.latex(r'''\rm Download\; a\;  structure\;  file\;  from\;  HybriD^3:''')
 # with st.expander("Expand for options"):
@@ -205,7 +129,6 @@ _debug_log("startup: title rendered")
     #
     # if dataset_id:  # If dataset ID is provided, it takes precedence
     #     try:
-    #         zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
     #         response = requests.get(zip_url, stream=True)
     #         response.raise_for_status()
     #

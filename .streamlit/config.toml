@@ -3,3 +3,11 @@ fileWatcherType = "poll"
 
 [browser]
 gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#0c877a"
+backgroundColor = "#f5f8f9"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#16202a"
+font = "sans serif"

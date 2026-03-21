@@ -11,6 +11,8 @@ HPS is an active research software project and is still evolving. It grew out of
 ## Install
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install hybrid-perovskite-studio
 ```
 
@@ -23,6 +25,8 @@ hps
 For the full optional stack:
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install "hybrid-perovskite-studio[full]"
 ```
 

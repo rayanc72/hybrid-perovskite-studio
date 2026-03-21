@@ -4,7 +4,16 @@
 
 Hybrid Perovskite Studio is a Streamlit app for hybrid perovskite structure analysis, structure transformation, electronic-output visualization, molecular-dynamics workflows, and utility-style plotting or scripting tools.
 
-## Run the app
+## Install and run the app
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install "hybrid-perovskite-studio[full]"
+hps
+```
+
+## Local development
 
 ```bash
 python3 -m venv .venv

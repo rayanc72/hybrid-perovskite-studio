@@ -34,6 +34,6 @@ The docs focus on:
 
 The current workspace map and feature tree are defined in:
 
-- [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py)
+- [src/hps/ui/navigation.py](../src/hps/ui/navigation.py)
 
 If the visible navigation changes, that file and the matching workspace doc should be updated together.

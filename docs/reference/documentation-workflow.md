@@ -17,7 +17,7 @@ Keep documentation changes scoped to the exact functionality that changed so fea
 When a feature changes:
 
 1. Update the matching file in `docs/features/`.
-2. Update [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py) if the visible navigation or feature tree changed.
+2. Update [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py) if the visible navigation or feature tree changed.
 3. Update `docs/changelog.md` if behavior, UI labels, dependencies, or outputs changed.
 4. Update `docs/index.md` if a workspace doc is added or removed.
 5. Update `docs/architecture.md` only if package structure, module ownership, or runtime boundaries changed.
@@ -40,7 +40,7 @@ Each workspace file should include:
 Before merging a feature change:
 
 - Confirm the described workspace labels still match the app.
-- Confirm the feature tree still matches [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py).
+- Confirm the feature tree still matches [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py).
 - Confirm the described outputs still exist.
 - Confirm the listed code touchpoints still point to the active implementation.
 - Add a short entry to `docs/changelog.md` if users will notice the change.

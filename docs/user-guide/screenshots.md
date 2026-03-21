@@ -30,5 +30,5 @@
 
 ## GitHub Landing Page
 
-- The main repository landing page uses these images in [README.md](/Users/rayanchakraborty/hPAME/README.md).
+- The main repository landing page uses these images in [README.md](../../README.md).
 - Updating the files in `docs/images/screenshots/` updates the GitHub gallery automatically.

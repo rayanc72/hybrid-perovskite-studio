@@ -222,9 +222,9 @@
 - Bandstructure plotting uses Matplotlib.
 - Brillouin-zone plotting uses Plotly.
 - The module combines UI logic in:
-  - [src/hps/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hps/ui/app_main.py)
+  - [src/hps/ui/app_main.py](../../src/hps/ui/app_main.py)
 - Domain and plotting helpers live in:
-  - [src/hps/domain/electronic_property.py](/Users/rayanchakraborty/hPAME/src/hps/domain/electronic_property.py)
+  - [src/hps/domain/electronic_property.py](../../src/hps/domain/electronic_property.py)
 
 ## Typical Workflow
 

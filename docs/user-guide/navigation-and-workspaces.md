@@ -38,7 +38,7 @@ The `Browse feature map` expander shows a tree of the app’s current capabiliti
 
 This tree is generated from:
 
-- [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py)
+- [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py)
 
 That file is the current single source of truth for:
 
@@ -69,4 +69,4 @@ The Structure workspace is more layered than the others:
 When the app navigation changes, the documentation should be updated in two places:
 
 - the relevant workspace guide in `docs/features/`
-- [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py) if the visible feature tree changed
+- [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py) if the visible feature tree changed

@@ -73,4 +73,4 @@
 
 ## Source Of Truth
 
-The live navigation tree is defined in [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py). Update that file if the app navigation changes.
+The live navigation tree is defined in [src/hps/ui/navigation.py](../src/hps/ui/navigation.py). Update that file if the app navigation changes.

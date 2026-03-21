@@ -17,8 +17,8 @@
 - Added expandable dataset summary cards with file-detection status plus VBM/CBM and band-gap details.
 - Replaced the older purple divider-style section headers across the app with consistent card-style section headers.
 - Moved several section-level helper texts into the new card headers for a cleaner, more consistent layout.
-- Added dedicated documentation for the bandstructure module in [docs/features/band-structure-studio.md](/Users/rayanchakraborty/hPAME/docs/features/band-structure-studio.md).
-- Linked the new bandstructure documentation from [docs/index.md](/Users/rayanchakraborty/hPAME/docs/index.md) and [docs/features/electronic-workspace.md](/Users/rayanchakraborty/hPAME/docs/features/electronic-workspace.md).
+- Added dedicated documentation for the bandstructure module in [docs/features/band-structure-studio.md](features/band-structure-studio.md).
+- Linked the new bandstructure documentation from [docs/index.md](index.md) and [docs/features/electronic-workspace.md](features/electronic-workspace.md).
 - Cleaned up `molecule_builder.py`, `pdf_analysis.py`, `electronic_property.py`, and `md_analysis.py` to reduce dead code, duplicate imports, and legacy side effects.
 
 ## 2026-03-19
@@ -27,7 +27,7 @@
 - Moved structure upload into `Structure -> Overview`.
 - Added a `Current Structure` summary card scoped to the Structure workspace.
 - Added an optional `Browse feature map` tree for navigating the full tool surface.
-- Introduced a shared navigation registry in [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py) so the visible selectors and feature map stay aligned.
+- Introduced a shared navigation registry in [src/hps/ui/navigation.py](../src/hps/ui/navigation.py) so the visible selectors and feature map stay aligned.
 - Stopped writing labelled uploaded structures into the repo root during initialization.
 
 ## Unreleased

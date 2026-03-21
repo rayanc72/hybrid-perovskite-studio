@@ -66,18 +66,18 @@ This view expects a zipped trajectory directory and a timestep value. Once loade
 
 - MD workflows depend on optional MDAnalysis-related packages.
 - Trajectory analysis assumes specific input conventions for extracted frame data.
-- The helper script [create_geometry_zip.pl](/Users/rayanchakraborty/hPAME/create_geometry_zip.pl) remains part of the direct MD-output path.
+- The helper script [create_geometry_zip.pl](../../create_geometry_zip.pl) remains part of the direct MD-output path.
 
 ## Code Touchpoints
 
 - UI:
-  [src/hps/ui/app_main.py](/Users/rayanchakraborty/hPAME/src/hps/ui/app_main.py)
+  [src/hps/ui/app_main.py](../../src/hps/ui/app_main.py)
 - Navigation registry:
-  [src/hps/ui/navigation.py](/Users/rayanchakraborty/hPAME/src/hps/ui/navigation.py)
+  [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py)
 - MD logic:
-  [src/hps/domain/md_analysis.py](/Users/rayanchakraborty/hPAME/src/hps/domain/md_analysis.py)
+  [src/hps/domain/md_analysis.py](../../src/hps/domain/md_analysis.py)
 - Helper script:
-  [create_geometry_zip.pl](/Users/rayanchakraborty/hPAME/create_geometry_zip.pl)
+  [create_geometry_zip.pl](../../create_geometry_zip.pl)
 
 ## Last Verified
 

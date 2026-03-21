@@ -39,4 +39,3 @@ streamlit run src/hpame/app.py
 
 - Local secrets belong in `.streamlit/secrets.toml`.
 - Runtime-generated artifacts should live under `tmp/` or `output/`.
-- Archived compatibility shims live under `legacy_shims/` and are not the primary runtime path.

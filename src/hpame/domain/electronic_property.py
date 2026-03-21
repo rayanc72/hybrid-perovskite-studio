@@ -3,23 +3,19 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import streamlit as st
 from io import StringIO
-import io
 import math
-from math import pi
 import pandas as pd
 import holoviews as hv
-from holoviews import opts
-hv.extension('bokeh')
-import holoviews as hv
-import pandas as pd
-import numpy as np
-from holoviews import opts
-from bokeh.plotting import figure, show
-import streamlit_bokeh_events as bokeh_events
-from bokeh.models import Span
 import re
 import colorcet as cc
 from plotly.subplots import make_subplots
+from itertools import cycle
+from matplotlib.colors import Normalize
+from matplotlib.cm import ScalarMappable
+from scipy.interpolate import griddata
+from scipy.spatial import Voronoi
+
+hv.extension('bokeh')
 
 
 def plot_pdos_streamlit(dos_data, shift, plot_range):
@@ -85,11 +81,11 @@ def plot_pdos_streamlit(dos_data, shift, plot_range):
 
 class Input(object):
 
-    def __init__(self, latvec=[], species_id={}, k_path=[], band_sampling=[]):
-        self.latvec = latvec
-        self.species_id = species_id
-        self.k_path = k_path
-        self.band_sampling = band_sampling
+    def __init__(self, latvec=None, species_id=None, k_path=None, band_sampling=None):
+        self.latvec = [] if latvec is None else latvec
+        self.species_id = {} if species_id is None else species_id
+        self.k_path = [] if k_path is None else k_path
+        self.band_sampling = [] if band_sampling is None else band_sampling
 
     def process_geometry_file(self, file):
         count = 1
@@ -210,6 +206,7 @@ def process_geometry_file(uploaded_file):
         lattice_vectors.append(latvec[j])
         reciprocal_lattice_vectors.append(rlatvec[j])
 
+    uploaded_file.seek(0)
     return lattice_vectors, reciprocal_lattice_vectors
 
 
@@ -255,8 +252,189 @@ def process_control_file(uploaded_file, rlatvec):
         xvals[i] = [j + band_len_tot[i] for j in xvals[i]]
 
     band_len_tot.append(xvals[-1][-1])
+    uploaded_file.seek(0)
 
     return k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot
+
+
+def _build_brillouin_zone_data(reciprocal_lattice_vectors):
+    reciprocal_lattice_vectors = np.array(reciprocal_lattice_vectors, dtype=float)
+    lattice_points = []
+    point_map = []
+    for i in range(-1, 2):
+        for j in range(-1, 2):
+            for k in range(-1, 2):
+                frac = np.array([i, j, k], dtype=float)
+                lattice_points.append(frac @ reciprocal_lattice_vectors)
+                point_map.append((i, j, k))
+
+    lattice_points = np.array(lattice_points)
+    vor = Voronoi(lattice_points)
+    origin_index = point_map.index((0, 0, 0))
+    region_index = vor.point_region[origin_index]
+    region = vor.regions[region_index]
+    if not region or any(vertex_index < 0 for vertex_index in region):
+        raise ValueError("Could not construct a finite Brillouin zone from the uploaded lattice vectors.")
+
+    vertices = vor.vertices[region]
+    ridge_segments = []
+    for ridge_points, ridge_vertices in zip(vor.ridge_points, vor.ridge_vertices):
+        if origin_index in ridge_points and all(vertex_index >= 0 for vertex_index in ridge_vertices):
+            ridge = vor.vertices[ridge_vertices]
+            ridge_segments.append(ridge)
+
+    return vertices, ridge_segments
+
+
+def build_brillouin_zone_figure(uploaded_files, dataset_label=None):
+    geometry_file = next((file for file in uploaded_files if file.name == 'geometry.in'), None)
+    control_file = next((file for file in uploaded_files if file.name == 'control.in'), None)
+    if geometry_file is None:
+        raise ValueError("`geometry.in` is required to build the Brillouin-zone plot.")
+
+    _, reciprocal_lattice_vectors = process_geometry_file(geometry_file)
+    vertices, ridge_segments = _build_brillouin_zone_data(reciprocal_lattice_vectors)
+
+    fig = go.Figure()
+
+    for ridge in ridge_segments:
+        closed_ridge = np.vstack([ridge, ridge[0]])
+        fig.add_trace(
+            go.Scatter3d(
+                x=closed_ridge[:, 0],
+                y=closed_ridge[:, 1],
+                z=closed_ridge[:, 2],
+                mode="lines",
+                line=dict(color="black", width=4),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
+    if control_file is not None:
+        k_label, kpoint, *_ = process_control_file(control_file, reciprocal_lattice_vectors)
+        seen_labels = set()
+        label_x = []
+        label_y = []
+        label_z = []
+        label_text = []
+        for segment_index, points in enumerate(kpoint):
+            start_frac = np.array(points[:3], dtype=float)
+            end_frac = np.array(points[3:6], dtype=float)
+            start_cart = start_frac @ np.array(reciprocal_lattice_vectors)
+            end_cart = end_frac @ np.array(reciprocal_lattice_vectors)
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[start_cart[0], end_cart[0]],
+                    y=[start_cart[1], end_cart[1]],
+                    z=[start_cart[2], end_cart[2]],
+                    mode="lines",
+                    line=dict(color="crimson", width=6),
+                    showlegend=False,
+                    hovertemplate="k-path segment %{x:.3f}, %{y:.3f}, %{z:.3f}<extra></extra>",
+                )
+            )
+            start_label, end_label = k_label[segment_index]
+            for label, point in ((start_label, start_cart), (end_label, end_cart)):
+                display_label = label.replace('Gamma', 'Γ').replace('G', 'Γ')
+                dedupe_key = (display_label, tuple(np.round(point, 8)))
+                if dedupe_key not in seen_labels:
+                    label_x.append(point[0])
+                    label_y.append(point[1])
+                    label_z.append(point[2])
+                    label_text.append(display_label)
+                    seen_labels.add(dedupe_key)
+
+        if label_text:
+            fig.add_trace(
+                go.Scatter3d(
+                    x=label_x,
+                    y=label_y,
+                    z=label_z,
+                    mode="text",
+                    text=label_text,
+                    textfont=dict(color="navy", size=16),
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+
+    reciprocal_vectors = np.array(reciprocal_lattice_vectors)
+    vector_traces = []
+    for index, vec in enumerate(reciprocal_vectors, start=1):
+        fig.add_trace(
+            go.Scatter3d(
+                x=[0, vec[0]],
+                y=[0, vec[1]],
+                z=[0, vec[2]],
+                mode="lines",
+                line=dict(color="gray", width=5),
+                showlegend=False,
+                hovertemplate=f"b{index}<extra></extra>",
+            )
+        )
+        vector_traces.append((vec[0], vec[1], vec[2], f"b{index}"))
+
+    if vector_traces:
+        fig.add_trace(
+            go.Scatter3d(
+                x=[item[0] for item in vector_traces],
+                y=[item[1] for item in vector_traces],
+                z=[item[2] for item in vector_traces],
+                mode="text",
+                text=[item[3] for item in vector_traces],
+                textfont=dict(color="gray", size=14),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
+    max_extent = max(np.max(np.abs(vertices)), np.max(np.abs(reciprocal_vectors)))
+    axis_limit = max_extent * 1.15 if max_extent > 0 else 1.0
+    title = "Brillouin Zone"
+    if dataset_label:
+        title = f"{title}: {dataset_label}"
+
+    fig.update_layout(
+        title=title,
+        title_font=dict(size=24),
+        width=950,
+        height=850,
+        scene=dict(
+            xaxis=dict(
+                title="kx",
+                range=[-axis_limit, axis_limit],
+                showbackground=False,
+                showgrid=False,
+                zeroline=False,
+                title_font=dict(size=18),
+                tickfont=dict(size=14),
+            ),
+            yaxis=dict(
+                title="ky",
+                range=[-axis_limit, axis_limit],
+                showbackground=False,
+                showgrid=False,
+                zeroline=False,
+                title_font=dict(size=18),
+                tickfont=dict(size=14),
+            ),
+            zaxis=dict(
+                title="kz",
+                range=[-axis_limit, axis_limit],
+                showbackground=False,
+                showgrid=False,
+                zeroline=False,
+                title_font=dict(size=18),
+                tickfont=dict(size=14),
+            ),
+            aspectmode="cube",
+        ),
+        margin=dict(l=0, r=0, t=50, b=0),
+        showlegend=False,
+    )
+
+    return fig
 
 
 def parse_band_out_files(uploaded_files, energyshift=None):
@@ -289,10 +467,18 @@ def parse_band_out_files(uploaded_files, energyshift=None):
     return bands_all_files
 
 
-def plot_bands(ax, bands_all_files, xvals=None, plot_color='blue'):
+def plot_bands(ax, bands_all_files, xvals=None, plot_color='blue', legend_label=None):
+    legend_used = False
     for file_id, bands in enumerate(bands_all_files):
         for band_id, band in enumerate(bands):
-            ax.plot(xvals[file_id], band, color=plot_color, lw=2)
+            ax.plot(
+                xvals[file_id],
+                band,
+                color=plot_color,
+                lw=2,
+                label=legend_label if legend_label and not legend_used else None,
+            )
+            legend_used = True
     ax.axhline(0, color='k', linestyle = '--', lw=1).set_dashes([5,5])
     # Clear the default x-tick labels
     ax.set_xticks([])
@@ -362,7 +548,7 @@ def plot_energy_contours(ax, kx, ky, energy, energy_shift, levels=15, cmap_type=
 def plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, scale):
     norm = plt.Normalize(color_component.min(), color_component.max())
     quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm, alpha=1, width=0.005, headlength=4.0, headwidth=3.0, headaxislength=3.0)
-    plt.colorbar(quivers, ax=ax).set_label(f'$<\sigma_{spin_direction}>$ component')
+    plt.colorbar(quivers, ax=ax).set_label(rf'$<\sigma_{{{spin_direction}}}>$ component')
 
 def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scale, axis_limits=None):
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -496,34 +682,106 @@ def parse_out_file(out_file):
     return df
 
 
-from hpame.tools.scan_cbm import Band, Input
+from hpame.tools.scan_cbm import Band
+
+
+def build_k_label_reduce(k_label):
+    """Collapse pairwise segment labels into the displayed x-axis label sequence."""
+    k_label_reduce = []
+    for k_pair in k_label:
+        for i, k in enumerate(k_pair):
+            if len(k_label_reduce) == 0:
+                k_label_reduce.append(k)
+            elif i == 0 and k != k_label_reduce[-1]:
+                k_label_reduce[-1] = k_label_reduce[-1] + "|" + k
+            elif i == 0 and k == k_label_reduce[-1]:
+                continue
+            else:
+                k_label_reduce.append(k)
+    return k_label_reduce
+
+
+def parse_segment_selection(segment_text):
+    """Parse a user string like '1, 3, 5-7' into one-based segment indices."""
+    if not segment_text or not str(segment_text).strip():
+        return None
+
+    segments = set()
+    for chunk in str(segment_text).split(","):
+        item = chunk.strip()
+        if not item:
+            continue
+        if "-" in item:
+            start_text, end_text = item.split("-", 1)
+            start = int(start_text.strip())
+            end = int(end_text.strip())
+            if start <= 0 or end <= 0:
+                raise ValueError("Segment indices must be positive integers.")
+            if end < start:
+                raise ValueError("Segment ranges must be ascending, e.g. 3-5.")
+            segments.update(range(start, end + 1))
+        else:
+            value = int(item)
+            if value <= 0:
+                raise ValueError("Segment indices must be positive integers.")
+            segments.add(value)
+    return sorted(segments)
+
+
+def parse_label_offset_map(offset_text):
+    """Parse label-offset overrides like '2:-0.08, 5:-0.15'."""
+    offset_map = {}
+    if not offset_text or not str(offset_text).strip():
+        return offset_map
+
+    for chunk in str(offset_text).split(","):
+        item = chunk.strip()
+        if not item:
+            continue
+        if ":" not in item:
+            raise ValueError("Use label offsets in the form '2:-0.08, 5:-0.15'.")
+        index_text, offset_value = item.split(":", 1)
+        label_index = int(index_text.strip())
+        if label_index <= 0:
+            raise ValueError("Label indices must be positive integers.")
+        offset_map[label_index - 1] = float(offset_value.strip())
+    return offset_map
 
 def get_file_uploads(num_data_sets, default_colors):
 
     if "file_uploader_key" not in st.session_state:
         st.session_state["file_uploader_key"] = 0
 
-    if "uploaded_files" not in st.session_state:
-        st.session_state["uploaded_files"] = []
-
-
     uploaded_files = []
     colors = []
+    legend_labels = []
     energyshifts = []
-    all_band_data_VBM = []
-    all_band_data_CBM = []
+    uploader_generation = st.session_state["file_uploader_key"]
 
     for i in range(num_data_sets):
+        dataset_uploader_key = f"bandstructure_files_{uploader_generation}_{i}"
+        dataset_color_key = f"bandstructure_color_{uploader_generation}_{i}"
+        dataset_legend_key = f"bandstructure_legend_{uploader_generation}_{i}"
         st.text(f"Upload files for data set {i + 1}:")
-        files = st.file_uploader(f"Data set {i + 1} files", type=['in', 'out'], accept_multiple_files=True,
-                                 key=st.session_state["file_uploader_key"])
+        files = st.file_uploader(
+            f"Data set {i + 1} files",
+            type=['in', 'out'],
+            accept_multiple_files=True,
+            key=dataset_uploader_key,
+        )
         color = st.text_input(f"Color for data set {i + 1} (optional):",
-                              value=default_colors[i % len(default_colors)], key=f"color{i + 1}")
+                              value=default_colors[i % len(default_colors)], key=dataset_color_key)
+        legend_label = st.text_input(
+            f"Legend label for data set {i + 1} (optional):",
+            value=f"Data set {i + 1}",
+            key=dataset_legend_key,
+        )
         # energyshift = st.number_input('Enter shift value:', value=0.000, min_value=-30.000, max_value=30.000, key=i)
 
         if files:
-            st.session_state["uploaded_files"] = files
             current_band = Band()
+            all_band_data_VBM = []
+            all_band_data_CBM = []
             # Filter files based on your criteria
             filtered_files = [file for file in files if file.name.startswith('band') and file.name.endswith('.out')]
             for file in filtered_files:
@@ -535,35 +793,89 @@ def get_file_uploads(num_data_sets, default_colors):
                 all_band_data_VBM.append(VBM_info)
                 all_band_data_CBM.append(CBM_info)
 
+            max_energy_band = None
+            min_energy_band = None
             if all_band_data_VBM:
                 max_energy_band = max(all_band_data_VBM, key=lambda x: x["Energy"])
             if all_band_data_CBM:
                 min_energy_band = min(all_band_data_CBM, key=lambda x: x["Energy"])
 
-                # Create two columns for VBM and CBM information
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("### VBM Information (shifted 0 eV)")
-                st.markdown(f"- **State:** {max_energy_band['State']}")
-                st.markdown(f"- **Coordinate:** {max_energy_band['Coordinate']}")
-                st.markdown(f"- **Energy:** {max_energy_band['Energy']} eV")
+            if max_energy_band is not None and min_energy_band is not None:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("### VBM Information (shifted 0 eV)")
+                    st.markdown(f"- **State:** {max_energy_band['State']}")
+                    st.markdown(f"- **Coordinate:** {max_energy_band['Coordinate']}")
+                    st.markdown(f"- **Energy:** {max_energy_band['Energy']} eV")
 
-            with col2:
-                st.markdown("### CBM Information (just FYI ...)")
-                st.markdown(f"- **State:** {min_energy_band['State']}")
-                st.markdown(f"- **Coordinate:** {min_energy_band['Coordinate']}")
-                st.markdown(f"- **Energy:** {min_energy_band['Energy']} eV")
+                with col2:
+                    st.markdown("### CBM Information (just FYI ...)")
+                    st.markdown(f"- **State:** {min_energy_band['State']}")
+                    st.markdown(f"- **Coordinate:** {min_energy_band['Coordinate']}")
+                    st.markdown(f"- **Energy:** {min_energy_band['Energy']} eV")
 
-            st.markdown(f" The band gap is {min_energy_band['Energy'] - max_energy_band['Energy']} eV")
+                st.markdown(f" The band gap is {min_energy_band['Energy'] - max_energy_band['Energy']} eV")
 
             uploaded_files.append(files)
             colors.append(color)
+            legend_labels.append(legend_label.strip() or f"Data set {i + 1}")
             energyshifts.append(max_energy_band['Energy'] if all_band_data_VBM else 0)
 
-    return uploaded_files, colors, energyshifts
+    return uploaded_files, colors, legend_labels, energyshifts
 
 
-def process_files(uploaded_files_list, user_defined_colors, user_defined_energyshifts):
+def filter_band_segments(data, selected_segments):
+    if not selected_segments:
+        return data
+
+    total_segments = len(data["bands_all_files"])
+    zero_based_segments = []
+    for segment in selected_segments:
+        zero_based = segment - 1
+        if zero_based < 0 or zero_based >= total_segments:
+            raise ValueError(
+                f"Requested segment {segment}, but this dataset only has {total_segments} segment(s)."
+            )
+        zero_based_segments.append(zero_based)
+
+    selected_k_label = [data["k_label"][segment] for segment in zero_based_segments]
+    selected_band_len = [data["band_len"][segment] for segment in zero_based_segments]
+    selected_band_data = [data["bands_all_files"][segment] for segment in zero_based_segments]
+
+    segment_offsets = []
+    running_offset = 0.0
+    for length in selected_band_len:
+        segment_offsets.append(running_offset)
+        running_offset += length
+
+    filtered_xvals = []
+    for segment_index, original_segment_index in enumerate(zero_based_segments):
+        segment_xvals = np.array(data["xvals"][original_segment_index], dtype=np.float64)
+        filtered_xvals.append((segment_xvals - segment_xvals[0]) + segment_offsets[segment_index])
+
+    filtered_band_len_tot = list(segment_offsets)
+    if filtered_xvals:
+        filtered_band_len_tot.append(float(filtered_xvals[-1][-1]))
+    else:
+        filtered_band_len_tot.append(0.0)
+
+    filtered_data = data.copy()
+    filtered_data["bands_all_files"] = selected_band_data
+    filtered_data["xvals"] = filtered_xvals
+    filtered_data["band_len_tot"] = filtered_band_len_tot
+    filtered_data["k_label"] = selected_k_label
+    filtered_data["k_label_reduce"] = build_k_label_reduce(selected_k_label)
+    filtered_data["band_len"] = selected_band_len
+    return filtered_data
+
+
+def process_files(
+    uploaded_files_list,
+    user_defined_colors,
+    user_defined_legends,
+    user_defined_energyshifts,
+    selected_segments=None,
+):
     all_data = []
     for index, uploaded_files in enumerate(uploaded_files_list):
         energyshift = user_defined_energyshifts[index]
@@ -577,25 +889,34 @@ def process_files(uploaded_files_list, user_defined_colors, user_defined_energys
             k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot = process_control_file(control_file, reciprocal_lattice_vectors)
 
         plot_color = user_defined_colors[index]
-        all_data.append((bands_all_files, xvals, band_len_tot, k_label_reduce, plot_color))
+        data = {
+            "bands_all_files": bands_all_files,
+            "xvals": xvals,
+            "band_len_tot": band_len_tot,
+            "k_label_reduce": k_label_reduce,
+            "plot_color": plot_color,
+            "legend_label": user_defined_legends[index],
+            "k_label": k_label,
+            "band_len": band_len,
+        }
+        all_data.append(filter_band_segments(data, selected_segments))
     return all_data
 
 
 def calculate_scaling_factors(all_data):
-    reference_length = all_data[0][2][-1]  # The total k-path length of the first dataset
-    scaling_factors = [reference_length / band_len_tot[-1] for _, _, band_len_tot, _, _ in all_data]
+    reference_length = all_data[0]["band_len_tot"][-1]  # The total k-path length of the first dataset
+    scaling_factors = [reference_length / data["band_len_tot"][-1] for data in all_data]
     return scaling_factors
 
 
 def scale_data(all_data, scaling_factors):
-    for index, (bands_all_files, xvals, band_len_tot, k_label_reduce, plot_color) in enumerate(all_data):
+    for index, data in enumerate(all_data):
         if index > 0:
             scale = scaling_factors[index]
-            xvals = np.array(xvals, dtype=np.float64)
-            band_len_tot = np.array(band_len_tot, dtype=np.float64)
-            scaled_xvals = [x * scale for x in xvals]
-            scaled_band_len_tot = [x * scale for x in band_len_tot]
-            all_data[index] = (bands_all_files, scaled_xvals, scaled_band_len_tot, k_label_reduce, plot_color)
+            xvals = np.array(data["xvals"], dtype=np.float64)
+            band_len_tot = np.array(data["band_len_tot"], dtype=np.float64)
+            data["xvals"] = [x * scale for x in xvals]
+            data["band_len_tot"] = [x * scale for x in band_len_tot]
     return all_data
 
 
@@ -603,8 +924,13 @@ def plot_all_bands(ax, all_data, apply_scaling, num_data_sets):
     # Determine the color for the dashed lines
     dashed_line_color = 'black' if num_data_sets == 1 or apply_scaling else None
 
-    for index, (bands_all_files, xvals, band_len_tot, k_label_reduce, plot_color) in enumerate(all_data):
-        plot_bands(ax, bands_all_files, xvals, plot_color)
+    for index, data in enumerate(all_data):
+        bands_all_files = data["bands_all_files"]
+        xvals = data["xvals"]
+        band_len_tot = data["band_len_tot"]
+        plot_color = data["plot_color"]
+        legend_label = data["legend_label"]
+        plot_bands(ax, bands_all_files, xvals, plot_color, legend_label if num_data_sets > 1 else None)
 
         # Draw dashed lines only if it's the first dataset or if scaling is not applied
         if index == 0 or not apply_scaling:
@@ -612,35 +938,44 @@ def plot_all_bands(ax, all_data, apply_scaling, num_data_sets):
                 ax.axvline(kpoint_x, color=dashed_line_color or plot_color, linestyle='--', lw=1).set_dashes([5, 5])
 
 
-def set_custom_labels(ax, all_data, apply_scaling, n_data_sets):
+def set_custom_labels(ax, all_data, apply_scaling, n_data_sets, label_offset_map=None):
+    label_offset_map = label_offset_map or {}
 
     if n_data_sets > 1:
         if apply_scaling:
             # Use the first dataset's labels and positions
-            band_len_tot, k_label_reduce, _ = all_data[0][2], all_data[0][3], all_data[0][4]
+            band_len_tot = all_data[0]["band_len_tot"]
+            k_label_reduce = all_data[0]["k_label_reduce"]
             # Set color to black
             label_color = 'black'
             # Set the x-axis labels based on the first dataset
             ax.set_xticks(band_len_tot)
             ax.set_xticklabels(k_label_reduce, color=label_color)
+            for label_index, tick in enumerate(ax.xaxis.get_major_ticks()):
+                tick.set_pad(3 + int(100 * abs(label_offset_map.get(label_index, 0.0))))
         else:
             # Set labels for each dataset without scaling
             label_y_position = -0.05  # Initial y-position for the first set of labels
             y_step = -0.06  # Step to move down the labels for each subsequent data set
             for data in all_data:
-                band_len_tot, k_label_reduce, plot_color = data[2], data[3], data[4]
-                label_color = plot_color
-                for pos, label in zip(band_len_tot, k_label_reduce):
-                    ax.text(pos, label_y_position, label, color=label_color, ha='center', transform=ax.get_xaxis_transform())
+                band_len_tot = data["band_len_tot"]
+                k_label_reduce = data["k_label_reduce"]
+                label_color = data["plot_color"]
+                for label_index, (pos, label) in enumerate(zip(band_len_tot, k_label_reduce)):
+                    y_position = label_y_position + label_offset_map.get(label_index, 0.0)
+                    ax.text(pos, y_position, label, color=label_color, ha='center', transform=ax.get_xaxis_transform())
                 label_y_position += y_step
     else:
-        band_len_tot, k_label_reduce, _ = all_data[0][2], all_data[0][3], all_data[0][4]
+        band_len_tot = all_data[0]["band_len_tot"]
+        k_label_reduce = all_data[0]["k_label_reduce"]
         # Set color to black
         label_color = 'black'
         # Set the x-axis labels based on the first dataset
         ax.set_xticks(band_len_tot)
         k_label_reduce = [label.replace('Gamma', 'Γ').replace('G', 'Γ') for label in k_label_reduce]
         ax.set_xticklabels(k_label_reduce, color=label_color, fontsize=26, rotation= 0)
+        for label_index, tick in enumerate(ax.xaxis.get_major_ticks()):
+            tick.set_pad(3 + int(100 * abs(label_offset_map.get(label_index, 0.0))))
         # for tick in ax.xaxis.get_major_ticks()[3:4]:
         #     tick.set_pad(30)
         # for tick in ax.xaxis.get_major_ticks()[7:8]:
@@ -828,12 +1163,6 @@ def plot_multiple_energy_surfaces_with_spins(data_sets, view_init=None, alpha=0.
     # cbar.set_label('Spin Direction (z component)')
 
     return fig
-from itertools import cycle
-from matplotlib.colors import Normalize
-from matplotlib.cm import ScalarMappable
-from mpl_toolkits.mplot3d import Axes3D
-import math
-from scipy.interpolate import griddata
 
 def plot_spin_quivers_3D(filename_spin, states, spin_direction):
     plt.rcParams["font.family"] = "Arial"

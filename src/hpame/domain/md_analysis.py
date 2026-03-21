@@ -1,34 +1,34 @@
-
-import streamlit as st
-import subprocess
-from hpame.io.paths import REPO_ROOT
-from MDAnalysis import Universe
-from MDAnalysis.coordinates.memory import MemoryReader
-from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
-import plotly.express as px
-import pandas as pd
-import collections
-from MDAnalysis.analysis import distances
-import matplotlib.cm as cm
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy.ndimage import gaussian_filter
-from io import BytesIO
-from ase.io import read
-import MDAnalysis as mda
-import numpy as np
-from ase import Atoms
-from MDAnalysis.analysis import align
-from MDAnalysis.transformations import positionaveraging
-from MDAnalysis.transformations import nojump
-from MDAnalysis.analysis.rdf import InterRDF, InterRDF_s
-import os
+import base64
 import glob
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
-from tempfile import NamedTemporaryFile
+import os
+import re
 import shutil
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+
+import MDAnalysis as mda
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import seaborn as sns
+import streamlit as st
+from ase import Atoms
+from ase.io import read, write
+from MDAnalysis import Universe
+from MDAnalysis.analysis import align, distances
+from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysis as HBA
+from MDAnalysis.analysis.rdf import InterRDF, InterRDF_s
+from MDAnalysis.coordinates.memory import MemoryReader
+from MDAnalysis.transformations import nojump
+from natsort import natsorted
+from scipy.ndimage import gaussian_filter
+
+from hpame.io.paths import APP_TMP_DIR, REPO_ROOT
 
 
 def try_float_conversion(value):
@@ -58,16 +58,6 @@ def extract_MD_status(lines, idx, prev_TE):
            "Total Energy [eV]": TE, "Total Energy Change [eV]": TE_change, "Conserved_Hamiltonian [eV]": H}
 
     return idx, row, TE
-
-
-def sort_files(directory):
-    # Use glob to get all the file paths
-    files = glob.glob(os.path.join(directory, 'slurm-*.out'))
-
-    # Extract the numbers from the file names and sort by these numbers
-    files.sort(key=lambda x: int(re.findall(r'\d+', os.path.basename(x))[0]))
-    return files
-
 
 
 def extract_data_from_stream(stream, prev_TE=None):
@@ -104,10 +94,6 @@ def process_streams(streams):
         all_data.extend(data)
 
     return pd.DataFrame(all_data)
-
-
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
 def generate_layout(title='Time vs. Temperature', xaxis_title='Time [ps]', yaxis_title='Temperature [K]', font_size=16, color_text='black', l_orientation = 'h', l_yplace=0.2):
     """Generate a layout dictionary based on the given parameters."""
@@ -200,17 +186,10 @@ def plot_data(df):
     fig4.update_layout(**generate_layout(title='Time vs. Conserved Hamiltonian', xaxis_title='Time [ps]', yaxis_title='Cons. H [eV]'))
     fig4.update_layout(yaxis=dict(tickformat=".6e"))
     col4.plotly_chart(fig4)
-
-import tempfile
-from pathlib import Path
-import base64
-import re
-from natsort import natsorted
-
-
 def run_perl_script(input_files):
     perl_script_path = str(REPO_ROOT / 'create_geometry_zip.pl')
-    joined_file_name = 'joined_file.out'
+    APP_TMP_DIR.mkdir(exist_ok=True)
+    joined_file_path = APP_TMP_DIR / 'joined_file.out'
 
     # Create a new file by joining all input files in natural order
     input_files = natsorted(input_files, key=lambda x: x.name)
@@ -218,7 +197,7 @@ def run_perl_script(input_files):
     # Define pattern for the line to start from in subsequent files
     start_line_pattern = " Advancing structure using Born-Oppenheimer Molecular Dynamics:"
 
-    with open(joined_file_name, 'wb') as outfile:
+    with open(joined_file_path, 'wb') as outfile:
         for i, file in enumerate(input_files):
             # If it's not the first file, find the first mention of the line and discard information before that
             if i != 0:
@@ -234,8 +213,12 @@ def run_perl_script(input_files):
                 outfile.write(file.getbuffer())
 
     # call the perl script with the new joined file
-    process = subprocess.Popen(['perl', perl_script_path, joined_file_name], stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT)
+    process = subprocess.Popen(
+        ['perl', perl_script_path, str(joined_file_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        cwd=APP_TMP_DIR,
+    )
 
     # # Prepare markdown display
     # markdown_display = st.empty()
@@ -251,18 +234,9 @@ def run_perl_script(input_files):
     # Ensure all output has been read after the subprocess stops
     process.communicate()
 
-    return Path('geometries.zip'), Path('geometries.spt')
+    joined_file_path.unlink(missing_ok=True)
 
-
-
-def get_download_link_md(file_path, download_name):
-    with open(file_path, "rb") as file:
-        bytes = file.read()
-        b64 = base64.b64encode(bytes).decode()
-        href = f'<a href="data:file/octet-stream;base64,{b64}" download="{download_name}">Download {download_name}</a>'
-        return href
-
-from ase.io import read, write
+    return APP_TMP_DIR / 'geometries.zip', APP_TMP_DIR / 'geometries.spt'
 
 def _strip_first_n_lines_inplace(path: Path, n: int = 6) -> None:
     """
@@ -820,6 +794,7 @@ def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs, start_tim
 
     fig = go.Figure()
     data_list = []
+    plotted_times = []
 
     for atom_pair in atom_pairs:
         atom_index1, atom_index2 = atom_pair
@@ -832,18 +807,16 @@ def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs, start_tim
         symbol1 = atom1.name
         symbol2 = atom2.name
 
-        if end_time is None:
-            end_time = u.trajectory[-1].time
-        else:
-            end_time = end_time
+        effective_end_time = u.trajectory[-1].time if end_time is None else end_time
 
         # transformation = nojump.NoJump()
         # u.trajectory.add_transformations(transformation)
 
         # Compute the distances over time
         for ts in u.trajectory:
-            if ts.time > start_time and ts.time < end_time:
+            if ts.time > start_time and ts.time < effective_end_time:
                 d = distances.distance_array(atom1.position, atom2.position, box=list(u.dimensions))
+                plotted_times.append(ts.time)
                 # d = distances.distance_array(atom1.position, atom2.position)
                 data_list.append({'Time': ts.time,
                                   f'{symbol1}_{atom_index1 + 1} - {symbol2}_{atom_index2 + 1}': d[0][0]})
@@ -854,15 +827,15 @@ def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs, start_tim
                                  y=[data[trace_name] for data in data_list if trace_name in data],
                                  mode='lines', name=trace_name))
 
-    if standard_distance > 0:
+    if standard_distance > 0 and plotted_times:
         # Add shaded region below the standard_distance to 0 on y-axis
         fig.add_shape(
             go.layout.Shape(
                 type="rect",
                 xref="x",
                 yref="y",
-                x0=times[0],
-                x1=times[-1],
+                x0=min(plotted_times),
+                x1=max(plotted_times),
                 y0=0,
                 y1=standard_distance,
                 fillcolor="lightpink",
@@ -877,8 +850,8 @@ def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs, start_tim
                 type="line",
                 xref="x",
                 yref="y",
-                x0=times[0],
-                x1=times[-1],
+                x0=min(plotted_times),
+                x1=max(plotted_times),
                 y0=standard_distance,
                 y1=standard_distance,
                 line=dict(dash="dash")
@@ -892,61 +865,6 @@ def plot_atom_distances_over_time(u, standard_distance=0, *atom_pairs, start_tim
     df = df.groupby('Time').first().reset_index()
 
     return fig, df
-
-def plot_atom_distances_over_time_matplotlib(u, standard_distance=0, *atom_pairs, start_time=0):
-    """
-    Plots the distance between pairs of atoms over time using Matplotlib.
-
-    Parameters:
-    - u: MDAnalysis universe
-    - standard_distance: The y-axis value for the horizontal dashed line (default 0)
-    - *atom_pairs: Variable number of atom pairs as tuples (atom_index1, atom_index2)
-
-    Returns:
-    - A Matplotlib Figure object representing the plot.
-    """
-
-    fig, ax = plt.subplots()
-
-    for atom_pair in atom_pairs:
-        atom_index1, atom_index2 = atom_pair
-
-        # Select the atoms based on their indices
-        atom1 = u.atoms[atom_index1]
-        atom2 = u.atoms[atom_index2]
-
-        # Retrieve the element symbols
-        symbol1 = atom1.name
-        symbol2 = atom2.name
-
-        # Compute the distances over time
-        times = []
-        distances_ar = []
-        for ts in u.trajectory:
-            if ts.time > start_time:
-                times.append(ts.time)
-                d = distances.distance_array(atom1.position, atom2.position, box=list(u.dimensions))
-                distances_ar.append(d[0][0])
-
-        # Plot for each pair
-        trace_name = f'{symbol1}_{atom_index1} - {symbol2}_{atom_index2}'
-        ax.plot(times, distances_ar, label=trace_name)
-
-    if standard_distance > 0:
-        # Add shaded region below the standard_distance to 0 on y-axis
-        ax.fill_between(times, 0, standard_distance, color='lightpink', alpha=0.3)
-
-        # Add dashed line at standard_distance
-        ax.axhline(y=standard_distance, color='grey', linestyle='--')
-
-    # Setting the plot layout
-    ax.set_title('Distances between Atom Pairs over Time')
-    ax.set_xlabel('Time [ps]')
-    ax.set_ylabel('Distance (Å)')
-    ax.legend()
-
-    return fig
-
 
 def average_structure_to_cif(u, start_time, filename="average_structure.in"):
     # Extract positions and times from the original universe
@@ -1509,106 +1427,6 @@ def handle_distance_analysis(u):
                 st.write(f"Error: {str(e)}")
 
     pass
-
-def create_dist_analysis_plots(df1, df2, df3):
-    plots = []
-
-    # Plot 1: Time vs. 50-point moving average of Angle
-    fig1, ax1 = plt.subplots()
-    for atoms, group in df1.groupby('Atoms'):
-        # Calculate 50-point moving average
-        ma_angle = group['Angle'].rolling(window=50, min_periods=1).mean()
-        ax1.plot(group['Time'], ma_angle)
-    ax1.set_xlabel('Time')
-    ax1.set_ylabel('Angle (50-pt MA)')
-    ax1.set_title('Time vs. Angle (50-pt Moving Average)')
-    plots.append(fig1)
-
-    # Plot 2: Time vs. 50-point moving average of In-Plane and Out-Plane
-    fig2, ax2 = plt.subplots()
-    for atoms, group in df1.groupby('Atoms'):
-        # Calculate 50-point moving averages
-        ma_in_plane = group['In-Plane'].rolling(window=50, min_periods=1).mean()
-        ma_out_plane = group['Out-Plane'].rolling(window=50, min_periods=1).mean()
-
-        ax2.plot(group['Time'], ma_in_plane)
-        ax2.plot(group['Time'], ma_out_plane)
-    ax2.set_xlabel('Time')
-    ax2.set_ylabel('Plane Value (50-pt MA)')
-    ax2.set_title('Time vs. In-Plane and Out-Plane (50-pt Moving Average)')
-    plots.append(fig2)
-
-    # Plot 3: Time vs. Bond Distance Variance (using df2)
-    fig3, ax3 = plt.subplots()
-    for col in df2.columns:
-        if col != 'Time':
-            ax3.plot(df2['Time'], df2[col])
-    ax3.set_xlabel('Time')
-    ax3.set_ylabel('Bond Distance Variance')
-    ax3.set_title('Time vs. Bond Distance Variance')
-    plots.append(fig3)
-
-    # Plot 4: Time vs. Angle Variance (using df3)
-    fig4, ax4 = plt.subplots()
-    for col in df3.columns:
-        if col != 'Time':
-            ax4.plot(df3['Time'], df3[col])
-    ax4.set_xlabel('Time')
-    ax4.set_ylabel('Angle Variance')
-    ax4.set_title('Time vs. Angle Variance')
-    plots.append(fig4)
-
-    return plots
-
-
-def create_probability_distribution_plots(df1, df2, df3):
-    plots = []
-
-    # Plot for Angle Distribution
-    fig_angle, ax_angle = plt.subplots()
-    ax_angle.hist(df1['Angle'], bins=100, density=True, alpha=0.6, color='g')
-    ax_angle.set_title('Probability Distribution of Angle')
-    ax_angle.set_xlabel('Angle')
-    ax_angle.set_ylabel('Probability Density')
-    plots.append(fig_angle)
-
-    # Plot for Beta Distribution
-    fig_beta, ax_beta = plt.subplots()
-    ax_beta.hist(df1['Beta'], bins=100, density=True, alpha=0.6, color='g')
-    ax_beta.set_title('Probability Distribution of Beta')
-    ax_beta.set_xlabel('Beta')
-    ax_beta.set_ylabel('Probability Density')
-    plots.append(fig_beta)
-
-    # Plot for In-Plane and Out-Plane Distribution
-    fig_plane, ax_plane = plt.subplots()
-    ax_plane.hist(df1['In-Plane'], bins=100, density=True, alpha=0.6, color='r', label='In-Plane')
-    ax_plane.hist(df1['Out-Plane'], bins=100, density=True, alpha=0.6, color='b', label='Out-Plane')
-    ax_plane.set_title('Probability Distribution of In-Plane and Out-Plane')
-    ax_plane.set_xlabel('Plane Value')
-    ax_plane.set_ylabel('Probability Density')
-    ax_plane.legend()
-    plots.append(fig_plane)
-
-    # Plot for Bond Distance Variance Distribution
-    fig_bdv, ax_bdv = plt.subplots()
-    melted_bdv = pd.melt(df2, id_vars=['Time'], value_vars=df2.columns[1:])
-    ax_bdv.hist(melted_bdv['value'].dropna(), bins=30, density=True, alpha=0.6, color='y')
-    ax_bdv.set_title('Probability Distribution of Bond Distance Variance')
-    ax_bdv.set_xlabel('Bond Distance Variance')
-    ax_bdv.set_ylabel('Probability Density')
-    plots.append(fig_bdv)
-
-    # Plot for Angle Variance Distribution
-    fig_av, ax_av = plt.subplots()
-    melted_av = pd.melt(df3, id_vars=['Time'], value_vars=df3.columns[1:])
-    ax_av.hist(melted_av['value'].dropna(), bins=30, density=True, alpha=0.6, color='c')
-    ax_av.set_title('Probability Distribution of Angle Variance')
-    ax_av.set_xlabel('Angle Variance')
-    ax_av.set_ylabel('Probability Density')
-    plots.append(fig_av)
-
-    return plots
 
 def create_probability_distribution_plots_plotly(df1, df2, df3, bin_size=30):
     plots = []

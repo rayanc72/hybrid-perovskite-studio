@@ -1,20 +1,31 @@
+from __future__ import annotations
 
-from diffpy.pdffit2 import PdfFit
-import pandas as pd
-# import tempfile
-# from ase import Atoms
-# from pathlib import Path
-# from diffpy.srreal.structureadapter import loadStructure
-# from pymatgen.io.cif import CifWriter
+import json
+from itertools import combinations_with_replacement
 
-
-import io
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
+from ase.data import atomic_numbers
+from ase.neighborlist import neighbor_list
+from diffpy.pdffit2 import PdfFit
+from plotly.subplots import make_subplots
 from pymatgen.core import Structure
+from scipy.stats import pearsonr
 
+
+DEFAULT_DIFFPY_STRUCTURE_ATTRIBUTES = {"Uisoequiv": 0.01}
+DEFAULT_PDF_CALCULATOR_KWARGS = {
+    "qmin": 1,
+    "qmax": 20,
+    "rmin": 1.0,
+    "rmax": 20.0,
+    "qdamp": 0.06,
+    "qbroad": 0.06,
+}
 
 def reduced_pdf_to_gr(df, rho0, g_col="G_exp", r_col="r", r_min=1e-6):
     out = df.copy()
@@ -56,15 +67,8 @@ def integrate_gr_window(df, r1, r2, r_col="r", g_col="g_r", rho0=None):
 
 def calculate_pdf(
         diffpy_structure,
-        diffpy_structure_attributes={"Uisoequiv": 0.01},
-        pdf_calculator_kwargs={
-            "qmin": 1,
-            "qmax": 20,
-            "rmin": 1.0,
-            "rmax": 20.0,
-            "qdamp": 0.06,
-            "qbroad": 0.06
-        }
+        diffpy_structure_attributes=None,
+        pdf_calculator_kwargs=None,
 ):
     """Computes the PDF of the given structure.
 
@@ -82,12 +86,19 @@ def calculate_pdf(
     numpy.ndarray
     """
 
+    diffpy_structure_attributes = (
+        DEFAULT_DIFFPY_STRUCTURE_ATTRIBUTES.copy()
+        if diffpy_structure_attributes is None
+        else diffpy_structure_attributes
+    )
+    pdf_calculator_kwargs = (
+        DEFAULT_PDF_CALCULATOR_KWARGS.copy()
+        if pdf_calculator_kwargs is None
+        else pdf_calculator_kwargs
+    )
+
     for key, value in diffpy_structure_attributes.items():
         setattr(diffpy_structure, key, value)
-
-    # ## PDFCalculator is for diffpy.srreal and will be replaced by diffpy.pdffit2
-    # dpc = PDFCalculator(**pdf_calculator_kwargs)
-    # r1, g1 = dpc(diffpy_structure)
 
     pf = PdfFit()
     pf.alloc('X',
@@ -104,11 +115,7 @@ def calculate_pdf(
     r1 = np.asarray(pf.getR())
     g1 = np.asarray(pf.getpdf_fit())
 
-    # return np.array([r1, g1]).T
     return r1, g1
-
-from scipy.stats import pearsonr
-import numpy as np
 
 
 def compute_pcc(experimental: tuple, simulated: tuple) -> float:
@@ -131,27 +138,23 @@ def compute_pcc(experimental: tuple, simulated: tuple) -> float:
     corr_coef, _ = pearsonr(g_exp, g_sim)
     return corr_coef
 
-
-from ase.neighborlist import neighbor_list
-
-import numpy as np
-
-
 def compute_rdf_weighted(structure, pair=('O', 'H'), r_max=10.0, bins=200, w=True):
-    from ase.data import atomic_numbers
-    from ase.neighborlist import neighbor_list
-    import numpy as np
-
     a1, a2 = pair
     indices1 = [i for i, atom in enumerate(structure) if atom.symbol == a1]
     indices2 = [i for i, atom in enumerate(structure) if atom.symbol == a2]
 
+    if not indices1 or not indices2:
+        return None, None
+
+    volume = structure.get_volume()
+    if volume <= 0:
+        return None, None
+
     i_list, j_list, distances = neighbor_list("ijd", structure, cutoff=r_max)
 
-    # Filter by pair type and collect Z_i * Z_j weights
     mask = []
     weights = []
-    for i, j, d in zip(i_list, j_list, distances):
+    for i, j in zip(i_list, j_list):
         s_i, s_j = structure[i].symbol, structure[j].symbol
         if (s_i, s_j) == (a1, a2) or (s_i, s_j) == (a2, a1):
             if w:
@@ -173,8 +176,8 @@ def compute_rdf_weighted(structure, pair=('O', 'H'), r_max=10.0, bins=200, w=Tru
 
     hist, edges = np.histogram(distances, bins=bins, range=(0, r_max), weights=weights)
     r = 0.5 * (edges[1:] + edges[:-1])
-    shell_volumes = 4/3 * np.pi * (edges[1:]**3 - edges[:-1]**3)
-    avg_density = len(indices2) / structure.get_volume()
+    shell_volumes = 4 / 3 * np.pi * (edges[1:] ** 3 - edges[:-1] ** 3)
+    avg_density = len(indices2) / volume
     rdf = hist / (len(indices1) * avg_density * shell_volumes)
 
     return r, rdf
@@ -184,12 +187,7 @@ def compute_pdf_from_rdf_df(df_all: pd.DataFrame, density: float) -> pd.DataFram
     df = df_all.copy()
     df["PDF(r)"] = 4 * np.pi * df["r (Å)"] ** 2 * density * df["g(r)"]
     return df
-
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
-
 def plot_rdf_pdf(atom_list, modified_atoms, df_pdf, rmax, bins, compute_rdf_weighted, config, weight=True):
-    from itertools import combinations_with_replacement
     fig_rdf = make_subplots(specs=[[{"secondary_y": True}]])
     df_all = pd.DataFrame()
 
@@ -275,68 +273,6 @@ def plot_rdf_pdf(atom_list, modified_atoms, df_pdf, rmax, bins, compute_rdf_weig
     )
 
     return fig_rdf, df_all
-# def load_or_create_plot_config(all_pairs):
-#     st.subheader("Plot Appearance Settings")
-#
-#     uploaded_config = st.file_uploader("Upload Plot Config (JSON)", type=["json"])
-#     config = {}
-#     if uploaded_config:
-#         try:
-#             config = json.load(uploaded_config)
-#             st.success("Configuration loaded.")
-#         except Exception as e:
-#             st.error(f"Failed to load config: {e}")
-#
-#     with st.expander("Customize Plot Appearance"):
-#         # RDF pair colors
-#         pair_colors = config.get("pair_colors", {})
-#         st.markdown("#### RDF Bar Colors")
-#         for pair in all_pairs:
-#             label = f"{pair[0]}–{pair[1]}"
-#             default_color = pair_colors.get(label, "#1f77b4")
-#             pair_colors[label] = st.color_picker(f"Color for {label}", default_color)
-#         config["pair_colors"] = pair_colors
-#
-#         config['line_color'] = st.color_picker("Line Color (PDF)", config.get('line_color', "#d62728"))
-#         config['line_style'] = st.selectbox("Line Style (PDF)", ["solid", "dot", "dash", "longdash"],
-#                                             index=["solid", "dot", "dash", "longdash"].index(config.get("line_style", "solid")))
-#         config['opacity'] = st.slider("Bar Opacity", 0.0, 1.0, config.get("opacity", 0.6), 0.05)
-#         config['linewidth'] = st.slider("PDF Line Width", 1.0, 6.0, config.get("linewidth", 3.0), 0.5)
-#
-#         config['text_size'] = st.slider("Text Size", 10, 30, config.get("text_size", 16))
-#         config['text_style'] = st.selectbox("Text Style", ["normal", "bold", "italic"],
-#                                             index=["normal", "bold", "italic"].index(config.get("text_style", "normal")))
-#
-#         config['show_rdf'] = st.checkbox("Show RDF (g(r))", value=config.get("show_rdf", True))
-#         config['show_pdf'] = st.checkbox("Show PDF (G(r))", value=config.get("show_pdf", True))
-#
-#         config['axis_linewidth'] = st.slider("Axes and Tick Line Width", 0.5, 4.0, config.get("axis_linewidth", 1.5), 0.1)
-#         config['aspect_ratio'] = st.slider("Aspect Ratio (y/x)", 0.2, 3.0, config.get("aspect_ratio", 1.0), 0.1)
-#
-#         config['font_color'] = st.color_picker("Font Color", config.get("font_color", "#000000"))
-#         config['font_family'] = st.selectbox("Font Family", [
-#             "Arial", "Balto", "Courier New", "Droid Sans", "Droid Serif",
-#             "Droid Sans Mono", "Gravitas One", "Old Standard TT", "Open Sans",
-#             "Overpass", "PT Sans Narrow", "Raleway", "Times New Roman"
-#         ], index=0 if config.get("font_family") is None else
-#         ["Arial", "Balto", "Courier New", "Droid Sans", "Droid Serif",
-#          "Droid Sans Mono", "Gravitas One", "Old Standard TT", "Open Sans",
-#          "Overpass", "PT Sans Narrow", "Raleway", "Times New Roman"].index(config["font_family"]))
-#         config['show_grid'] = st.checkbox("Show Grid Lines", config.get("show_grid", True))
-#         config['tick_label_size'] = st.slider("Tick Label Size", 6, 20, config.get("tick_label_size", 12))
-#         config['tick_label_color'] = st.color_picker("Tick Label Color", config.get("tick_label_color", "#000000"))
-#         config['tick_font_family'] = st.selectbox("Tick Font Family", [
-#             "Arial", "Courier New", "Droid Sans", "Times New Roman", "Raleway"
-#         ], index=0 if config.get("tick_font_family") is None else
-#         ["Arial", "Courier New", "Droid Sans", "Times New Roman", "Raleway"].index(config["tick_font_family"]))
-#
-#     config_json = json.dumps(config, indent=2)
-#     st.download_button("Download Plot Config", config_json, file_name="plot_config.json")
-#
-#     return config
-
-import plotly.express as px
-
 def get_color_map(pairs, palette_name="Plotly"):
     cmap = getattr(px.colors.qualitative, palette_name, px.colors.qualitative.Plotly)
     color_cycle = (cmap * ((len(pairs) // len(cmap)) + 1))[:len(pairs)]
@@ -403,18 +339,8 @@ def load_or_create_plot_config(all_pairs):
 
     return config
 
-
-import io
-import json
-import streamlit as st
-import matplotlib.pyplot as plt
-from itertools import combinations_with_replacement
-import pandas as pd
-
 def load_or_create_plot_config_matplotlib(all_pairs):
-    """
-    Build a rich matplotlib config via Streamlit widgets.
-    """
+    """Build a matplotlib config via Streamlit widgets."""
     st.subheader("Matplotlib Plot Appearance Settings")
     uploaded = st.file_uploader("Upload Plot Config (JSON)", type="json")
     if uploaded:

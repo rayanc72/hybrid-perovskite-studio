@@ -487,7 +487,7 @@ def rotate_molecules_v2(atoms, molecule, axis, angle):
 
     if not all_connected:
         st.write("Not all atoms are connected within the molecule.")
-        draw_molecule_graph(mol_graph)
+        st.pyplot(draw_molecule_graph(mol_graph))
         return None
 
 
@@ -585,7 +585,7 @@ def rotate_molecules_v3(atoms, molecules, molecule_indices, axis, angle,
 
         if not all_connected:
             st.write("Not all atoms are connected within the molecule.")
-            draw_molecule_graph(mol_graph)
+            st.pyplot(draw_molecule_graph(mol_graph))
             return None
 
         if centroid_option == 2:

@@ -3650,14 +3650,65 @@ if plot_bs_option:
     default_colors = ['crimson', 'blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'orange', 'purple', 'brown']
 
     # Get file uploads and user preferences
-    uploaded_files_list, user_defined_colors, user_defined_eshifts = get_file_uploads(num_data_sets, default_colors)
+    uploaded_files_list, user_defined_colors, user_defined_legends, user_defined_eshifts = get_file_uploads(num_data_sets, default_colors)
 
     # Get the user-defined plot range
     plot_range = st.slider("Select plot range for Energy axis (eV):", min_value=-10.0, max_value=10.0, value=(-2.0, 5.0), step=0.1)
     ymin, ymax = plot_range
 
+    selected_segment_text = st.text_input(
+        "K-path segments to plot (optional)",
+        value="",
+        help="Use one-based segment indices like 1,3,5-6. Leave blank to plot all segments.",
+    )
+    label_offset_text = st.text_input(
+        "X-axis label offsets (optional)",
+        value="",
+        help="Adjust selected x-axis labels with entries like 2:-0.08, 5:-0.15.",
+    )
+
     # Checkbox for scaling, visible only if more than one dataset is uploaded
     apply_scaling = st.checkbox("Scale x-axis to match the first dataset?") if num_data_sets > 1 else False
+
+    if uploaded_files_list:
+        bz_dataset_options = [f"Data set {index + 1}" for index in range(len(uploaded_files_list))]
+        bz_dataset_label = st.selectbox(
+            "Brillouin-zone dataset",
+            options=bz_dataset_options,
+            index=0,
+            help="Choose which uploaded dataset to use for the Brillouin-zone plot.",
+        )
+        if st.button("Plot Brillouin zone"):
+            try:
+                bz_index = bz_dataset_options.index(bz_dataset_label)
+                bz_fig = build_brillouin_zone_figure(
+                    uploaded_files_list[bz_index],
+                    dataset_label=user_defined_legends[bz_index] if bz_index < len(user_defined_legends) else bz_dataset_label,
+                )
+                st.plotly_chart(bz_fig, use_container_width=True)
+
+                bz_png = pio.to_image(bz_fig, format="png", scale=3)
+                bz_pdf = pio.to_image(bz_fig, format="pdf")
+                st.caption("Export Brillouin Zone")
+                bz_col1, bz_col2 = st.columns(2)
+                with bz_col1:
+                    st.download_button(
+                        label="PNG",
+                        data=bz_png,
+                        file_name="brillouin_zone.png",
+                        mime="application/png",
+                        use_container_width=True,
+                    )
+                with bz_col2:
+                    st.download_button(
+                        label="PDF",
+                        data=bz_pdf,
+                        file_name="brillouin_zone.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+            except ValueError as exc:
+                st.error(str(exc))
 
     # Button to trigger the plotting
     plot_button = st.button("Plot")
@@ -3667,43 +3718,79 @@ if plot_bs_option:
 
     if uploaded_files_list:
         if plot_button:
+            try:
+                # Set up the plot with custom configurations
+                fig, ax = plt.subplots(figsize=(16, 12))
+                plt.rcParams["font.family"] = "Arial"
+                plt.rcParams.update({'font.size': 24})
+                for spine in ['bottom', 'left', 'top', 'right']:
+                    ax.spines[spine].set_linewidth(2)
 
-            # Set up the plot with custom configurations
-            fig, ax = plt.subplots(figsize=(16, 12))
-            plt.rcParams["font.family"] = "Arial"
-            plt.rcParams.update({'font.size': 24})
-            for spine in ['bottom', 'left', 'top', 'right']:
-                ax.spines[spine].set_linewidth(2)
+                selected_segments = parse_segment_selection(selected_segment_text)
+                label_offset_map = parse_label_offset_map(label_offset_text)
 
-            # Process files and potentially apply scaling
-            all_data = process_files(uploaded_files_list, user_defined_colors, user_defined_eshifts)
-            if apply_scaling:
-                scaling_factors = calculate_scaling_factors(all_data)
-                all_data = scale_data(all_data, scaling_factors)
+                # Process files and potentially apply scaling
+                all_data = process_files(
+                    uploaded_files_list,
+                    user_defined_colors,
+                    user_defined_legends,
+                    user_defined_eshifts,
+                    selected_segments=selected_segments,
+                )
+                if apply_scaling:
+                    scaling_factors = calculate_scaling_factors(all_data)
+                    all_data = scale_data(all_data, scaling_factors)
 
-            # Plot bands and set labels
-            line_and_text_color = 'black' if apply_scaling else None
-            plot_all_bands(ax, all_data, apply_scaling, num_data_sets)
-            set_custom_labels(ax, all_data, apply_scaling, num_data_sets)
+                # Plot bands and set labels
+                plot_all_bands(ax, all_data, apply_scaling, num_data_sets)
+                set_custom_labels(ax, all_data, apply_scaling, num_data_sets, label_offset_map=label_offset_map)
 
-            # Finalize and show the plot
-            # rcParams["text. usetex"](default: True)
-            # plt.ylabel(r'$E - E_{{f}}$ (eV)')
-            plt.ylabel('Energy (eV)')
-            plt.axis([0, max([abs(i) for data in all_data for i in data[1][-1]]), ymin, ymax])
-            plt.tight_layout()
-            st.pyplot(fig)
+                # Finalize and show the plot
+                plt.ylabel('Energy (eV)')
+                plt.axis([0, max([abs(i) for data in all_data for i in data["xvals"][-1]]), ymin, ymax])
+                if num_data_sets > 1:
+                    ax.legend(
+                        frameon=True,
+                        facecolor='white',
+                        edgecolor='lightgray',
+                        framealpha=0.95,
+                        fontsize=14,
+                        loc='upper right',
+                        borderpad=0.4,
+                        labelspacing=0.3,
+                        handlelength=1.6,
+                    )
+                plt.tight_layout()
+                st.pyplot(fig)
 
-            buf = io.BytesIO()
-            fig.savefig(buf, format='png', transparent=True)
-            buf.seek(0)
+                buf = io.BytesIO()
+                fig.savefig(buf, format='png', transparent=True)
+                buf.seek(0)
 
-            st.download_button(
-                label="Download plot as png",
-                data=buf,
-                file_name=f"band_structure.png",
-                mime="application/png"
-            )
+                pdf_buf = io.BytesIO()
+                fig.savefig(pdf_buf, format='pdf', transparent=True)
+                pdf_buf.seek(0)
+                st.caption("Export Band Structure")
+                export_col1, export_col2 = st.columns(2)
+                with export_col1:
+                    st.download_button(
+                        label="PNG",
+                        data=buf,
+                        file_name=f"band_structure.png",
+                        mime="application/png",
+                        use_container_width=True,
+                    )
+                with export_col2:
+                    st.download_button(
+                        label="PDF",
+                        data=pdf_buf,
+                        file_name="band_structure.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+
+            except ValueError as exc:
+                st.error(str(exc))
 
         if remove_button:
             st.session_state["file_uploader_key"] += 1

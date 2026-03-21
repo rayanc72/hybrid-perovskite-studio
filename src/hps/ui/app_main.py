@@ -129,6 +129,7 @@ _debug_log("startup: title rendered")
     #
     # if dataset_id:  # If dataset ID is provided, it takes precedence
     #     try:
+    #         zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
     #         response = requests.get(zip_url, stream=True)
     #         response.raise_for_status()
     #

@@ -30,5 +30,5 @@
 
 ## GitHub Landing Page
 
-- The main repository landing page uses these images in [README.md](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/README.md).
+- The main repository landing page uses these images in [README.md](../../README.md).
 - Updating the files in `docs/images/screenshots/` updates the GitHub gallery automatically.

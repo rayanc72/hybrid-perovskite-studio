@@ -21,8 +21,8 @@ Files under `src/hps/ui/` should contain Streamlit rendering logic, labels, and 
 
 Navigation-specific guidance:
 
-- [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py) should be updated when workspace structure changes
-- [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py) should consume that registry rather than redefining the same tree by hand
+- [src/hps/ui/navigation.py](../src/hps/ui/navigation.py) should be updated when workspace structure changes
+- [src/hps/ui/app_main.py](../src/hps/ui/app_main.py) should consume that registry rather than redefining the same tree by hand
 
 ### Service layer
 

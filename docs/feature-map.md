@@ -43,14 +43,12 @@
       - Interpolation
 
 - Electronic
-  - Polarization and DOS
-    - Plot polarization
-    - Plot partial density of states (PDOS)
   - Bands and Spin
     - Plot bandstructure
     - Plot spin texture
-    - Plot 3D spin texture
-  - Optical
+    - Plot partial density of states (PDOS)
+  - Advanced
+    - Plot polarization
     - Plot absorption spectra
 
 - Dynamics

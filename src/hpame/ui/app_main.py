@@ -664,6 +664,29 @@ if primary_section is not None:
     st.caption("Switch workspaces at any time, or return to the start page for a clean overview.")
 
 if primary_section == "Structure":
+    st.caption("Upload or replace the active structure from anywhere inside the Structure workspace.")
+    structure_upload = st.file_uploader(
+        "Upload a structure file (aims geometry, CIF, or next_step)",
+        type=["in", "cif", "next_step"],
+        key=f"structure_workspace_uploader_{st.session_state.structure_uploader_key}",
+    )
+    _debug_log("structure workspace: file_uploader rendered")
+    if structure_upload is not None:
+        st.session_state.uploaded_structure_name = structure_upload.name
+        st.session_state.uploaded_structure_bytes = structure_upload.getvalue()
+        st.session_state.file_name = structure_upload.name
+        _debug_log(
+            f"structure workspace: stored upload file={structure_upload.name} bytes={len(st.session_state.uploaded_structure_bytes)}"
+        )
+        st.success(f"Loaded `{structure_upload.name}` into the current workspace.")
+    elif st.session_state.uploaded_structure_name is None:
+        st.caption("No structure loaded yet.")
+    else:
+        st.caption(f"Current structure: `{st.session_state.uploaded_structure_name}`")
+        if st.button("Remove current structure", key="remove_structure_workspace"):
+            clear_loaded_structure()
+            st.rerun()
+
     structure_mode = st.radio(
         "View",
         options=view_names("Structure"),
@@ -671,28 +694,7 @@ if primary_section == "Structure":
     )
 
     if structure_mode == "Overview":
-        st.info("Upload a structure here, review its summary, and then move into analysis or transformations.")
-        structure_upload = st.file_uploader(
-            "Upload a structure file (aims geometry, CIF, or next_step)",
-            type=["in", "cif", "next_step"],
-            key=f"structure_workspace_uploader_{st.session_state.structure_uploader_key}",
-        )
-        _debug_log("structure overview: file_uploader rendered")
-        if structure_upload is not None:
-            st.session_state.uploaded_structure_name = structure_upload.name
-            st.session_state.uploaded_structure_bytes = structure_upload.getvalue()
-            st.session_state.file_name = structure_upload.name
-            _debug_log(
-                f"structure overview: stored upload file={structure_upload.name} bytes={len(st.session_state.uploaded_structure_bytes)}"
-            )
-            st.success(f"Loaded `{structure_upload.name}` into the current workspace.")
-        elif st.session_state.uploaded_structure_name is None:
-            st.caption("No structure loaded yet.")
-        else:
-            st.caption(f"Current structure: `{st.session_state.uploaded_structure_name}`")
-            if st.button("Remove current structure", key="remove_structure_overview"):
-                clear_loaded_structure()
-                st.rerun()
+        st.info("Review the current structure, then move into analysis or transformations as needed.")
 
     elif structure_mode == "Analysis":
         analysis_group = st.radio(
@@ -756,9 +758,10 @@ elif primary_section == "Electronic":
         options=view_names("Electronic"),
         horizontal=True,
     )
-    electronic_tool = st.selectbox(
+    electronic_tool = st.radio(
         "Tool",
         options=tool_options("Electronic", electronic_group),
+        horizontal=True,
     )
     plot_polarization_option = electronic_tool == "Plot polarization"
     plot_pdos_option = electronic_tool == "Plot partial density of states (PDOS)"

@@ -756,6 +756,7 @@ def get_file_uploads(num_data_sets, default_colors):
     colors = []
     legend_labels = []
     energyshifts = []
+    dataset_summaries = []
     uploader_generation = st.session_state["file_uploader_key"]
 
     for i in range(num_data_sets):
@@ -800,28 +801,33 @@ def get_file_uploads(num_data_sets, default_colors):
             if all_band_data_CBM:
                 min_energy_band = min(all_band_data_CBM, key=lambda x: x["Energy"])
 
-            if max_energy_band is not None and min_energy_band is not None:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("### VBM Information (shifted 0 eV)")
-                    st.markdown(f"- **State:** {max_energy_band['State']}")
-                    st.markdown(f"- **Coordinate:** {max_energy_band['Coordinate']}")
-                    st.markdown(f"- **Energy:** {max_energy_band['Energy']} eV")
-
-                with col2:
-                    st.markdown("### CBM Information (just FYI ...)")
-                    st.markdown(f"- **State:** {min_energy_band['State']}")
-                    st.markdown(f"- **Coordinate:** {min_energy_band['Coordinate']}")
-                    st.markdown(f"- **Energy:** {min_energy_band['Energy']} eV")
-
-                st.markdown(f" The band gap is {min_energy_band['Energy'] - max_energy_band['Energy']} eV")
-
             uploaded_files.append(files)
             colors.append(color)
             legend_labels.append(legend_label.strip() or f"Data set {i + 1}")
             energyshifts.append(max_energy_band['Energy'] if all_band_data_VBM else 0)
+            dataset_summaries.append(
+                {
+                    "dataset_index": i + 1,
+                    "legend_label": legend_label.strip() or f"Data set {i + 1}",
+                    "color": color,
+                    "band_file_count": len(filtered_files),
+                    "has_geometry": any(file.name == "geometry.in" for file in files),
+                    "has_control": any(file.name == "control.in" for file in files),
+                    "vbm_state": max_energy_band["State"] if max_energy_band is not None else None,
+                    "vbm_coordinate": max_energy_band["Coordinate"] if max_energy_band is not None else None,
+                    "vbm_energy": max_energy_band["Energy"] if max_energy_band is not None else None,
+                    "cbm_state": min_energy_band["State"] if min_energy_band is not None else None,
+                    "cbm_coordinate": min_energy_band["Coordinate"] if min_energy_band is not None else None,
+                    "cbm_energy": min_energy_band["Energy"] if min_energy_band is not None else None,
+                    "band_gap": (
+                        min_energy_band["Energy"] - max_energy_band["Energy"]
+                        if max_energy_band is not None and min_energy_band is not None
+                        else None
+                    ),
+                }
+            )
 
-    return uploaded_files, colors, legend_labels, energyshifts
+    return uploaded_files, colors, legend_labels, energyshifts, dataset_summaries
 
 
 def filter_band_segments(data, selected_segments):

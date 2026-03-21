@@ -103,6 +103,21 @@ def email_link():
     )
     st.write(f"{inline_mention}", unsafe_allow_html=True)
 
+
+def render_section_header(title, kicker=None, subtitle=None):
+    kicker_html = f'<div class="section-kicker">{kicker}</div>' if kicker else ""
+    subtitle_html = f'<div class="workspace-card-copy">{subtitle}</div>' if subtitle else ""
+    st.markdown(
+        f"""
+        <div class="workspace-card">
+            {kicker_html}
+            <div class="workspace-card-title">{title}</div>
+            {subtitle_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 st.set_page_config(page_title="Hybrid Perovskite Studio", layout="wide")
 _debug_log("startup: page config set")
 
@@ -913,7 +928,7 @@ if current_atoms is not None:
     modified_atoms = current_atoms.copy()
     molecules = current_molecules.copy()
     if rotate_option:
-        st.header("Rotation", divider='violet')
+        render_section_header("Rotation", kicker="Structure Workspace")
 
         rotate_type = st.selectbox("Select Rotation Type", (
         "Rotate Individual Molecules", "Rotate Multiple Molecules", "Random Rotation", "Interpolate by Rotation", "Rotate Part of Molecules", "Rotate by Dipole Moment"))
@@ -1611,7 +1626,7 @@ if current_atoms is not None:
                     create_labelled_download_file(modified_atoms, file_name, output_suffix)
 
     if reflect_option:
-        st.header("Reflect molecules on a plane", divider='violet')
+        render_section_header("Reflect molecules on a plane", kicker="Structure Workspace")
 
         molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
 
@@ -1657,7 +1672,7 @@ if current_atoms is not None:
             create_labelled_download_file(modified_atoms, file_name, output_suffix)
 
     if translation_option:
-        st.header("Translation", divider='violet')
+        render_section_header("Translation", kicker="Structure Workspace")
 
         translate_type = st.selectbox("Select Translation Type", (
             "Molecules", "Atoms"))
@@ -1744,7 +1759,7 @@ if current_atoms is not None:
                         atoms_to_speck(modified_atoms, "translation")
 
     if delete_option:
-        st.header("Delete Molecules", divider='violet')
+        render_section_header("Delete Molecules", kicker="Structure Workspace")
         with st.form(key="delete_form"):
 
             selected_indices = st.multiselect("Select molecule indices to delete",
@@ -1765,7 +1780,7 @@ if current_atoms is not None:
                 atoms_to_speck(modified_atoms, "deletion")
 
     if symmetry_option:
-        st.header("Symmetrize structure", divider='violet')
+        render_section_header("Symmetrize structure", kicker="Structure Workspace")
         with st.form(key="symmetry_form"):
             symprec_lower = st.number_input("Enter the lower bound for tolerance", value=1e-3, step=1e-3, format="%.4f")
             symprec_upper = st.number_input("Enter the upper bound for tolerance", value=1e-1, step=1e-3, format="%.4f")
@@ -1813,7 +1828,7 @@ if current_atoms is not None:
                     st.error(f"An unexpected error occurred: {e}")
 
     if ADP_table_option:
-        st.header("Extract ADP from CIF", divider='violet')
+        render_section_header("Extract ADP from CIF", kicker="Structure Workspace")
 
         try:
             uij_df = extract_Uij_from_cif(file_buffer)
@@ -1824,7 +1839,7 @@ if current_atoms is not None:
             st.error(f"An error occurred when trying to extract the ADP values: {e}")
 
     if polarization_option:
-        st.header("Calculated Polarization direction", divider='violet')
+        render_section_header("Calculated Polarization direction", kicker="Structure Workspace")
         pymatgen_structure = generate_symmetrized_structure(modified_atoms, 0.001,5.0)
         analyzer = SpacegroupAnalyzer(pymatgen_structure)
         structure = analyzer.get_conventional_standard_structure()
@@ -1854,7 +1869,7 @@ if current_atoms is not None:
         st.write(miller_direction)
 
     if PDF_option:
-        st.header("Simulate pair distribution function", divider='violet')
+        render_section_header("Simulate pair distribution function", kicker="Structure Workspace")
 
         # -------------------------------------------------------------------------
         # 1) Parameter sliders
@@ -2864,7 +2879,7 @@ if current_atoms is not None:
 
 
     if charge_analysis_option:
-        st.header('Analyze charge differences', divider='violet')
+        render_section_header("Analyze charge differences", kicker="Structure Workspace")
 
         uploaded = st.file_uploader("Upload Bader charge analysis output (.out)", type=["out", "txt", "dat"])
         if uploaded is not None:
@@ -2966,7 +2981,7 @@ if current_atoms is not None:
                 st.info("Enter one or both ID sets above to compute charge sums, means, and their differences.")
 
     if com_option:
-        st.header('Get center of mass of molecules', divider='violet')
+        render_section_header("Get center of mass of molecules", kicker="Structure Workspace")
         # scale_choice = st.checkbox("Scaled (Fractional) co-ordinates")
         scale_choice = False
         df_centroids, df_distance_matrix, lattice_vectors, df_merged = get_distance_matrix(modified_atoms, molecules)
@@ -3023,7 +3038,7 @@ if current_atoms is not None:
     import re
 
     if dm_option:
-        st.header("Get dipole moment direction", divider='violet')
+        render_section_header("Get dipole moment direction", kicker="Structure Workspace")
 
         # Gather user inputs for rotation using Streamlit widgets
         all_options = list(range(1, len(molecules) + 1))
@@ -3263,7 +3278,7 @@ if current_atoms is not None:
             )
 
     if distance_option:
-        st.header("Calculate atomic distances", divider='violet')
+        render_section_header("Calculate atomic distances", kicker="Structure Workspace")
 
         # User input for atomic symbols
         first_atom = st.text_input('Enter the symbol of the first atom (A):', value="Pb")
@@ -3283,7 +3298,7 @@ if current_atoms is not None:
             st.dataframe(found_distances, use_container_width=True, hide_index=True)
 
     if distortion_option:
-        st.header("Calculate distortion parameters", divider='violet')
+        render_section_header("Calculate distortion parameters", kicker="Structure Workspace")
 
         # User input for atomic symbols
         center_atom = st.text_input('Enter the symbol of the center atom (A):', value="Pb")
@@ -3362,7 +3377,7 @@ if current_atoms is not None:
 
 
 if interpolate_option:
-    st.header("Interpolate Structures", divider='violet')
+    render_section_header("Interpolate Structures", kicker="Structure Workspace")
     file_buffer1 = st.file_uploader("Upload an initial structure file (AIMS or CIF)", type=[".in", ".cif"],
                                     key="file_buffer1")
     file_buffer2 = st.file_uploader("Upload a final structure file (AIMS or CIF)", type=[".in", ".cif"],
@@ -3499,11 +3514,11 @@ if interpolate_option:
 #                         st.error(f"Error: {e}")
 
 if plot_polarization_option:
-    st.header("Polarization Analysis", divider='violet')
-
-    st.text(f'''
-                Upload all aims.out files from polarization calculation. 
-                ''')
+    render_section_header(
+        "Polarization Analysis",
+        kicker="Electronic Workspace",
+        subtitle="Upload all `aims.out` files from the polarization calculation.",
+    )
 
     uploaded_files = st.file_uploader("Upload one or more AIMS output files (.out)", accept_multiple_files=True,
                                       type=".out")
@@ -3581,13 +3596,11 @@ if plot_polarization_option:
     # st.write("This is outside the container")
 
 if plot_pdos_option:
-    st.header("Plot PDOS", divider='violet')
-
-    st.text(f'''
-        Upload all pdos dat files. 
-        If you wish to scale the energy axis similar to the bandstructure,
-         you'll need to provide the energy shift (fermi level) value. This can be found using the "Plot Bandstructure" module.
-        ''')
+    render_section_header(
+        "Plot PDOS",
+        kicker="Electronic Workspace",
+        subtitle='Upload all PDOS data files. To align the energy axis with the bandstructure, optionally provide the energy shift (Fermi level) from the "Band Structure Studio" module.',
+    )
 
     # File uploader for all DOS files
     uploaded_files = st.file_uploader("Upload Total DOS and element DOS files:", type=['dat', 'txt'],
@@ -3642,172 +3655,228 @@ if plot_pdos_option:
         #     st.warning("Please upload the required files.")
 
 if plot_bs_option:
-    st.header("Plot Bandstructure", divider='violet')
+    st.markdown(
+        """
+        <div class="workspace-card">
+            <div class="section-kicker">Electronic Workspace</div>
+            <div class="workspace-card-title">Band Structure Studio</div>
+            <div class="workspace-card-copy">
+                Band plots require <code>band*.out</code>. Brillouin-zone plots require <code>geometry.in</code>, and path labels additionally require <code>control.in</code>.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    # Configuration for the number of datasets and default settings
-    num_data_sets = st.number_input("How many plot data sets do you want to provide?",
-                                    min_value=1, max_value=10, value=1)
+    st.markdown("**Inputs**")
+    num_data_sets = st.number_input(
+        "How many plot data sets do you want to provide?",
+        min_value=1,
+        max_value=10,
+        value=1,
+    )
     default_colors = ['crimson', 'blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'orange', 'purple', 'brown']
 
-    # Get file uploads and user preferences
-    uploaded_files_list, user_defined_colors, user_defined_legends, user_defined_eshifts = get_file_uploads(num_data_sets, default_colors)
+    uploaded_files_list, user_defined_colors, user_defined_legends, user_defined_eshifts, dataset_summaries = get_file_uploads(num_data_sets, default_colors)
 
-    # Get the user-defined plot range
-    plot_range = st.slider("Select plot range for Energy axis (eV):", min_value=-10.0, max_value=10.0, value=(-2.0, 5.0), step=0.1)
-    ymin, ymax = plot_range
+    if dataset_summaries:
+        with st.expander("Loaded Data Sets", expanded=False):
+            for start in range(0, len(dataset_summaries), 3):
+                row = dataset_summaries[start:start + 3]
+                columns = st.columns(len(row))
+                for col, summary in zip(columns, row):
+                    geometry_status = "Yes" if summary["has_geometry"] else "No"
+                    control_status = "Yes" if summary["has_control"] else "No"
+                    band_gap_text = f"{summary['band_gap']:.3f} eV" if summary["band_gap"] is not None else "Not detected"
+                    vbm_text = (
+                        f"State {summary['vbm_state']} @ {summary['vbm_coordinate']}<br>"
+                        f"{summary['vbm_energy']:.3f} eV"
+                        if summary["vbm_energy"] is not None
+                        else "Not detected"
+                    )
+                    cbm_text = (
+                        f"State {summary['cbm_state']} @ {summary['cbm_coordinate']}<br>"
+                        f"{summary['cbm_energy']:.3f} eV"
+                        if summary["cbm_energy"] is not None
+                        else "Not detected"
+                    )
+                    with col:
+                        st.markdown(
+                            f"""
+                            <div class="workspace-card">
+                                <div class="workspace-card-title">{summary['legend_label']}</div>
+                                <div class="workspace-card-copy">
+                                    <strong>Color:</strong> <span style="color:{summary['color']};">{summary['color']}</span><br>
+                                    <strong>Band files:</strong> {summary['band_file_count']}<br>
+                                    <strong>geometry.in:</strong> {geometry_status}<br>
+                                    <strong>control.in:</strong> {control_status}<br>
+                                    <strong>VBM:</strong><br>{vbm_text}<br>
+                                    <strong>CBM:</strong><br>{cbm_text}<br>
+                                    <strong>Band gap:</strong> {band_gap_text}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
-    selected_segment_text = st.text_input(
-        "K-path segments to plot (optional)",
-        value="",
-        help="Use one-based segment indices like 1,3,5-6. Leave blank to plot all segments.",
-    )
-    label_offset_text = st.text_input(
-        "X-axis label offsets (optional)",
-        value="",
-        help="Adjust selected x-axis labels with entries like 2:-0.08, 5:-0.15.",
-    )
+    band_tab, bz_tab = st.tabs(["Band Structure", "Brillouin Zone"])
 
-    # Checkbox for scaling, visible only if more than one dataset is uploaded
-    apply_scaling = st.checkbox("Scale x-axis to match the first dataset?") if num_data_sets > 1 else False
-
-    if uploaded_files_list:
-        bz_dataset_options = [f"Data set {index + 1}" for index in range(len(uploaded_files_list))]
-        bz_dataset_label = st.selectbox(
-            "Brillouin-zone dataset",
-            options=bz_dataset_options,
-            index=0,
-            help="Choose which uploaded dataset to use for the Brillouin-zone plot.",
+    with band_tab:
+        st.markdown("**Plot Settings**")
+        plot_range = st.slider(
+            "Select plot range for Energy axis (eV):",
+            min_value=-10.0,
+            max_value=10.0,
+            value=(-2.0, 5.0),
+            step=0.1,
         )
-        if st.button("Plot Brillouin zone"):
-            try:
-                bz_index = bz_dataset_options.index(bz_dataset_label)
-                bz_fig = build_brillouin_zone_figure(
-                    uploaded_files_list[bz_index],
-                    dataset_label=user_defined_legends[bz_index] if bz_index < len(user_defined_legends) else bz_dataset_label,
-                )
-                st.plotly_chart(bz_fig, use_container_width=True)
+        ymin, ymax = plot_range
 
-                bz_png = pio.to_image(bz_fig, format="png", scale=3)
-                bz_pdf = pio.to_image(bz_fig, format="pdf")
-                st.caption("Export Brillouin Zone")
-                bz_col1, bz_col2 = st.columns(2)
-                with bz_col1:
-                    st.download_button(
-                        label="PNG",
-                        data=bz_png,
-                        file_name="brillouin_zone.png",
-                        mime="application/png",
-                        use_container_width=True,
+        with st.expander("Advanced"):
+            selected_segment_text = st.text_input(
+                "K-path segments to plot (optional)",
+                value="",
+                help="Use one-based segment indices like 1,3,5-6. Leave blank to plot all segments.",
+            )
+            label_offset_text = st.text_input(
+                "X-axis label offsets (optional)",
+                value="",
+                help="Adjust selected x-axis labels with entries like 2:-0.08, 5:-0.15.",
+            )
+            apply_scaling = st.checkbox("Scale x-axis to match the first dataset?") if num_data_sets > 1 else False
+
+        plot_button = st.button("Generate Band Structure")
+
+        if uploaded_files_list:
+            if plot_button:
+                try:
+                    fig, ax = plt.subplots(figsize=(16, 12))
+                    plt.rcParams["font.family"] = "Arial"
+                    plt.rcParams.update({'font.size': 24})
+                    for spine in ['bottom', 'left', 'top', 'right']:
+                        ax.spines[spine].set_linewidth(2)
+
+                    selected_segments = parse_segment_selection(selected_segment_text)
+                    label_offset_map = parse_label_offset_map(label_offset_text)
+
+                    all_data = process_files(
+                        uploaded_files_list,
+                        user_defined_colors,
+                        user_defined_legends,
+                        user_defined_eshifts,
+                        selected_segments=selected_segments,
                     )
-                with bz_col2:
-                    st.download_button(
-                        label="PDF",
-                        data=bz_pdf,
-                        file_name="brillouin_zone.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
+                    if apply_scaling:
+                        scaling_factors = calculate_scaling_factors(all_data)
+                        all_data = scale_data(all_data, scaling_factors)
+
+                    plot_all_bands(ax, all_data, apply_scaling, num_data_sets)
+                    set_custom_labels(ax, all_data, apply_scaling, num_data_sets, label_offset_map=label_offset_map)
+
+                    plt.ylabel('Energy (eV)')
+                    plt.axis([0, max([abs(i) for data in all_data for i in data["xvals"][-1]]), ymin, ymax])
+                    if num_data_sets > 1:
+                        ax.legend(
+                            frameon=True,
+                            facecolor='white',
+                            edgecolor='lightgray',
+                            framealpha=0.95,
+                            fontsize=14,
+                            loc='upper right',
+                            borderpad=0.4,
+                            labelspacing=0.3,
+                            handlelength=1.6,
+                        )
+                    plt.tight_layout()
+                    st.pyplot(fig)
+
+                    buf = io.BytesIO()
+                    fig.savefig(buf, format='png', transparent=True)
+                    buf.seek(0)
+
+                    pdf_buf = io.BytesIO()
+                    fig.savefig(pdf_buf, format='pdf', transparent=True)
+                    pdf_buf.seek(0)
+                    st.markdown("**Export**")
+                    export_col1, export_col2 = st.columns(2)
+                    with export_col1:
+                        st.download_button(
+                            label="PNG",
+                            data=buf,
+                            file_name="band_structure.png",
+                            mime="application/png",
+                            use_container_width=True,
+                        )
+                    with export_col2:
+                        st.download_button(
+                            label="PDF",
+                            data=pdf_buf,
+                            file_name="band_structure.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                        )
+
+                except ValueError as exc:
+                    st.error(str(exc))
+        else:
+            st.info("Upload at least one dataset above to generate a band-structure plot.")
+
+    with bz_tab:
+        if uploaded_files_list:
+            st.markdown("**Inputs**")
+            bz_dataset_options = [f"Data set {index + 1}" for index in range(len(uploaded_files_list))]
+            bz_dataset_label = st.selectbox(
+                "Brillouin-zone dataset",
+                options=bz_dataset_options,
+                index=0,
+                help="Choose which uploaded dataset to use for the Brillouin-zone plot.",
+            )
+            bz_plot_button = st.button("Generate Brillouin Zone")
+            if bz_plot_button:
+                try:
+                    bz_index = bz_dataset_options.index(bz_dataset_label)
+                    bz_fig = build_brillouin_zone_figure(
+                        uploaded_files_list[bz_index],
+                        dataset_label=user_defined_legends[bz_index] if bz_index < len(user_defined_legends) else bz_dataset_label,
                     )
-            except ValueError as exc:
-                st.error(str(exc))
+                    st.plotly_chart(bz_fig, use_container_width=True)
 
-    # Button to trigger the plotting
-    plot_button = st.button("Plot")
+                    bz_png = pio.to_image(bz_fig, format="png", scale=3)
+                    bz_pdf = pio.to_image(bz_fig, format="pdf")
+                    st.markdown("**Export**")
+                    bz_col1, bz_col2 = st.columns(2)
+                    with bz_col1:
+                        st.download_button(
+                            label="PNG",
+                            data=bz_png,
+                            file_name="brillouin_zone.png",
+                            mime="application/png",
+                            use_container_width=True,
+                        )
+                    with bz_col2:
+                        st.download_button(
+                            label="PDF",
+                            data=bz_pdf,
+                            file_name="brillouin_zone.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                        )
+                except ValueError as exc:
+                    st.error(str(exc))
+        else:
+            st.info("Upload a dataset with `geometry.in` to generate a Brillouin-zone plot.")
 
-    # Button to remove files
     remove_button = st.button("Clear files")
-
-    if uploaded_files_list:
-        if plot_button:
-            try:
-                # Set up the plot with custom configurations
-                fig, ax = plt.subplots(figsize=(16, 12))
-                plt.rcParams["font.family"] = "Arial"
-                plt.rcParams.update({'font.size': 24})
-                for spine in ['bottom', 'left', 'top', 'right']:
-                    ax.spines[spine].set_linewidth(2)
-
-                selected_segments = parse_segment_selection(selected_segment_text)
-                label_offset_map = parse_label_offset_map(label_offset_text)
-
-                # Process files and potentially apply scaling
-                all_data = process_files(
-                    uploaded_files_list,
-                    user_defined_colors,
-                    user_defined_legends,
-                    user_defined_eshifts,
-                    selected_segments=selected_segments,
-                )
-                if apply_scaling:
-                    scaling_factors = calculate_scaling_factors(all_data)
-                    all_data = scale_data(all_data, scaling_factors)
-
-                # Plot bands and set labels
-                plot_all_bands(ax, all_data, apply_scaling, num_data_sets)
-                set_custom_labels(ax, all_data, apply_scaling, num_data_sets, label_offset_map=label_offset_map)
-
-                # Finalize and show the plot
-                plt.ylabel('Energy (eV)')
-                plt.axis([0, max([abs(i) for data in all_data for i in data["xvals"][-1]]), ymin, ymax])
-                if num_data_sets > 1:
-                    ax.legend(
-                        frameon=True,
-                        facecolor='white',
-                        edgecolor='lightgray',
-                        framealpha=0.95,
-                        fontsize=14,
-                        loc='upper right',
-                        borderpad=0.4,
-                        labelspacing=0.3,
-                        handlelength=1.6,
-                    )
-                plt.tight_layout()
-                st.pyplot(fig)
-
-                buf = io.BytesIO()
-                fig.savefig(buf, format='png', transparent=True)
-                buf.seek(0)
-
-                pdf_buf = io.BytesIO()
-                fig.savefig(pdf_buf, format='pdf', transparent=True)
-                pdf_buf.seek(0)
-                st.caption("Export Band Structure")
-                export_col1, export_col2 = st.columns(2)
-                with export_col1:
-                    st.download_button(
-                        label="PNG",
-                        data=buf,
-                        file_name=f"band_structure.png",
-                        mime="application/png",
-                        use_container_width=True,
-                    )
-                with export_col2:
-                    st.download_button(
-                        label="PDF",
-                        data=pdf_buf,
-                        file_name="band_structure.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                    )
-
-            except ValueError as exc:
-                st.error(str(exc))
-
-        if remove_button:
-            st.session_state["file_uploader_key"] += 1
-            st.rerun()
-
-
-
-    else:
-        st.warning("Please upload files before plotting.")
+    if uploaded_files_list and remove_button:
+        st.session_state["file_uploader_key"] += 1
+        st.rerun()
 
 if plot_spin_option:
-    st.header("Plot Spin Texture", divider='violet')
-
-    st.text(f'''
-            Upload the spin_texture.dat file. 
-            Optionally, if you provide the "aims.out" file, the app will display other relevant information (e.g., band edges).
-            ''')
+    render_section_header(
+        "Plot Spin Texture",
+        kicker="Electronic Workspace",
+        subtitle='Upload `spin_texture.dat`. Optionally include `aims.out` to show related band-edge information.',
+    )
 
     # File uploader
     uploaded_file = st.file_uploader("Upload spin_texture.dat", type=['dat'], accept_multiple_files=False)
@@ -3899,7 +3968,7 @@ if plot_spin_option:
 
 
 if plot_absorption_option:
-    st.header("Plot absorption spectra", divider='violet')
+    render_section_header("Plot absorption spectra", kicker="Electronic Workspace")
 
     uploaded_abs_files = st.file_uploader("Upload absorption output files", type=['out'], accept_multiple_files=True)
     exponent_y_user = st.checkbox('y-axis logarithmic?')
@@ -3915,7 +3984,7 @@ if plot_absorption_option:
 
 
 if deviation_calculation_option:
-    st.header("Calculate deviation", divider='violet')
+    render_section_header("Calculate deviation", kicker="Structure Workspace")
 
     file_buffer1 = st.file_uploader("Upload an initial structure file (AIMS or CIF)", type=[".in", ".cif"],
                                     key="file_buffer1")
@@ -3951,7 +4020,7 @@ if deviation_calculation_option:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
 if MD_option:
-    st.header("Analyze AIMS Molecular Dynamics (MD) Output files", divider='violet')
+    render_section_header("Analyze AIMS Molecular Dynamics (MD) Output files", kicker="Dynamics Workspace")
 
     file_buffer_md = st.file_uploader("Upload MD output files", type=[".out"], accept_multiple_files=True,
                                       key="file_buffer_md")
@@ -4140,7 +4209,7 @@ def create_universe(file_buffer_md, timestep):
 previous_file_buffer = None
 
 if MDanalysis_option:
-    st.header("Analysis on MD Trajectory", divider='violet')
+    render_section_header("Analysis on MD Trajectory", kicker="Dynamics Workspace")
     timestep = st.number_input("Enter timestep in fs (dt)", min_value=0.0, max_value=50.0, step=0.1)
     file_buffer_md = st.file_uploader("Upload zipped directory", type=["zip"], key="file_buffer_zip")
 
@@ -4252,20 +4321,22 @@ if MDanalysis_option:
 
 
 if script_option:
-    st.header("Run your own python script!", divider='violet')
-    st.text("This feature uses JupyterLite and runs the script entirely on your browser. At this time, this enviroment does not have access to any previously uploaded file.")
+    render_section_header(
+        "Run your own python script!",
+        kicker="Utilities Workspace",
+        subtitle="This feature uses JupyterLite and runs entirely in your browser. It does not currently have access to previously uploaded files.",
+    )
     jupyterlite(900, 1600)
 
 import mpld3
 import streamlit.components.v1 as components
 
 if plot_spin_v2_option:
-    st.header("Plot Spin Texture", divider='violet')
-
-    st.text(f'''
-            Upload the spin_texture.dat file. 
-            Optionally, if you provide the "aims.out" file, the app will display other relevant information (e.g., band edges).
-            ''')
+    render_section_header(
+        "Plot Spin Texture",
+        kicker="Utilities Workspace",
+        subtitle='Upload `spin_texture.dat`. Optionally include `aims.out` to show related band-edge information.',
+    )
 
     # File uploader
     uploaded_file = st.file_uploader("Upload spin_texture.dat", type=['dat'], accept_multiple_files=False)

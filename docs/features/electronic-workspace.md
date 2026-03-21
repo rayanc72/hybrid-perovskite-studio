@@ -18,6 +18,8 @@ The Electronic workspace focuses on plotting and inspecting electronic-structure
 - Plot bandstructure
 - Plot spin texture
 - Plot partial density of states (PDOS)
+- Detailed module guide:
+  [Band Structure Studio](band-structure-studio.md)
 
 ### Advanced
 

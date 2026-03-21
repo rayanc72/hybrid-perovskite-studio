@@ -15,6 +15,7 @@ This documentation set is organized around the current workspace-based UI. The g
 
 - [Structure Workspace](features/structure-workspace.md)
 - [Electronic Workspace](features/electronic-workspace.md)
+- [Band Structure Studio](features/band-structure-studio.md)
 - [Dynamics Workspace](features/dynamics-workspace.md)
 - [Utilities Workspace](features/utilities-workspace.md)
 

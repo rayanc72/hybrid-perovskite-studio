@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hybrid-perovskite-studio"
-version = "0.1.0"
+version = "0.1.1"
 description = "Workspace-oriented Streamlit toolkit for hybrid perovskite modeling, analysis, and visualization."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -84,8 +84,6 @@ full = [
   "ase",
   "bokeh",
   "colorcet",
-  "diffpy.pdffit2",
-  "diffpy.structure",
   "holoviews",
   "ipyspeck",
   "matplotlib",

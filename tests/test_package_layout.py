@@ -12,7 +12,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from hps.services.runtime import DEPENDENCY_GROUPS, full_install_command
+from hps.services.runtime import DEPENDENCY_GROUPS, full_install_command, pdf_install_command
 from hps.ui.sidebar import SIDEBAR_SECTIONS
 
 
@@ -33,6 +33,7 @@ class PackageLayoutTests(unittest.TestCase):
         names = {group.name for group in DEPENDENCY_GROUPS}
         self.assertTrue({"core", "md", "pdf", "viz", "auth"}.issubset(names))
         self.assertEqual(full_install_command(), "pip install -e '.[full]'")
+        self.assertEqual(pdf_install_command(), "pip install -e '.[pdf]'")
 
     def test_sidebar_catalog_is_not_empty(self) -> None:
         titles = {section.title for section in SIDEBAR_SECTIONS}

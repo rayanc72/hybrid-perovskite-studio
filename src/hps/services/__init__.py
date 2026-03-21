@@ -5,6 +5,7 @@ from .runtime import (
     full_install_command,
     grouped_missing_modules,
     legacy_app_is_runnable,
+    pdf_install_command,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "full_install_command",
     "grouped_missing_modules",
     "legacy_app_is_runnable",
+    "pdf_install_command",
 ]

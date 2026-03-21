@@ -110,8 +110,14 @@ def dependency_status_by_group() -> list[dict[str, object]]:
 
 
 def legacy_app_is_runnable() -> bool:
-    return not grouped_missing_modules()
+    missing = grouped_missing_modules()
+    missing.pop("pdf", None)
+    return not missing
 
 
 def full_install_command() -> str:
     return "pip install -e '.[full]'"
+
+
+def pdf_install_command() -> str:
+    return "pip install -e '.[pdf]'"

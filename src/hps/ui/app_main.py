@@ -1,6 +1,6 @@
 import copy
+import importlib
 
-from hps.domain import pdf_analysis as pdf_analysis_module
 from hps.domain import electronic_property as electronic_property_module
 from hps.domain import md_analysis as md_analysis_module
 from hps.domain import molecule_builder as molecule_builder_module
@@ -32,14 +32,23 @@ def _debug_log(message):
 _debug_log("startup: entered hps.ui.app_main")
 
 
+try:
+    pdf_analysis_module = importlib.import_module("hps.domain.pdf_analysis")
+    PDF_ANALYSIS_AVAILABLE = True
+except Exception:
+    pdf_analysis_module = None
+    PDF_ANALYSIS_AVAILABLE = False
+
 for _module in (
     structure_manager_module,
     molecule_builder_module,
     electronic_property_module,
     md_analysis_module,
-    pdf_analysis_module,
 ):
     _inject_public_names(_module)
+
+if pdf_analysis_module is not None:
+    _inject_public_names(pdf_analysis_module)
 
 _debug_log("startup: injected public names from packaged modules")
 
@@ -54,8 +63,6 @@ import subprocess
 import os
 import shutil
 from pathlib import Path
-from diffpy.structure import loadStructure
-from diffpy.pdffit2 import PdfFit
 import requests
 from PIL import Image
 from streamlit_lottie import st_lottie
@@ -1794,6 +1801,13 @@ if current_atoms is not None:
 
     if PDF_option:
         render_section_header("Simulate pair distribution function", kicker="Structure Workspace")
+
+        if not PDF_ANALYSIS_AVAILABLE:
+            st.warning(
+                "PDF analysis requires the optional PDF dependencies. Install them with "
+                "`pip install \"hybrid-perovskite-studio[pdf]\"`."
+            )
+            st.stop()
 
         # -------------------------------------------------------------------------
         # 1) Parameter sliders

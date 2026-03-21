@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import streamlit as st
 
-from hps.services.runtime import dependency_status_by_group, full_install_command
+from hps.services.runtime import (
+    dependency_status_by_group,
+    full_install_command,
+    pdf_install_command,
+)
 from hps.ui.sidebar import SIDEBAR_SECTIONS
 
 
@@ -16,11 +20,14 @@ def render_bootstrap_page() -> None:
     st.markdown(
         """
         This packaged launcher keeps the legacy Streamlit app intact while moving installation and runtime checks
-        into a more reproducible structure. Install the full dependency set to run the complete legacy UI.
+        into a more reproducible structure. Install the standard dependency set to run the main app, and add the
+        PDF extras only if you need the PDF-analysis workflow.
         """
     )
 
     st.code(full_install_command())
+    st.caption("Optional PDF support")
+    st.code(pdf_install_command())
 
     st.subheader("Dependency status")
     for group in dependency_status_by_group():
@@ -37,5 +44,5 @@ def render_bootstrap_page() -> None:
             st.write(f"- {item}")
 
     st.info(
-        "Run `streamlit run src/hps/app.py` after installing `.[full]` to execute the complete legacy interface."
+        "Run `streamlit run src/hps/app.py` after installing `.[full]`. Add `.[pdf]` only if you need PDF analysis."
     )

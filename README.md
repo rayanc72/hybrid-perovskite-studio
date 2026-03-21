@@ -8,11 +8,23 @@ Beyond structure chemistry, HPS also provides tools for analyzing computational 
 
 HPS is an active research software project and is still evolving. It grew out of a longer collection of notebook-based and script-based workflows developed for hybrid-perovskite research, and is gradually being consolidated into a more structured, reusable application. Although it focuses upon hybrid perovskites, the tools are equally applicable to other materials classes. While the codebase is already useful for day-to-day analysis, some workflows remain under active refinement and edge cases may still appear. The broader goal is to continue expanding HPS into a flexible and maintainable platform for hybrid perovskite modelling, analysis, and visualization.
 
-## Run
+## Install
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+pip install ".[full]"
+```
+
+## Run
+
+```bash
+hps
+```
+
+For local development:
+
+```bash
 pip install -e ".[full]"
 streamlit run src/hps/app.py
 ```
@@ -35,6 +47,7 @@ streamlit run src/hps/app.py
 
 ## Notes
 
+- PyPI/package entrypoint: `hps`
 - Main entrypoint: `streamlit run src/hps/app.py`
 - Runtime files belong under `tmp/` and `output/`
 - Navigation is defined in `src/hps/ui/navigation.py`

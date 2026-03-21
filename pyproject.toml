@@ -5,12 +5,42 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "hybrid-perovskite-studio"
 version = "0.1.0"
-description = "Packaged entrypoint and dependency management for Hybrid Perovskite Studio."
+description = "Workspace-oriented Streamlit toolkit for hybrid perovskite modeling, analysis, and visualization."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [
+  {name = "Rayan Chakraborty"},
+]
+keywords = [
+  "hybrid perovskites",
+  "materials science",
+  "structure analysis",
+  "streamlit",
+  "electronic structure",
+  "molecular dynamics",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Chemistry",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Topic :: Scientific/Engineering :: Visualization",
+]
 dependencies = [
   "streamlit>=1.33",
 ]
+
+[project.urls]
+Homepage = "https://github.com/rayanc72/hybrid-perovskite-studio"
+Documentation = "https://github.com/rayanc72/hybrid-perovskite-studio/tree/main/docs"
+Repository = "https://github.com/rayanc72/hybrid-perovskite-studio"
+Issues = "https://github.com/rayanc72/hybrid-perovskite-studio/issues"
+
+[project.scripts]
+hps = "hps.cli:main"
 
 [project.optional-dependencies]
 core = [

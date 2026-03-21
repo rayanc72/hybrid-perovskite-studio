@@ -16,18 +16,6 @@ source .venv/bin/activate
 pip install ".[full]"
 ```
 
-Optional PDF analysis support requires extra native dependencies and is installed separately:
-
-```bash
-pip install ".[pdf]"
-```
-
-On macOS, `diffpy.pdffit2` may require:
-
-```bash
-brew install gsl
-```
-
 ## Run
 
 ```bash

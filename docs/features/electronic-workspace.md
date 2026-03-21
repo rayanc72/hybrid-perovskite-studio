@@ -2,31 +2,26 @@
 
 ## Overview
 
-The Electronic workspace focuses on plotting and inspecting electronic-structure outputs. It collects the app's polarization, DOS, bandstructure, spin-texture, and absorption workflows under one workspace.
+The Electronic workspace focuses on plotting and inspecting electronic-structure outputs. It groups band, spin, PDOS, polarization, and absorption workflows under one workspace.
 
 ## Where It Appears In The UI
 
 - Start page workspace card: `Electronic`
 - Workspace views:
-  - `Polarization and DOS`
   - `Bands and Spin`
-  - `Optical`
+  - `Advanced`
 
 ## Main Tools
-
-### Polarization and DOS
-
-- Plot polarization
-- Plot partial density of states (PDOS)
 
 ### Bands and Spin
 
 - Plot bandstructure
 - Plot spin texture
-- Plot 3D spin texture
+- Plot partial density of states (PDOS)
 
-### Optical
+### Advanced
 
+- Plot polarization
 - Plot absorption spectra
 
 ## Typical Workflow

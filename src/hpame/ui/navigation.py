@@ -94,21 +94,16 @@ NAVIGATION_REGISTRY = {
     "Electronic": {
         "description": "Explore polarization, DOS, bands, spin, and optical outputs.",
         "views": {
-            "Polarization and DOS": {
-                "tools": [
-                    "Plot polarization",
-                    "Plot partial density of states (PDOS)",
-                ]
-            },
             "Bands and Spin": {
                 "tools": [
                     "Plot bandstructure",
                     "Plot spin texture",
-                    "Plot 3D spin texture",
+                    "Plot partial density of states (PDOS)",
                 ]
             },
-            "Optical": {
+            "Advanced": {
                 "tools": [
+                    "Plot polarization",
                     "Plot absorption spectra",
                 ]
             },

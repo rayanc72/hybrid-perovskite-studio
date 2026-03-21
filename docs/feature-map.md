@@ -17,10 +17,10 @@
       - Calculate dipole moment
       - Charge analysis
     - Structure Metrics
-      - Calculate atomic distances
+      - Calculate interatomic distances
       - Calculate octahedral distortions
-      - Calculate percentage deviation
-    - PDF Analysis
+      - Calculate percentage deviation (between two structures)
+    - Pair Distribution Function Analysis
       - PDF analysis
   - Transformations
     - Molecule Operations
@@ -54,7 +54,6 @@
 - Dynamics
   - Analyze AIMS MD output
     - Plot parsed MD output
-    - Export CSV
     - Generate geometry files
   - Trajectory analysis
     - H-Bond Analysis
@@ -69,8 +68,7 @@
     - JupyterLite browser workspace
   - Plot Data
     - Custom dataset plotting
-    - Math-expression transforms
 
 ## Source Of Truth
 
-The live navigation tree is defined in [src/hps/ui/navigation.py](../src/hps/ui/navigation.py). Update that file if the app navigation changes.
+The live navigation tree is defined in [src/hps/ui/navigation.py](../src/hps/ui/navigation.py). 

@@ -6,8 +6,6 @@ SRC_ROOT = Path(__file__).resolve().parents[2]
 REPO_ROOT = SRC_ROOT.parent
 APP_OUTPUT_DIR = REPO_ROOT / "output"
 APP_TMP_DIR = REPO_ROOT / "tmp"
-LEGACY_SHIMS_DIR = REPO_ROOT / "legacy_shims"
-LEGACY_ENTRYPOINT = LEGACY_SHIMS_DIR / "app1.py"
 
 
 def ensure_runtime_dirs() -> None:

@@ -1,23 +1,17 @@
 # Hybrid Perovskite Studio Architecture
 
-## Current migration model
+## Current layout
 
-The repository is moving from a flat set of top-level scripts into a package-centered layout under `src/hpame/`.
-
-The transition is intentionally incremental:
+The repository now runs from a package-centered layout under `src/hpame/`.
 
 - `src/hpame/app.py` is the supported entrypoint
-- `src/hpame/legacy/loader.py` can execute the archived shim entrypoint under `legacy_shims/` if needed
 - `src/hpame/domain/` provides narrow, lazy wrappers around the current scientific modules instead of importing them eagerly at package import time
 - `src/hpame/services/runtime.py` owns dependency-group checks and bootstrap behavior
 - `src/hpame/io/paths.py` defines shared runtime locations for `output/` and `tmp/`
 
-After the first cutover:
-
 - `src/hpame/ui/app_main.py` contains the packaged app implementation copied from the legacy entrypoint
 - `src/hpame/ui/navigation.py` is the single source of truth for workspace names, workspace descriptions, and the feature-map tree
 - `src/hpame/domain/pdf_analysis.py` contains the packaged PDF analysis implementation copied from the legacy module
-- archived compatibility shims now live under `legacy_shims/`
 
 ## Boundaries
 
@@ -42,21 +36,16 @@ Files under `src/hpame/domain/` should expose scientific operations through narr
 
 Files under `src/hpame/io/` should handle repository paths, output conventions, and file/runtime helpers.
 
-### Legacy layer
-
-Files under `src/hpame/legacy/` are compatibility shims only. New features should not be added there.
-Files under `legacy_shims/` should be treated the same way.
-
 ## Dependency policy
 
 - `pyproject.toml` is the source of truth for installation metadata
 - `requirements.txt` is a compatibility wrapper that installs the editable package with `full` and `dev` extras
 - Optional dependency groups are separated by concern: `core`, `md`, `pdf`, `viz`, `auth`
-- The legacy UI currently requires the `full` stack because of top-level imports in the old app modules
+- The current UI requires the `full` stack because of the scientific dependencies used across the packaged modules
 
 ## Guardrails
 
 - No wildcard imports in `src/hpame/`
-- New package modules should prefer lazy imports when wrapping legacy code
+- New package modules should prefer lazy imports when scientific imports are optional or heavy
 - Runtime artifacts should go under `output/` or `tmp/`
-- New work should target the package tree first, not the legacy top-level layout
+- New work should target the package tree first

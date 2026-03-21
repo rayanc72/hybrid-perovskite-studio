@@ -19,10 +19,8 @@ from hpame.ui.sidebar import SIDEBAR_SECTIONS
 class PackageLayoutTests(unittest.TestCase):
     def test_expected_directories_exist(self) -> None:
         expected = [
-            ROOT / "legacy_shims",
             ROOT / "src" / "hpame" / "domain",
             ROOT / "src" / "hpame" / "io",
-            ROOT / "src" / "hpame" / "legacy",
             ROOT / "src" / "hpame" / "services",
             ROOT / "src" / "hpame" / "ui",
             ROOT / "docs",
@@ -65,12 +63,10 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn('module_name = "hpame.ui.app_main"', entrypoint)
         self.assertIn("importlib.reload(sys.modules[module_name])", entrypoint)
         self.assertIn("importlib.import_module(module_name)", entrypoint)
-        self.assertNotIn("run_legacy_app", entrypoint)
 
     def test_packaged_pdf_wrapper_uses_packaged_module(self) -> None:
         wrapper = (ROOT / "src" / "hpame" / "domain" / "pdf.py").read_text()
         self.assertIn("from hpame.domain import pdf_analysis as _impl", wrapper)
-        self.assertNotIn('import_legacy_module("PDFAnalysis")', wrapper)
 
     def test_plot_band_is_import_safe(self) -> None:
         plot_band = (ROOT / "src" / "hpame" / "tools" / "plot_band.py").read_text()

@@ -1,0 +1,32 @@
+site_name: Hybrid Perovskite Studio
+site_description: Documentation for the Hybrid Perovskite Studio project.
+site_url: https://hybrid-perovskite-studio.readthedocs.io/
+repo_url: https://github.com/rayanc72/hybrid-perovskite-studio
+repo_name: rayanc72/hybrid-perovskite-studio
+docs_dir: docs
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+markdown_extensions:
+  - admonition
+  - tables
+nav:
+  - Home: index.md
+  - User Guide:
+      - Getting Started: user-guide/getting-started.md
+      - Navigation and Workspaces: user-guide/navigation-and-workspaces.md
+  - Features:
+      - Feature Map: feature-map.md
+      - Structure Workspace: features/structure-workspace.md
+      - Electronic Workspace: features/electronic-workspace.md
+      - Band Structure Studio: features/band-structure-studio.md
+      - Dynamics Workspace: features/dynamics-workspace.md
+      - Utilities Workspace: features/utilities-workspace.md
+  - Reference:
+      - Architecture: architecture.md
+      - Documentation Workflow: reference/documentation-workflow.md
+      - Changelog: changelog.md

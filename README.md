@@ -56,6 +56,21 @@ streamlit run src/hps/app.py
 - [Feature Map](docs/feature-map.md)
 - [Workspace Guides](docs/index.md)
 
+To preview the documentation locally:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+To build the static docs site locally:
+
+```bash
+mkdocs build
+```
+
 ## Gallery
 
 ![Landing Page](docs/images/screenshots/landing-page.png)

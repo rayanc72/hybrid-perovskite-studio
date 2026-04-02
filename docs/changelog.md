@@ -34,3 +34,6 @@
 
 - Renamed the app-facing product name to `Hybrid Perovskite Studio`.
 - Added feature-oriented documentation under `docs/features/`.
+- Added a Structure Workspace labelling tool that exports custom-labelled `geometry.in` files for one or more selected molecule groups.
+- Updated the labelling export so non-selected atoms keep their plain element symbols while selected atoms receive user-defined labels.
+- Updated AIMS-format labelling exports to preserve the original uploaded `geometry.in` line structure when only atom labels change.

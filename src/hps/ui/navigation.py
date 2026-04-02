@@ -70,6 +70,11 @@ NAVIGATION_REGISTRY = {
                                     "Delete selected molecule groups",
                                 ]
                             },
+                            "Labelling": {
+                                "details": [
+                                    "Apply a custom atom label to a selected molecule group",
+                                ]
+                            },
                         }
                     },
                     "Lattice Operations": {

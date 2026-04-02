@@ -255,6 +255,7 @@ rotate_option = False
 reflect_option = False
 translation_option = False
 delete_option = False
+labelling_option = False
 interpolate_option = False
 plot_polarization_option = False
 plot_pdos_option = False
@@ -694,6 +695,7 @@ if primary_section == "Structure":
         reflect_option = transform_tool == "Reflection"
         translation_option = transform_tool == "Translation"
         delete_option = transform_tool == "Deletion"
+        labelling_option = transform_tool == "Labelling"
         if transform_tool == "Interpolation":
             st.caption("Interpolation uses its own file-upload workflow inside lattice operations.")
         interpolate_option = transform_tool == "Interpolation"
@@ -775,6 +777,7 @@ structure_tool_selected = any(
         reflect_option,
         translation_option,
         delete_option,
+        labelling_option,
         interpolate_option,
     ]
 )
@@ -794,6 +797,7 @@ if current_atoms is None and structure_tool_selected:
     reflect_option = False
     translation_option = False
     delete_option = False
+    labelling_option = False
     interpolate_option = False
 
 
@@ -1709,6 +1713,68 @@ if current_atoms is not None:
 
             with st.expander("See structure"):
                 atoms_to_speck(modified_atoms, "deletion")
+
+    if labelling_option:
+        render_section_header("Label Molecule Atoms", kicker="Structure Workspace")
+
+        selected_molecule_indices = st.multiselect(
+            "Select molecules",
+            options=range(1, len(molecules) + 1),
+            format_func=lambda index: f"Molecule {index}",
+        )
+
+        label_overrides = {}
+        labelled_molecule_parts = []
+        has_valid_label = False
+
+        for selected_molecule_index in selected_molecule_indices:
+            selected_molecule = molecules[selected_molecule_index - 1]
+            current_labels = [current_modified_symbols[atom_index] for atom_index in selected_molecule]
+            st.caption(f"Molecule {selected_molecule_index} current labels: {', '.join(current_labels)}")
+
+            custom_label = st.text_input(
+                f"Label suffix for Molecule {selected_molecule_index}",
+                value="",
+                key=f"molecule_label_suffix_{selected_molecule_index}",
+                help="Example: `l1` relabels Pb1, I5, I10, I13 to Pbl1, Il1, Il1, Il1 for the selected molecule.",
+            )
+            cleaned_label = custom_label.strip()
+            if not cleaned_label:
+                continue
+
+            try:
+                molecule_overrides = build_molecule_label_overrides(
+                    modified_atoms,
+                    selected_molecule,
+                    cleaned_label,
+                )
+            except ValueError as exc:
+                st.error(f"Molecule {selected_molecule_index}: {exc}")
+                continue
+
+            label_overrides.update(molecule_overrides)
+            labelled_molecule_parts.append(f"molecule_{selected_molecule_index}_{cleaned_label}")
+            preview_labels = [molecule_overrides[atom_index] for atom_index in selected_molecule]
+            st.caption(f"Molecule {selected_molecule_index} preview: {', '.join(preview_labels)}")
+            has_valid_label = True
+
+        if has_valid_label:
+            original_geometry_content = None
+            uploaded_name = st.session_state.uploaded_structure_name
+            uploaded_bytes = st.session_state.uploaded_structure_bytes
+            if uploaded_name and uploaded_bytes is not None:
+                uploaded_format = get_file_format(uploaded_name)
+                if uploaded_format == "aims":
+                    original_geometry_content = uploaded_bytes.decode("utf-8")
+
+            create_custom_geometry_download_file(
+                modified_atoms,
+                "geometry.in",
+                "_" + "_".join(labelled_molecule_parts),
+                atom_label_overrides=label_overrides,
+                original_content=original_geometry_content,
+                download_label="Download custom-labelled geometry.in",
+            )
 
     if symmetry_option:
         render_section_header("Symmetrize structure", kicker="Structure Workspace")

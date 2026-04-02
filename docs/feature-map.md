@@ -36,6 +36,10 @@
         - Molecules
         - Atoms
       - Deletion
+      - Labelling
+        - Select one or more molecule groups
+        - Assign an individual label suffix to each selected molecule
+        - Export a custom-labelled `geometry.in` with only those atoms relabelled
     - Lattice Operations
       - Translation
         - Molecules

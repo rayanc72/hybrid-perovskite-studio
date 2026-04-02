@@ -179,9 +179,83 @@ def initialize_structure_v2(uploaded_data, file_format):
 
     return atoms, molecules, modified_symbols
 
-def write_modified_aims_file(atoms, file_name):
-    symbols = atoms.get_chemical_symbols()
-    modified_symbols = [f"{symbol}{i+1}" for i, symbol in enumerate(symbols)]
+def build_modified_symbols(atoms, atom_label_overrides=None):
+    modified_symbols = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(atoms)]
+    if atom_label_overrides:
+        for atom_index, label in atom_label_overrides.items():
+            modified_symbols[atom_index] = label
+    return modified_symbols
+
+def build_molecule_label_overrides(atoms, molecule, molecule_label):
+    cleaned_label = molecule_label.strip()
+    if not cleaned_label:
+        raise ValueError("The molecule label cannot be empty.")
+
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", cleaned_label):
+        raise ValueError("The molecule label may only contain letters, numbers, hyphens, and underscores.")
+
+    return {
+        atom_index: f"{atoms[atom_index].symbol}{cleaned_label}"
+        for atom_index in molecule
+    }
+
+def write_geometry_file_with_labels(atoms, file_name, atom_label_overrides=None):
+    labels = [
+        atom_label_overrides.get(atom_index, atom.symbol) if atom_label_overrides else atom.symbol
+        for atom_index, atom in enumerate(atoms)
+    ]
+
+    if hasattr(file_name, "write"):
+        f = file_name
+        if atoms.get_pbc().any():
+            for vec in atoms.get_cell():
+                f.write(f"lattice_vector {vec[0]} {vec[1]} {vec[2]}\n")
+
+        for atom_index, atom in enumerate(atoms):
+            f.write(f"atom {atom.position[0]} {atom.position[1]} {atom.position[2]} {labels[atom_index]}\n")
+        return
+
+    with open(file_name, 'w') as f:
+        if atoms.get_pbc().any():
+            for vec in atoms.get_cell():
+                f.write(f"lattice_vector {vec[0]} {vec[1]} {vec[2]}\n")
+
+        for atom_index, atom in enumerate(atoms):
+            f.write(f"atom {atom.position[0]} {atom.position[1]} {atom.position[2]} {labels[atom_index]}\n")
+
+def render_labelled_geometry_content(atoms, atom_label_overrides=None, original_content=None):
+    if original_content:
+        output_lines = []
+        atom_index = 0
+        atom_line_pattern = re.compile(r"^(\s*(?:atom|atom_frac)\s+\S+\s+\S+\s+\S+\s+)(\S+)(.*)$")
+
+        for line in original_content.splitlines(keepends=True):
+            line_ending = ""
+            line_body = line
+            if line.endswith("\r\n"):
+                line_ending = "\r\n"
+                line_body = line[:-2]
+            elif line.endswith("\n"):
+                line_ending = "\n"
+                line_body = line[:-1]
+
+            match = atom_line_pattern.match(line_body)
+            if match and atom_index < len(atoms):
+                replacement_label = atom_label_overrides.get(atom_index, atoms[atom_index].symbol) if atom_label_overrides else atoms[atom_index].symbol
+                output_lines.append(f"{match.group(1)}{replacement_label}{match.group(3)}{line_ending}")
+                atom_index += 1
+            else:
+                output_lines.append(line)
+
+        if atom_index == len(atoms):
+            return "".join(output_lines)
+
+    output_buffer = io.StringIO()
+    write_geometry_file_with_labels(atoms, output_buffer, atom_label_overrides=atom_label_overrides)
+    return output_buffer.getvalue()
+
+def write_modified_aims_file(atoms, file_name, atom_label_overrides=None):
+    modified_symbols = build_modified_symbols(atoms, atom_label_overrides=atom_label_overrides)
 
     if hasattr(file_name, "write"):
         f = file_name
@@ -1083,17 +1157,39 @@ def find_twofold_rotation_axes(initial_space_group, final_space_group):
                 twofold_rotation_axes.append(axis)
 
     return twofold_rotation_axes
-def create_labelled_download_file(atoms, file_name, output_suffix):
+def create_labelled_download_file(atoms, file_name, output_suffix, atom_label_overrides=None, download_label=None):
     output_labelled_buffer = io.StringIO()
-    write_modified_aims_file(atoms, output_labelled_buffer)
+    write_modified_aims_file(atoms, output_labelled_buffer, atom_label_overrides=atom_label_overrides)
     output_labelled_content = output_labelled_buffer.getvalue()
     download_name = f"{os.path.splitext(file_name)[0]}{output_suffix}_labelled.in"
     st.download_button(
-        label=f"Download {download_name}",
+        label=download_label or f"Download {download_name}",
         data=output_labelled_content,
         file_name=download_name,
         mime="text/plain",
         key=f"download_labelled_{download_name}",
+    )
+
+def create_custom_geometry_download_file(
+    atoms,
+    file_name,
+    output_suffix,
+    atom_label_overrides=None,
+    original_content=None,
+    download_label=None,
+):
+    output_content = render_labelled_geometry_content(
+        atoms,
+        atom_label_overrides=atom_label_overrides,
+        original_content=original_content,
+    )
+    download_name = f"{os.path.splitext(file_name)[0]}{output_suffix}.in"
+    st.download_button(
+        label=download_label or f"Download {download_name}",
+        data=output_content,
+        file_name=download_name,
+        mime="text/plain",
+        key=f"download_custom_geometry_{download_name}",
     )
 
 def create_aims_download_file(atoms, file_name, output_suffix):

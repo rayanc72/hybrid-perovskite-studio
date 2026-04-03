@@ -9,9 +9,6 @@ import holoviews as hv
 import re
 import colorcet as cc
 from plotly.subplots import make_subplots
-from itertools import cycle
-from matplotlib.colors import Normalize
-from matplotlib.cm import ScalarMappable
 from scipy.interpolate import griddata
 from scipy.spatial import Voronoi
 
@@ -485,39 +482,78 @@ def plot_bands(ax, bands_all_files, xvals=None, plot_color='blue', legend_label=
 
 
 def get_state_range(uploaded_file):
-    df = pd.read_csv(uploaded_file, delim_whitespace=True, comment='#', header=None)
-    column_names_new = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z','rel_kx', 'rel_ky', 'rel_kz']
-    column_names_old = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z']
-    try:
-        df.columns = column_names_new
-    except:
-        df.columns = column_names_old
+    df = _read_spin_texture_dataframe(uploaded_file)
     states = df['State'].unique()
     return states.min(), states.max()
 
 
 def filter_state_data(uploaded_file, target_state):
-    # Read the file directly from the file-like object
-    df = pd.read_csv(uploaded_file, delim_whitespace=True, comment='#', header=None)
-    uploaded_file.seek(0)  # Reset the file pointer to the beginning after reading
-    column_names_new = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z', 'rel_kx',
-                        'rel_ky', 'rel_kz']
-    column_names_old = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z']
-    try:
-        df.columns = column_names_new
-    except:
-        df.columns = column_names_old
+    df = _read_spin_texture_dataframe(uploaded_file)
     filtered_df = df[df['State'] == target_state].copy()
     filtered_df = filtered_df.drop('State', axis=1)
     filtered_df.reset_index(drop=True, inplace=True)
     return filtered_df
 
 
-def prepare_plot_data(filename, state):
+def _read_spin_texture_dataframe(uploaded_file):
+    df = pd.read_csv(uploaded_file, delim_whitespace=True, comment='#', header=None)
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+    column_names_new = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z',
+                        'rel_kx', 'rel_ky', 'rel_kz']
+    column_names_old = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z']
+    try:
+        df.columns = column_names_new
+    except ValueError:
+        df.columns = column_names_old
+    return df
+
+
+def _read_text_lines(uploaded_file):
+    if uploaded_file is None:
+        return []
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+    raw_content = uploaded_file.read()
+    if hasattr(uploaded_file, "seek"):
+        uploaded_file.seek(0)
+
+    if isinstance(raw_content, bytes):
+        text = raw_content.decode("utf-8")
+    else:
+        text = raw_content
+    return text.splitlines()
+
+
+def get_rec_vector(uploaded_file):
+    latvec = []
+    for line in _read_text_lines(uploaded_file):
+        stripped = line.strip()
+        if stripped.startswith("lattice_vector") or stripped.startswith("lattice"):
+            latvec.append([float(i) for i in stripped.split()[1:4]])
+
+    if len(latvec) != 3:
+        raise ValueError("Geometry file must contain exactly three lattice vectors.")
+
+    rlatvec = []
+    pi = math.pi
+    volume = np.dot(latvec[0], np.cross(latvec[1], latvec[2]))
+    rlatvec.append(2 * pi * np.cross(latvec[1], latvec[2]) / volume)
+    rlatvec.append(2 * pi * np.cross(latvec[2], latvec[0]) / volume)
+    rlatvec.append(2 * pi * np.cross(latvec[0], latvec[1]) / volume)
+
+    return np.array(rlatvec)
+
+
+def prepare_plot_data(filename, state, geometry_file=None):
     filtered_df = filter_state_data(filename, state)
     k_points = filtered_df[['kx', 'ky', 'kz']].to_numpy()
     spins = filtered_df[['sigma_x', 'sigma_y', 'sigma_z']].to_numpy()
     energy = filtered_df['Eigenvalue'].to_numpy()
+
+    if geometry_file is not None:
+        reciprocal_lattice = get_rec_vector(geometry_file)
+        k_points = np.dot(k_points, reciprocal_lattice.T)
 
     return k_points, spins, energy
 
@@ -550,18 +586,10 @@ def plot_quivers(ax, kx, ky, spin_x, spin_y, color_component, spin_direction, sc
     quivers = ax.quiver(kx, ky, spin_x, spin_y, color_component, scale=scale, cmap=cc.cm.CET_D1, norm=norm, alpha=1, width=0.005, headlength=4.0, headwidth=3.0, headaxislength=3.0)
     plt.colorbar(quivers, ax=ax).set_label(rf'$<\sigma_{{{spin_direction}}}>$ component')
 
-def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scale, axis_limits=None):
-    fig, ax = plt.subplots(figsize=(8, 6))
-    plt.rcParams["font.family"] = "Arial"
-    plt.rcParams.update({'font.size': 18})
-    plt.rcParams['axes.linewidth'] = 1.5
-    plt.rcParams['axes.labelweight'] = "normal"
 
-    k_points, spins, energy = prepare_plot_data(filename, state)
-
-
+def resolve_spin_texture_plane(k_points, spins, spin_direction, plane):
     if plane == 'xy':
-        k1, k2 = k_points[:, 0]*10, k_points[:, 1]*10
+        k1, k2 = k_points[:, 0] * 10, k_points[:, 1] * 10
         ax_label_1, ax_label_2 = "kx ($nm^{-1}$)", "ky ($nm^{-1}$)"
         if spin_direction == 'z':
             spin_1, spin_2, color_component = spins[:, 0], spins[:, 1], spins[:, 2]
@@ -572,7 +600,7 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
         else:
             raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
     elif plane == 'yz':
-        k1, k2 = k_points[:, 1]*10, k_points[:, 2]*10
+        k1, k2 = k_points[:, 1] * 10, k_points[:, 2] * 10
         ax_label_1, ax_label_2 = "ky ($nm^{-1}$)", "kz ($nm^{-1}$)"
         if spin_direction == 'z':
             spin_1, spin_2, color_component = spins[:, 1], spins[:, 2], spins[:, 2]
@@ -583,7 +611,7 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
         else:
             raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
     elif plane == 'xz':
-        k1, k2 = k_points[:, 0]*10, k_points[:, 2]*10
+        k1, k2 = k_points[:, 0] * 10, k_points[:, 2] * 10
         ax_label_1, ax_label_2 = "kx ($nm^{-1}$)", "kz ($nm^{-1}$)"
         if spin_direction == 'z':
             spin_1, spin_2, color_component = spins[:, 0], spins[:, 2], spins[:, 2]
@@ -596,6 +624,20 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
     else:
         raise ValueError("Invalid plane. Choose 'xy', 'yz', or 'xz'.")
 
+    return k1, k2, spin_1, spin_2, color_component, ax_label_1, ax_label_2
+
+
+def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scale, axis_limits=None):
+    fig, ax = plt.subplots(figsize=(8, 6))
+    plt.rcParams["font.family"] = "Arial"
+    plt.rcParams.update({'font.size': 18})
+    plt.rcParams['axes.linewidth'] = 1.5
+    plt.rcParams['axes.labelweight'] = "normal"
+
+    k_points, spins, energy = prepare_plot_data(filename, state)
+    k1, k2, spin_1, spin_2, color_component, ax_label_1, ax_label_2 = resolve_spin_texture_plane(
+        k_points, spins, spin_direction, plane
+    )
 
     plot_quivers(ax, k1, k2, spin_1, spin_2, color_component, spin_direction, scale=scale)
 
@@ -613,26 +655,6 @@ def plot_spin_quivers(filename, state, spin_direction, plane, shift_energy, scal
 
     plt.tight_layout()
     return plt
-
-
-def get_rec_vector(filename):
-    kpoint = []
-    latvec = []
-    f = open(filename, 'r')
-    for line in f:
-        if line.strip().startswith("lattice"):
-            latvec.append([float(i) for i in line.strip().split()[1:4]])
-    f.close()
-
-    rlatvec = []
-    pi = math.pi
-    volume = (np.dot(latvec[0], np.cross(latvec[1], latvec[2])))
-    rlatvec.append(2 * pi * np.cross(latvec[1], latvec[2]) / volume)
-    rlatvec.append(2 * pi * np.cross(latvec[2], latvec[0]) / volume)
-    rlatvec.append(2 * pi * np.cross(latvec[0], latvec[1]) / volume)
-
-    return rlatvec
-
 
 
 def parse_out_file(out_file):
@@ -1101,97 +1123,158 @@ def generate_layout_elec(title, xaxis_title, yaxis_title, font_size=16, color_te
     return layout
 
 
-def plot_multiple_energy_surfaces_with_spins(data_sets, view_init=None, alpha=0.1, gridsize=50,
-                                             constant=0.01):
-    """
-    Plots multiple 3D surface plots of energy levels on the kx-ky plane, with 3D spins represented as arrows, for multiple sets of data.
+def plot_multiple_energy_surfaces_with_spins(
+    data_sets,
+    spin_direction,
+    gridsize=50,
+    energy_shift_m=2.0,
+    state_opacities=None,
+    energy_axis_range=None,
+    colorscale_name="RdBu",
+    color_mode="normalized_component",
+    text_size=18,
+    show_background_grid=True,
+    figure_height=900,
+):
+    """Build an interactive Plotly 3D spin-texture figure."""
+    fig = go.Figure()
+    if state_opacities is None:
+        state_opacities = [0.18] * len(data_sets)
+    if color_mode == "magnitude":
+        cmin = 0.0
+        cmax = max(float(np.nanmax(data_set[3])) for data_set in data_sets) if data_sets else 1.0
+        if cmax <= cmin:
+            cmax = 1.0
+        colorbar_title = "|sigma|"
+    else:
+        cmin = -1.0
+        cmax = 1.0
+        colorbar_title = f"<σ{spin_direction}>"
 
-    Parameters:
-    - data_sets: A list of data sets, where each set is [kx, ky, energy, sigma_x, sigma_y, sigma_z].
-    - color: String representing the color of the surface plot.
-    - view_init: Tuple of (elev, azim) to set the view angle of the 3D plot.
-    - alpha: Opacity of the surface plot.
-    - gridsize: The size of the grid to interpolate onto for smoothing.
-    - constant: A small constant value added to the magnitude calculation to visualize zero magnitude spins.
-    - linewidths: The thickness of the arrows in the quiver plot.
-    """
-    # Create a new figure and add a 3D subplot
-    colors = cycle(['grey', 'orchid'])
+    for idx, data_set in enumerate(data_sets):
+        k1, k2, energy, color_component = data_set
+        energy = energy + idx * energy_shift_m
+        surface_opacity = float(state_opacities[idx]) if idx < len(state_opacities) else 0.18
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    for data_set in data_sets:
-        kx, ky, energy, sigma_x, sigma_y, sigma_z = data_set
-        surface_color = next(colors)
-
-        # Normalize spin vectors with a small constant to handle zero magnitude vectors
-        magnitudes = np.sqrt(sigma_x ** 2 + sigma_y ** 2 + sigma_z ** 2) + constant
-        sigma_x_normalized = sigma_x / magnitudes
-        sigma_y_normalized = sigma_y / magnitudes
-        sigma_z_normalized = sigma_z / magnitudes
-
-        # Create a colormap based on the z component of the spin
-        norm = Normalize(vmin=-1, vmax=1)
-        cmap = plt.get_cmap('coolwarm')
-        mappable = ScalarMappable(norm=norm, cmap=cmap)
-        spin_colors = mappable.to_rgba(sigma_z_normalized)
-
-        # Interpolate energy data onto the grid
-        xi = np.linspace(min(kx), max(kx), gridsize)
-        yi = np.linspace(min(ky), max(ky), gridsize)
+        xi = np.linspace(np.min(k1), np.max(k1), gridsize)
+        yi = np.linspace(np.min(k2), np.max(k2), gridsize)
         Xi, Yi = np.meshgrid(xi, yi)
-        Zi = griddata((kx, ky), energy, (Xi, Yi), method='cubic')
+        try:
+            Zi = griddata((k1, k2), energy, (Xi, Yi), method='cubic')
+        except Exception:
+            Zi = griddata((k1, k2), energy, (Xi, Yi), method='nearest')
 
-        # Plot the surface
-        ax.plot_surface(Xi, Yi, Zi, color=surface_color, edgecolor='none', alpha=alpha)
+        try:
+            Ci = griddata((k1, k2), color_component, (Xi, Yi), method='cubic')
+        except Exception:
+            Ci = griddata((k1, k2), color_component, (Xi, Yi), method='nearest')
+        fig.add_trace(
+            go.Surface(
+                x=Xi,
+                y=Yi,
+                z=Zi,
+                surfacecolor=np.clip(Ci, cmin, cmax),
+                colorscale=colorscale_name,
+                cmin=cmin,
+                cmax=cmax,
+                opacity=surface_opacity,
+                colorbar=dict(title=colorbar_title, len=0.6) if idx == 0 else None,
+                showscale=idx == 0,
+                customdata=np.expand_dims(np.clip(Ci, cmin, cmax), axis=-1),
+                hovertemplate=(
+                    "k1=%{x:.3f}<br>"
+                    "k2=%{y:.3f}<br>"
+                    "E=%{z:.3f}<br>"
+                    f"{colorbar_title}=%{{customdata[0]:.3f}}<extra></extra>"
+                ),
+            )
+        )
 
-        # Calculate the energy (Z) at each spin's (kx, ky) position
-        spin_z = griddata((kx, ky), energy, (kx, ky), method='nearest')
-
-        # Plot the normalized spins as 3D arrows, coloring based on z component
-        for i in range(len(kx)):
-            ax.quiver(kx[i], ky[i], spin_z[i], sigma_x_normalized[i], sigma_y_normalized[i], sigma_z_normalized[i],
-                      color=spin_colors[i], pivot='middle', length=0.2, arrow_length_ratio=0.1, normalize=False,
-                      linewidth=1, alpha=1)
-
-    # Optionally set the view angle
-    if view_init:
-        ax.view_init(elev=view_init[0], azim=view_init[1])
-
-    # Set labels for the axes
-    ax.set_xlabel('kx')
-    ax.set_ylabel('ky')
-    ax.set_zlabel('Energy')
-
-    # Add colorbar for the spins' z component
-    # cbar = fig.colorbar(mappable, shrink=0.1, aspect=5, pad=0.1)
-    # cbar.set_label('Spin Direction (z component)')
+    fig.update_layout(
+        font=dict(size=text_size),
+        scene=dict(
+            bgcolor="white",
+            xaxis_title="kx (nm^-1)",
+            yaxis_title="ky (nm^-1)",
+            zaxis_title="Energy (eV)",
+            xaxis=dict(showgrid=show_background_grid, backgroundcolor="white"),
+            yaxis=dict(showgrid=show_background_grid, backgroundcolor="white"),
+            zaxis=dict(
+                range=energy_axis_range,
+                showgrid=show_background_grid,
+                backgroundcolor="white",
+            ) if energy_axis_range is not None else dict(showgrid=show_background_grid, backgroundcolor="white"),
+        ),
+        margin=dict(l=0, r=0, t=20, b=0),
+        template="plotly_white",
+        height=figure_height,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+    )
 
     return fig
 
-def plot_spin_quivers_3D(filename_spin, states, spin_direction):
+def plot_spin_quivers_3D(
+    filename_spin,
+    states,
+    spin_direction,
+    plane,
+    geometry_file=None,
+    gridsize=250,
+    energy_shift_m=2.0,
+    state_opacities=None,
+    energy_axis_range=None,
+    colorscale_name="RdBu",
+    color_mode="normalized_component",
+    text_size=18,
+    show_background_grid=True,
+    figure_height=900,
+):
     plt.rcParams["font.family"] = "Arial"
     plt.rcParams.update({'font.size': 18})
 
     data_sets = []
 
     for state in states:
-        k_points, spins, energy = prepare_plot_data(filename_spin, state)
-        kx, ky, kz = k_points[:, 0], k_points[:, 1], k_points[:, 2]
-        sigma_x, sigma_y, sigma_z = spins[:, 0], spins[:, 1], spins[:, 2]
-
-
-        if spin_direction == 'z':
-            data_set = [kx, ky, energy, sigma_x, sigma_y, sigma_z]
-            data_sets.append(data_set)
-        elif spin_direction == 'x':
-            data_set = [kz, ky,energy, sigma_z, sigma_y, sigma_x]
-            data_sets.append(data_set)
-        elif spin_direction == 'y':
-            data_set = [kx, kz, energy, sigma_x, sigma_z, sigma_y]
-            data_sets.append(data_set)
+        k_points, spins, energy = prepare_plot_data(filename_spin, state, geometry_file=geometry_file)
+        k1, k2, spin_1, spin_2, color_component, ax_label_1, ax_label_2 = resolve_spin_texture_plane(
+            k_points, spins, spin_direction, plane
+        )
+        magnitudes = np.linalg.norm(spins, axis=1)
+        if color_mode == "normalized_component":
+            eps = 1e-15
+            color_values = np.divide(
+                color_component,
+                magnitudes,
+                out=np.zeros_like(color_component),
+                where=magnitudes > eps,
+            )
+        elif color_mode == "raw_component":
+            color_values = color_component
+        elif color_mode == "magnitude":
+            color_values = magnitudes
         else:
-            raise ValueError("Invalid spin_direction. Choose 'x', 'y', or 'z'.")
+            raise ValueError("Invalid color_mode.")
+        data_set = [k1, k2, energy, color_values]
+        data_sets.append(data_set)
 
-    return plot_multiple_energy_surfaces_with_spins(data_sets, view_init=[18,0])
+    fig = plot_multiple_energy_surfaces_with_spins(
+        data_sets,
+        spin_direction,
+        gridsize=gridsize,
+        energy_shift_m=energy_shift_m,
+        state_opacities=state_opacities,
+        energy_axis_range=energy_axis_range,
+        colorscale_name=colorscale_name,
+        color_mode=color_mode,
+        text_size=text_size,
+        show_background_grid=show_background_grid,
+        figure_height=figure_height,
+    )
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=ax_label_1.replace("$", ""),
+            yaxis_title=ax_label_2.replace("$", ""),
+        )
+    )
+    return fig

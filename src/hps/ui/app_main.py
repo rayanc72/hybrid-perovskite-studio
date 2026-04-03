@@ -1,5 +1,6 @@
 import copy
 import importlib
+import json
 
 from hps.domain import electronic_property as electronic_property_module
 from hps.domain import md_analysis as md_analysis_module
@@ -27,6 +28,48 @@ def _debug_log(message):
     APP_TMP_DIR.mkdir(exist_ok=True)
     with open(APP_TMP_DIR / "upload_debug.log", "a", encoding="utf-8") as fh:
         fh.write(f"{message}\n")
+
+
+def _parse_uploaded_json(uploaded_file):
+    if uploaded_file is None:
+        return {}
+    try:
+        return json.loads(uploaded_file.getvalue().decode("utf-8"))
+    except Exception as exc:
+        st.error(f"Could not read preset file: {exc}")
+        return {}
+
+
+def _detect_spin_texture_bundle_files(uploaded_files):
+    detected = {
+        "spin_texture": None,
+        "geometry": None,
+        "out": None,
+        "preset": None,
+    }
+    duplicate_types = []
+    unclassified_files = []
+
+    for bundle_file in uploaded_files or []:
+        name = bundle_file.name.lower()
+        file_type = None
+        if name.endswith(".json"):
+            file_type = "preset"
+        elif name.endswith(".out"):
+            file_type = "out"
+        elif name.endswith(".dat") or "spin_texture" in name:
+            file_type = "spin_texture"
+        elif name.endswith(".in"):
+            file_type = "geometry"
+
+        if file_type is None:
+            unclassified_files.append(bundle_file.name)
+        elif detected[file_type] is None:
+            detected[file_type] = bundle_file
+        else:
+            duplicate_types.append(bundle_file.name)
+
+    return detected, duplicate_types, unclassified_files
 
 
 _debug_log("startup: entered hps.ui.app_main")
@@ -4342,85 +4385,238 @@ import streamlit.components.v1 as components
 
 if plot_spin_v2_option:
     render_section_header(
-        "Plot Spin Texture",
-        kicker="Utilities Workspace",
-        subtitle='Upload `spin_texture.dat`. Optionally include `aims.out` to show related band-edge information.',
+        "Plot 3D Spin Texture",
+        kicker="Electronic Workspace",
+        subtitle='Upload files in one batch. `spin_texture.dat` is required; `geometry.in`, `aims.out`, and a preset `.json` are optional.',
     )
 
-    # File uploader
-    uploaded_file = st.file_uploader("Upload spin_texture.dat", type=['dat'], accept_multiple_files=False)
+    uploaded_bundle = st.file_uploader(
+        "Upload spin-texture files",
+        type=['dat', 'in', 'out', 'json'],
+        accept_multiple_files=True,
+    )
 
-    # File uploader for .out file
-    uploaded_out_file = st.file_uploader("Upload .out file from spin texture calculation (optional)", type=['out'], accept_multiple_files=False)
+    detected_files, duplicate_types, unclassified_files = _detect_spin_texture_bundle_files(uploaded_bundle)
+    uploaded_file = detected_files["spin_texture"]
+    uploaded_geometry_file = detected_files["geometry"]
+    uploaded_out_file = detected_files["out"]
+    preset_file = detected_files["preset"]
+
+    if uploaded_bundle:
+        mapped_files = []
+        if uploaded_file is not None:
+            mapped_files.append(f"`spin_texture.dat`: {uploaded_file.name}")
+        if uploaded_geometry_file is not None:
+            mapped_files.append(f"`geometry.in`: {uploaded_geometry_file.name}")
+        if uploaded_out_file is not None:
+            mapped_files.append(f"`.out` metadata: {uploaded_out_file.name}")
+        if preset_file is not None:
+            mapped_files.append(f"`preset.json`: {preset_file.name}")
+        if mapped_files:
+            st.caption("Detected files: " + " | ".join(mapped_files))
+        if duplicate_types:
+            st.warning("Ignored extra files with duplicate roles: " + ", ".join(duplicate_types))
+        if unclassified_files:
+            st.warning("Could not classify these files: " + ", ".join(unclassified_files))
 
     if uploaded_out_file is not None:
-        uploaded_out_file.seek(0)  # Reset file pointer
+        uploaded_out_file.seek(0)
         out_df = parse_out_file(uploaded_out_file)
         st.dataframe(out_df, hide_index=True, use_container_width=True)
 
     if uploaded_file is not None:
-        # Get the range of available states
+        uploaded_file.seek(0)
         min_state, max_state = get_state_range(uploaded_file)
 
-        # Display the range of available states
         st.markdown(f"Range of available states for spin texture plot: {min_state} to {max_state}")
+        preset_data = _parse_uploaded_json(preset_file)
 
-        # Input for states
-        state_input = st.text_input("Enter states (separated by commas, max 8):")
-
-        # Input for energy shift
-        shift_e = st.number_input("Enter the energy shift:")
-
-        #Input for spin direction
-        spin_direction = st.selectbox("Spin direction", ['x', 'y', 'z'])
-
-        # Scale for the arrows
-        scale_param = st.number_input("Scale parameter for the spin arrows (optional)", value=15)
-
-        # Axis range for the texture
-        axis_limits = st.text_input("Enter axis limits (xmin, xmax, ymin, ymax):", "")
-        # Initialize limits to None
-        if axis_limits.strip():
-            try:
-                values = axis_limits.split(',')
-                # Ensure there are exactly 4 values or fill missing ones with None
-                x_min, x_max, y_min, y_max = [float(v.strip()) if v.strip() else None for v in values] + [None] * (
-                            4 - len(values))
-            except ValueError:
-                st.error("Please enter the limits in the correct format: xmin, xmax, ymin, ymax")
+        state_default = preset_data.get("states", [])
+        if isinstance(state_default, list):
+            state_default_text = ", ".join(str(state) for state in state_default)
         else:
-            # Default to None if no input is provided
-            x_min, x_max, y_min, y_max = [None] * 4
+            state_default_text = ""
+        spin_default = preset_data.get("spin_direction", "z")
+        plane_default = preset_data.get("plane", "xy")
+        colorscale_options = {
+            "Red-Blue": "RdBu",
+            "Red-Yellow-Blue": "RdYlBu",
+            "Spectral": "Spectral",
+            "Brown-Green": "BrBG",
+            "Portland": "Portland",
+            "Picnic": "Picnic",
+            "Viridis": "Viridis",
+            "Cividis": "Cividis",
+            "Turbo": "Turbo",
+        }
+        colorscale_names = list(colorscale_options.keys())
+        colorscale_value_to_label = {value: label for label, value in colorscale_options.items()}
+        colorscale_default_label = colorscale_value_to_label.get(preset_data.get("colorscale_name", "RdBu"), "Red-Blue")
+        color_mode_options = {
+            "Normalized component": "normalized_component",
+            "Raw component": "raw_component",
+            "Spin magnitude": "magnitude",
+        }
+        color_mode_labels = list(color_mode_options.keys())
+        color_mode_value_to_label = {value: label for label, value in color_mode_options.items()}
+        color_mode_default_label = color_mode_value_to_label.get(
+            preset_data.get("color_mode", "normalized_component"),
+            "Normalized component",
+        )
 
-        # Process the input states
+        state_input = st.text_input("Enter states (separated by commas, max 8):", value=state_default_text)
+        col0, col1, col2, col3 = st.columns(4)
+        with col0:
+            plane = st.selectbox(
+                "k-plane for texture",
+                ['xy', 'yz', 'xz'],
+                index=['xy', 'yz', 'xz'].index(plane_default) if plane_default in ['xy', 'yz', 'xz'] else 0,
+            )
+        with col1:
+            spin_direction = st.selectbox(
+                "Spin direction",
+                ['x', 'y', 'z'],
+                index=['x', 'y', 'z'].index(spin_default) if spin_default in ['x', 'y', 'z'] else 2,
+            )
+        with col2:
+            gridsize = st.slider(
+                "Surface grid size",
+                min_value=25,
+                max_value=500,
+                value=int(preset_data.get("gridsize", 250)),
+                step=25,
+            )
+        with col3:
+            state_energy_offset = st.number_input(
+                "Energy offset between states",
+                value=float(preset_data.get("energy_shift_m", 2.0)),
+                step=0.1,
+                format="%.2f",
+            )
+        control_col1, control_col2, control_col3, control_col4 = st.columns(4)
+        with control_col1:
+            colorscale_label = st.selectbox(
+                "Colormap",
+                colorscale_names,
+                index=colorscale_names.index(colorscale_default_label),
+            )
+        with control_col2:
+            color_mode_label = st.selectbox(
+                "Surface color mode",
+                color_mode_labels,
+                index=color_mode_labels.index(color_mode_default_label),
+            )
+        with control_col3:
+            text_size = st.slider("Text size", min_value=10, max_value=28, value=int(preset_data.get("text_size", 18)), step=1)
+        with control_col4:
+            show_background_grid = st.toggle("Show background grid", value=bool(preset_data.get("show_background_grid", True)))
+        energy_axis_default = preset_data.get("energy_axis_range")
+        if isinstance(energy_axis_default, list) and len(energy_axis_default) == 2:
+            energy_axis_default_text = f"{energy_axis_default[0]}, {energy_axis_default[1]}"
+        else:
+            energy_axis_default_text = ""
+        energy_axis_text = st.text_input("Energy axis range (min, max)", value=energy_axis_default_text)
+
         if state_input:
             states = [int(s.strip()) for s in state_input.split(',') if s.strip().isdigit()]
-            states = states[:8]  # Limit to maximum 8 states
+            states = states[:8]
+            preset_opacities = preset_data.get("state_opacities")
+            if isinstance(preset_opacities, list) and preset_opacities:
+                default_opacity_text = ", ".join(str(value) for value in preset_opacities)
+            else:
+                default_opacity_text = ", ".join(["0.18"] * len(states)) if states else "0.18"
+            state_opacity_text = st.text_input(
+                "State opacities (comma-separated, one per selected state)",
+                value=default_opacity_text,
+            )
 
             if all(min_state <= state <= max_state for state in states):
-                if st.button("Plot spin texture"):
+                try:
+                    state_opacities = [float(value.strip()) for value in state_opacity_text.split(",") if value.strip()]
+                except ValueError:
+                    st.error("State opacities must be numeric values between 0 and 1.")
+                    state_opacities = None
 
-                    uploaded_file.seek(0)
+                if state_opacities is not None:
+                    if len(state_opacities) == 1 and len(states) > 1:
+                        state_opacities = state_opacities * len(states)
+                    elif len(state_opacities) != len(states):
+                        st.error("Provide either one opacity value or one value for each selected state.")
+                        state_opacities = None
+
+                if state_opacities is not None and any(opacity < 0 or opacity > 1 for opacity in state_opacities):
+                    st.error("Each state opacity must be between 0 and 1.")
+                    state_opacities = None
+
+                energy_axis_range = None
+                if energy_axis_text.strip():
                     try:
-                        fig = plot_spin_quivers_3D(uploaded_file, states, spin_direction)
-                        # fig_html = mpld3.fig_to_html(fig)
+                        energy_bounds = [float(value.strip()) for value in energy_axis_text.split(",") if value.strip()]
+                        if len(energy_bounds) != 2:
+                            st.error("Provide the energy axis range as two comma-separated values: min, max.")
+                        elif energy_bounds[0] >= energy_bounds[1]:
+                            st.error("Energy axis minimum must be smaller than the maximum.")
+                        else:
+                            energy_axis_range = energy_bounds
+                    except ValueError:
+                        st.error("Energy axis range values must be numeric.")
 
+                current_preset = {
+                    "states": states,
+                    "plane": plane,
+                    "spin_direction": spin_direction,
+                    "gridsize": gridsize,
+                    "energy_shift_m": state_energy_offset,
+                    "state_opacities": state_opacities,
+                    "energy_axis_range": energy_axis_range,
+                    "colorscale_name": colorscale_options[colorscale_label],
+                    "color_mode": color_mode_options[color_mode_label],
+                    "text_size": text_size,
+                    "show_background_grid": show_background_grid,
+                }
 
-
-
-                        buf = io.BytesIO()
-                        fig.savefig(buf, format='pdf', transparent=True)
-                        buf.seek(0)
+                if state_opacities is not None and st.button("Plot 3D spin texture"):
+                    uploaded_file.seek(0)
+                    if uploaded_geometry_file is not None:
+                        uploaded_geometry_file.seek(0)
+                    try:
+                        fig = plot_spin_quivers_3D(
+                            uploaded_file,
+                            states,
+                            spin_direction,
+                            plane,
+                            geometry_file=uploaded_geometry_file,
+                            gridsize=gridsize,
+                            energy_shift_m=state_energy_offset,
+                            state_opacities=state_opacities,
+                            energy_axis_range=energy_axis_range,
+                            colorscale_name=colorscale_options[colorscale_label],
+                            color_mode=color_mode_options[color_mode_label],
+                            text_size=text_size,
+                            show_background_grid=show_background_grid,
+                            figure_height=1050,
+                        )
+                        html = pio.to_html(fig, include_plotlyjs="cdn", full_html=True)
+                        preset_json = json.dumps(current_preset, indent=2)
 
                         st.markdown(f"### State {states}")
-                        st.pyplot(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True, theme=None)
 
-                        st.download_button(
-                            label="Download plot as PDF",
-                            data=buf,
-                            file_name=f"plot_state_{states}.pdf",
-                            mime="application/pdf"
-                        )
+                        download_col1, download_col2 = st.columns(2)
+                        with download_col1:
+                            st.download_button(
+                                label="Download interactive plot as HTML",
+                                data=html,
+                                file_name=f"plot_state_{states}.html",
+                                mime="text/html"
+                            )
+                        with download_col2:
+                            st.download_button(
+                                label="Download view preset",
+                                data=preset_json,
+                                file_name=f"plot_state_{states}_preset.json",
+                                mime="application/json",
+                            )
 
                     except Exception as e:
                         st.error(f"An error occurred while plotting: {e}")
@@ -4429,7 +4625,6 @@ if plot_spin_v2_option:
 
 
 from matplotlib.ticker import MultipleLocator
-import json
 
 
 def format_subscripts(text):

@@ -37,3 +37,12 @@
 - Added a Structure Workspace labelling tool that exports custom-labelled `geometry.in` files for one or more selected molecule groups.
 - Updated the labelling export so non-selected atoms keep their plain element symbols while selected atoms receive user-defined labels.
 - Updated AIMS-format labelling exports to preserve the original uploaded `geometry.in` line structure when only atom labels change.
+- Added an interactive 3D spin-texture workflow to the `Electronic` workspace with plane-aware `xy`/`yz`/`xz` handling aligned to the 2D spin-texture parser.
+- Added reciprocal-space scaling for 3D spin texture from optional uploaded `geometry.in` files.
+- Added single-bundle file upload detection for 3D spin texture, including automatic detection of `spin_texture.dat`, `geometry.in`, `.out`, and preset `.json` files.
+- Added reusable 3D spin-texture presets for reapplying the same plotting parameters to later datasets.
+- Added multiple 3D spin-texture colormap choices plus color modes for normalized component, raw component, and total spin magnitude.
+- Added 3D spin-texture controls for per-state opacity, energy-axis range, text size, and background-grid visibility.
+- Expanded the 3D spin-texture viewing area and isolated the plot canvas from the Streamlit app theme with a white background.
+- Removed the temporary editable-PDF export action from the 3D spin-texture workflow and kept HTML plus preset export actions.
+- Added regression tests covering reciprocal-lattice scaling and shared 2D/3D plane mapping for electronic spin-texture parsing.

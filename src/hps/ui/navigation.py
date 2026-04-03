@@ -103,6 +103,7 @@ NAVIGATION_REGISTRY = {
                 "tools": [
                     "Plot bandstructure",
                     "Plot spin texture",
+                    "Plot 3D spin texture",
                     "Plot partial density of states (PDOS)",
                 ]
             },

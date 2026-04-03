@@ -23,3 +23,7 @@ def process_control_file(*args, **kwargs):
 
 def plot_bands(*args, **kwargs):
     return _impl.plot_bands(*args, **kwargs)
+
+
+def plot_spin_quivers_3D(*args, **kwargs):
+    return _impl.plot_spin_quivers_3D(*args, **kwargs)

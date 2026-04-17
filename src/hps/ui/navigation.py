@@ -37,7 +37,14 @@ NAVIGATION_REGISTRY = {
                             "Calculate percentage deviation",
                         ]
                     },
-                    "PDF Analysis": {"tools": ["PDF analysis"]},
+                    "PDF Analysis": {
+                        "tools": [
+                            "Simulate PDF",
+                            "Plot RDF",
+                            "Compare experimental PDF",
+                            "Convert reduced PDF to g(r)",
+                        ]
+                    },
                 }
             },
             "Transformations": {

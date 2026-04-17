@@ -15,7 +15,295 @@ from scipy.spatial import Voronoi
 hv.extension('bokeh')
 
 
-def plot_pdos_streamlit(dos_data, shift, plot_range):
+PDOS_TOTAL_FILENAME = "ks_dos_total.dat"
+PDOS_PROJECTED_RE = re.compile(r"(.+)_l_proj_dos\.dat$", re.IGNORECASE)
+PDOS_PROJECTED_SP_ELEMENTS = {"Pb", "Sn"}
+PDOS_ORBITAL_COLUMN_LABELS = {
+    2: "s",
+    3: "p",
+    4: "d",
+    5: "f",
+}
+PDOS_DEFAULT_COLORS = [
+    "#8a2be2",
+    "#5f9ea0",
+    "#dc143c",
+    "#228b22",
+    "#ff7f50",
+    "#4169e1",
+    "#b8860b",
+    "#c71585",
+]
+
+
+def detect_pdos_file_roles(uploaded_files):
+    roles = {
+        "total": [],
+        "projected": [],
+        "unrecognized": [],
+    }
+
+    for file in uploaded_files or []:
+        name = getattr(file, "name", "")
+        lower_name = name.lower()
+        projected_match = PDOS_PROJECTED_RE.fullmatch(name)
+
+        if lower_name == PDOS_TOTAL_FILENAME:
+            roles["total"].append(name)
+        elif projected_match:
+            roles["projected"].append({"name": name, "element": projected_match.group(1)})
+        else:
+            roles["unrecognized"].append(name)
+
+    return roles
+
+
+def _read_pdos_array(file):
+    try:
+        file.seek(0)
+    except (AttributeError, OSError):
+        pass
+
+    data = np.loadtxt(file)
+
+    try:
+        file.seek(0)
+    except (AttributeError, OSError):
+        pass
+
+    data = np.asarray(data)
+    if data.ndim == 1:
+        data = data.reshape(1, -1)
+    return data
+
+
+def _validate_pdos_array(name, data, min_columns):
+    if data.ndim != 2 or data.shape[1] < min_columns:
+        raise ValueError(
+            f"`{name}` must contain at least {min_columns} numeric columns for PDOS plotting."
+        )
+    if data.shape[0] == 0:
+        raise ValueError(f"`{name}` does not contain any PDOS rows.")
+
+
+def _pdos_required_columns(element):
+    if element in PDOS_PROJECTED_SP_ELEMENTS:
+        return 4
+    return 2
+
+
+def _pdos_trace_columns(element):
+    if element == "Total":
+        return [("Total DOS", 1)]
+    if element in PDOS_PROJECTED_SP_ELEMENTS:
+        return [(f"{element}(s)", 2), (f"{element}(p)", 3)]
+    return [(element, 1)]
+
+
+def smooth_pdos_values(values, window_size):
+    values = np.asarray(values, dtype=float)
+    if window_size is None or window_size <= 1 or len(values) == 0:
+        return values
+    try:
+        window_size = int(window_size)
+        if window_size % 2 == 0:
+            window_size += 1
+        if window_size > len(values):
+            window_size = len(values) if len(values) % 2 == 1 else len(values) - 1
+        if window_size <= 1:
+            return values
+
+        padding = window_size // 2
+        padded_values = np.pad(values, padding, mode="edge")
+        kernel = np.ones(window_size) / window_size
+        return np.convolve(padded_values, kernel, mode="valid")
+    except Exception:
+        return values
+
+
+def get_pdos_trace_options(dos_data):
+    trace_options = []
+    for element in dos_data:
+        trace_options.extend(trace_name for trace_name, _ in _pdos_trace_columns(element))
+    return trace_options
+
+
+def _pdos_table_columns(element, data):
+    columns = [(element, 1)]
+    for column_index, orbital_label in PDOS_ORBITAL_COLUMN_LABELS.items():
+        if data.shape[1] > column_index:
+            columns.append((f"{element}({orbital_label})", column_index))
+    return columns
+
+
+def parse_pdos_uploads(uploaded_files):
+    uploaded_files = list(uploaded_files or [])
+    roles = detect_pdos_file_roles(uploaded_files)
+
+    if not uploaded_files:
+        raise ValueError("Upload `KS_DOS_total.dat` and one or more `*_l_proj_dos.dat` files.")
+    if roles["unrecognized"] and not roles["total"] and not roles["projected"]:
+        raise ValueError(
+            "No FHI-aims PDOS files were recognized. Expected `KS_DOS_total.dat` and `*_l_proj_dos.dat`."
+        )
+    if not roles["total"]:
+        raise ValueError("Total DOS file `KS_DOS_total.dat` was not found.")
+    if len(roles["total"]) > 1:
+        raise ValueError("Only one `KS_DOS_total.dat` file can be plotted at a time.")
+
+    dos_data = {}
+    seen_elements = set()
+
+    for file in uploaded_files:
+        name = getattr(file, "name", "")
+        lower_name = name.lower()
+        projected_match = PDOS_PROJECTED_RE.fullmatch(name)
+
+        if lower_name == PDOS_TOTAL_FILENAME:
+            data = _read_pdos_array(file)
+            _validate_pdos_array(name, data, 2)
+            dos_data["Total"] = data
+        elif projected_match:
+            element = projected_match.group(1)
+            if element in seen_elements:
+                raise ValueError(f"Duplicate PDOS file for `{element}`.")
+            data = _read_pdos_array(file)
+            _validate_pdos_array(name, data, _pdos_required_columns(element))
+            dos_data[element] = data
+            seen_elements.add(element)
+
+    table = build_pdos_table(dos_data)
+    return dos_data, table, roles
+
+
+def build_pdos_table(dos_data):
+    if "Total" not in dos_data:
+        raise ValueError("Total DOS data is required before building the PDOS table.")
+
+    total = dos_data["Total"]
+    _validate_pdos_array("Total DOS", total, 2)
+    energy_values = total[:, 0]
+    table_data = {
+        "Energy": energy_values,
+        "Total DOS": total[:, 1],
+    }
+
+    for element, data in dos_data.items():
+        if element == "Total":
+            continue
+        _validate_pdos_array(element, data, _pdos_required_columns(element))
+        if len(data[:, 0]) != len(energy_values) or not np.allclose(data[:, 0], energy_values):
+            raise ValueError(f"`{element}` PDOS energy values do not match `KS_DOS_total.dat`.")
+        for column_name, column_index in _pdos_table_columns(element, data):
+            table_data[column_name] = data[:, column_index]
+
+    return pd.DataFrame(table_data)
+
+
+def _resolve_pdos_column_name(pdos_table, term):
+    term = term.strip()
+    if len(term) >= 2 and term[0] == "`" and term[-1] == "`":
+        term = term[1:-1].strip()
+
+    if term in pdos_table.columns:
+        return term
+
+    lower_term = term.lower()
+    matches = [column for column in pdos_table.columns if column.lower() == lower_term]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError(f"`{term}` matches multiple PDOS columns.")
+
+    raise ValueError(f"`{term}` is not an available PDOS contribution.")
+
+
+def _evaluate_pdos_combination(pdos_table, expression):
+    tokens = re.split(r"(\+|-)", expression)
+    result = None
+    sign = 1
+    used_column = False
+
+    for token in tokens:
+        token = token.strip()
+        if not token:
+            continue
+        if token == "+":
+            sign = 1
+            continue
+        if token == "-":
+            sign = -1
+            continue
+
+        column_name = _resolve_pdos_column_name(pdos_table, token)
+        contribution = pdos_table[column_name].to_numpy()
+        result = sign * contribution if result is None else result + sign * contribution
+        used_column = True
+        sign = 1
+
+    if not used_column:
+        raise ValueError(f"`{expression}` does not contain a PDOS contribution.")
+    return result
+
+
+def get_pdos_combination_labels(combination_text):
+    if not combination_text or not combination_text.strip():
+        return []
+
+    labels = []
+    lines = [line.strip() for line in combination_text.splitlines() if line.strip()]
+    for index, line in enumerate(lines, start=1):
+        if "=" in line:
+            label, _ = line.split("=", 1)
+            label = label.strip()
+        else:
+            label = f"Combination {index}"
+        if label:
+            labels.append(label)
+    return labels
+
+
+def add_pdos_combinations(pdos_table, combination_text):
+    if not combination_text or not combination_text.strip():
+        return pdos_table.copy(), []
+
+    combined_table = pdos_table.copy()
+    created_columns = []
+    lines = [line.strip() for line in combination_text.splitlines() if line.strip()]
+
+    for index, line in enumerate(lines, start=1):
+        if "=" in line:
+            label, expression = line.split("=", 1)
+            label = label.strip()
+            expression = expression.strip()
+        else:
+            label = f"Combination {index}"
+            expression = line
+
+        if not label:
+            raise ValueError(f"Combination line {index} needs a label before `=`.")
+        if label in {"Energy"}:
+            raise ValueError("`Energy` cannot be used as a combination label.")
+        if not expression:
+            raise ValueError(f"Combination `{label}` needs an expression after `=`.")
+
+        combined_table[label] = _evaluate_pdos_combination(combined_table, expression)
+        created_columns.append(label)
+
+    return combined_table, created_columns
+
+
+def plot_pdos_streamlit(
+    dos_data,
+    shift,
+    plot_range,
+    dos_range=None,
+    figure_height=900,
+    figure_width=None,
+    selected_trace_names=None,
+    trace_colors=None,
+    smoothing_window=None,
+):
     fig = go.Figure()
 
     colors = ['blueviolet', 'brown', 'cadetblue', 'chartreuse',
@@ -36,41 +324,81 @@ def plot_pdos_streamlit(dos_data, shift, plot_range):
               'seashell', 'sienna', 'silver', 'skyblue', 'slateblue', 'slategray', 'slategrey', 'snow', 'springgreen',
               'steelblue', 'tan', 'teal', 'thistle', 'tomato', 'turquoise', 'violet', 'wheat', 'yellow', 'yellowgreen']
     color_iter = iter(colors)
+    selected_trace_names = None if selected_trace_names is None else set(selected_trace_names)
+    trace_colors = trace_colors or {}
 
     for element, dos in dos_data.items():
-        # color = next(color_iter)
-        if element == "Total":
-            fig.add_trace(go.Scatter(x=dos.T[1], y=dos.T[0] + shift, mode='lines', name="Total DOS", line=dict(color='black', width=3)))
-        elif element == "Sn" or element == "Pb":
+        _validate_pdos_array(element, dos, _pdos_required_columns(element))
+        for trace_name, column_index in _pdos_trace_columns(element):
+            if selected_trace_names is not None and trace_name not in selected_trace_names:
+                continue
+            if trace_name in trace_colors:
+                color = trace_colors[trace_name]
+            else:
+                color = "black" if element == "Total" else next(color_iter)
+            width = 3.5 if element == "Total" else 2.5
             fig.add_trace(
-                go.Scatter(x=dos.T[2], y=dos.T[0] + shift, mode='lines', name=f"{element}" + "(s)" , line=dict(color=next(color_iter), width=3)))
-            fig.add_trace(
-                go.Scatter(x=dos.T[3], y=dos.T[0] + shift, mode='lines', name=f"{element}" + "(p)", line=dict(color=next(color_iter), width=3)))
-        elif element == "Cl" or element == "Br" or element == "Br1" or element == "I":
-            fig.add_trace(
-                go.Scatter(x=dos.T[1], y=dos.T[0] + shift, mode='lines', name=f"{element}", line=dict(color=next(color_iter), width=3)))
-        else:
-            fig.add_trace(go.Scatter(x=dos.T[1], y=dos.T[0] + shift, mode='lines', name=f"{element}", line=dict(color=next(color_iter), width=3)))
+                go.Scatter(
+                    x=smooth_pdos_values(dos[:, column_index], smoothing_window),
+                    y=dos[:, 0] + shift,
+                    mode='lines',
+                    name=trace_name,
+                    line=dict(color=color, width=width),
+                )
+            )
 
     fig.update_layout(
         yaxis_title="Energy (eV)",
-        yaxis_tickfont=dict(size=20, color='black'),
-        yaxis_title_font=dict(size=24, color='black'),
+        yaxis_tickfont=dict(size=14, color='black'),
+        yaxis_title_font=dict(size=18, color='black'),
 
         xaxis_title="Density of States",
-        xaxis_tickfont=dict(size=20, color='black'),
-        xaxis_title_font=dict(size=24, color='black'),
-        xaxis_showticklabels=False,
+        xaxis_tickfont=dict(size=14, color='black'),
+        xaxis_title_font=dict(size=18, color='black'),
 
-        legend=dict(font=dict(size=15), bgcolor="rgba(255, 255, 255, 0.8)"),
-        margin=dict(l=50, r=30, t=30, b=50),
-        plot_bgcolor="rgba(255, 255, 255, 0.8)"
+        legend=dict(font=dict(size=13), bgcolor="rgba(255, 255, 255, 0.9)"),
+        margin=dict(l=60, r=30, t=30, b=60),
+        plot_bgcolor="rgba(255, 255, 255, 0.95)",
+        paper_bgcolor="white",
+        hovermode="closest",
+        height=figure_height,
     )
+    if figure_width is not None:
+        fig.update_layout(width=figure_width)
 
     fig.update_yaxes(range=plot_range)
-    fig.update_layout(height=900, width=500)
+    if dos_range is not None:
+        fig.update_xaxes(range=dos_range)
     fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True, side='top', ticklen=10,
                      ticks="outside")
+
+    return fig
+
+
+def add_pdos_combination_traces(
+    fig,
+    pdos_table,
+    combination_columns,
+    shift,
+    trace_colors=None,
+    smoothing_window=None,
+):
+    trace_colors = trace_colors or {}
+    energy_values = pdos_table["Energy"].to_numpy()
+
+    for index, column in enumerate(combination_columns):
+        if column not in pdos_table.columns:
+            raise ValueError(f"`{column}` is not available for plotting.")
+        color = trace_colors.get(column, PDOS_DEFAULT_COLORS[index % len(PDOS_DEFAULT_COLORS)])
+        fig.add_trace(
+            go.Scatter(
+                x=smooth_pdos_values(pdos_table[column], smoothing_window),
+                y=energy_values + shift,
+                mode='lines',
+                name=column,
+                line=dict(color=color, width=3),
+            )
+        )
 
     return fig
 

@@ -45,6 +45,7 @@ hps = "hps.cli:main"
 [project.optional-dependencies]
 core = [
   "ase",
+  "kaleido",
   "matplotlib",
   "natsort",
   "networkx",
@@ -84,6 +85,7 @@ full = [
   "bokeh",
   "colorcet",
   "holoviews",
+  "kaleido",
   "matplotlib",
   "MDAnalysis",
   "mpld3",

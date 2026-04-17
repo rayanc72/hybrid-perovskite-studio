@@ -40,6 +40,39 @@ def _parse_uploaded_json(uploaded_file):
         return {}
 
 
+PDOS_COLOR_PREFERENCES_PATH = APP_TMP_DIR / "pdos_trace_colors.json"
+
+
+def _load_pdos_color_preferences():
+    if not PDOS_COLOR_PREFERENCES_PATH.exists():
+        return {}
+    try:
+        data = json.loads(PDOS_COLOR_PREFERENCES_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {
+        str(trace_name): str(color)
+        for trace_name, color in data.items()
+        if isinstance(trace_name, str) and isinstance(color, str)
+    }
+
+
+def _save_pdos_color_preferences(trace_colors):
+    APP_TMP_DIR.mkdir(exist_ok=True)
+    PDOS_COLOR_PREFERENCES_PATH.write_text(
+        json.dumps(trace_colors, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+
+
+def _clear_pdos_color_picker_state():
+    for key in list(st.session_state.keys()):
+        if str(key).startswith("pdos_trace_color_"):
+            del st.session_state[key]
+
+
 def _detect_spin_texture_bundle_files(uploaded_files):
     detected = {
         "spin_texture": None,
@@ -283,6 +316,18 @@ if "uploaded_structure_bytes" not in st.session_state:
     st.session_state.uploaded_structure_bytes = None
 if "structure_uploader_key" not in st.session_state:
     st.session_state.structure_uploader_key = 0
+if "pdos_file_uploader_key" not in st.session_state:
+    st.session_state.pdos_file_uploader_key = 0
+if "pdos_table" not in st.session_state:
+    st.session_state.pdos_table = None
+if "pdos_figure" not in st.session_state:
+    st.session_state.pdos_figure = None
+if "pdos_roles" not in st.session_state:
+    st.session_state.pdos_roles = None
+if "pdos_file_signature" not in st.session_state:
+    st.session_state.pdos_file_signature = None
+if "pdos_saved_trace_colors" not in st.session_state:
+    st.session_state.pdos_saved_trace_colors = _load_pdos_color_preferences()
 
 symmetry_option = False
 com_option = False
@@ -293,6 +338,7 @@ distortion_option = False
 deviation_calculation_option = False
 ADP_table_option = False
 PDF_option = False
+PDF_workflow = None
 charge_analysis_option = False
 rotate_option = False
 reflect_option = False
@@ -564,6 +610,12 @@ def clear_loaded_structure():
     st.session_state.show_structure_details = False
     st.session_state.load_initial_structure_viewer = False
 
+
+def clear_pdos_results():
+    st.session_state.pdos_table = None
+    st.session_state.pdos_figure = None
+    st.session_state.pdos_roles = None
+
 feature_map_view = st.query_params.get("view") == "feature-map"
 primary_section = st.session_state.primary_section
 start_page_clicked = False
@@ -709,9 +761,10 @@ if primary_section == "Structure":
                 options=tool_options("Structure", "Analysis", analysis_group),
             )
         else:
-            st.markdown("**PDF Analysis**")
-            st.caption("Run pair distribution function analysis for the currently loaded structure.")
-            analysis_tool = tool_options("Structure", "Analysis", analysis_group)[0]
+            analysis_tool = st.selectbox(
+                "Workflow",
+                options=tool_options("Structure", "Analysis", analysis_group),
+            )
 
         symmetry_option = analysis_tool == "Symmetrize structure"
         com_option = analysis_tool == "Find center of mass"
@@ -721,7 +774,8 @@ if primary_section == "Structure":
         distortion_option = analysis_tool == "Calculate octahedral distortions"
         deviation_calculation_option = analysis_tool == "Calculate percentage deviation"
         ADP_table_option = analysis_tool == "Anisotropic displacement parameters"
-        PDF_option = analysis_tool == "PDF analysis"
+        PDF_option = analysis_group == "PDF Analysis"
+        PDF_workflow = analysis_tool if PDF_option else None
         charge_analysis_option = analysis_tool == "Charge analysis"
 
     elif structure_mode == "Transformations":
@@ -1909,10 +1963,16 @@ if current_atoms is not None:
         st.write(miller_direction)
 
     if PDF_option:
+        pdf_workflow_titles = {
+            "Simulate PDF": "Simulate pair distribution function",
+            "Plot RDF": "Plot radial distribution function",
+            "Compare experimental PDF": "Compare experimental and simulated PDF",
+            "Convert reduced PDF to g(r)": "Convert reduced PDF to g(r)",
+        }
         render_section_header(
-            "Simulate pair distribution function",
+            pdf_workflow_titles.get(PDF_workflow, "PDF Analysis"),
             kicker="Structure Workspace",
-            subtitle="Generate a simulated PDF for the loaded structure. This tool uses the optional PDF analysis stack.",
+            subtitle="Run the selected pair distribution function workflow for the loaded structure.",
         )
 
         if not PDF_ANALYSIS_AVAILABLE:
@@ -1923,44 +1983,43 @@ if current_atoms is not None:
             st.info("After installing the PDF extra, restart the app and reopen this tool.")
             st.stop()
 
-        # -------------------------------------------------------------------------
-        # 1) Parameter sliders
-        # -------------------------------------------------------------------------
-        qmin, qmax = st.slider("q (Å⁻¹)", 0, 25, (1, 20))
+        needs_simulated_pdf = PDF_workflow in {
+            "Simulate PDF",
+            "Plot RDF",
+            "Compare experimental PDF",
+        }
+
+        if needs_simulated_pdf:
+            qmin, qmax = st.slider("q (Å⁻¹)", 0, 25, (1, 20))
         rmin, rmax = st.slider("r (Å)", 0.0, 30.0, (0.1, 20.0))
 
-        # -------------------------------------------------------------------------
-        # 2) Build & write a clean CIF
-        # -------------------------------------------------------------------------
-        pymatgen_structure = generate_symmetrized_structure(modified_atoms, 0.01, 0.1)
-        tmpdir = os.path.join(os.getcwd(), "pdfanalysis_temp")
-        path = Path(tmpdir) / "structure_clean.cif"
-        os.makedirs(tmpdir, exist_ok=True)
-        CifWriter(pymatgen_structure).write_file(str(path))
+        if needs_simulated_pdf:
+            pymatgen_structure = generate_symmetrized_structure(modified_atoms, 0.01, 0.1)
+            tmpdir = os.path.join(os.getcwd(), "pdfanalysis_temp")
+            path = Path(tmpdir) / "structure_clean.cif"
+            os.makedirs(tmpdir, exist_ok=True)
+            CifWriter(pymatgen_structure).write_file(str(path))
 
-        # -------------------------------------------------------------------------
-        # 3) Compute the simulated PDF
-        # -------------------------------------------------------------------------
-        diffpy_structure = loadStructure(str(path))
-        r1, g1 = calculate_pdf(
-            diffpy_structure,
-            diffpy_structure_attributes={"Uisoequiv": 0.01},
-            pdf_calculator_kwargs={
-                "qmin": qmin,
-                "qmax": qmax,
-                "rmin": rmin,
-                "rmax": rmax,
-                "qdamp": 0.06,
-                "qbroad": 0.06
-            }
-        )
+            diffpy_structure = loadStructure(str(path))
+            r1, g1 = calculate_pdf(
+                diffpy_structure,
+                diffpy_structure_attributes={"Uisoequiv": 0.01},
+                pdf_calculator_kwargs={
+                    "qmin": qmin,
+                    "qmax": qmax,
+                    "rmin": rmin,
+                    "rmax": rmax,
+                    "qdamp": 0.06,
+                    "qbroad": 0.06
+                }
+            )
 
-        # 4) DataFrame & expander
-        df_pdf = pd.DataFrame({"r (Å)": r1, "G_sim(r)": g1})
-        with st.expander("View simulated PDF data"):
-            st.dataframe(df_pdf, use_container_width= True, hide_index = True)
+            df_pdf = pd.DataFrame({"r (Å)": r1, "G_sim(r)": g1})
 
-        with st.expander("View simulated PDF"):
+        if PDF_workflow == "Simulate PDF":
+            with st.expander("View simulated PDF data"):
+                st.dataframe(df_pdf, use_container_width=True, hide_index=True)
+
             fig = go.Figure()
             fig.add_trace(go.Scatter(
                 x=df_pdf["r (Å)"],
@@ -1987,81 +2046,239 @@ if current_atoms is not None:
 
             st.plotly_chart(fig, use_container_width=True)
 
-        st.divider()
-        st.subheader("Optional: plot Radial Distribution Function")
+        if PDF_workflow == "Plot RDF":
+            st.subheader("Radial Distribution Function")
 
-        # 1) Gather inputs
-        rdf_atoms = st.text_input("Enter atom labels (comma-sep)", "Pb, I")
-        atom_list = [a.strip() for a in rdf_atoms.split(",") if a.strip()]
-        all_pairs = list(combinations_with_replacement(atom_list, 2))
-        bins = st.slider("Number of bins", 50, 500, 200)
-        rdf_w_weights = st.radio("Scale by atomic weights?",["True","False"])
+            rdf_atoms = st.text_input("Enter atom labels (comma-sep)", "Pb, I")
+            atom_list = [a.strip() for a in rdf_atoms.split(",") if a.strip()]
+            all_pairs = list(combinations_with_replacement(atom_list, 2))
+            bins = st.slider("Number of bins", 50, 500, 200)
+            rdf_w_weights = st.radio("Scale by atomic weights?", ["True", "False"])
 
-        if rdf_w_weights == "True":
-            weight = True
-        else:
-            weight=False
+            if rdf_w_weights == "True":
+                weight = True
+            else:
+                weight = False
 
-        # 2) Choose library
-        lib = st.radio("Choose plotting library", ["Matplotlib", "Plotly"])
+            lib = st.radio("Choose plotting library", ["Matplotlib", "Plotly"])
 
-        # 3) Load the appropriate config UI
-        if lib == "Matplotlib":
-            config = load_or_create_plot_config_matplotlib(all_pairs)
-        else:
-            config = load_or_create_plot_config(all_pairs)
-
-        # 4) Compute & display
-        if st.button("Compute RDF"):
             if lib == "Matplotlib":
-                fig, df_all = plot_rdf_pdf_matplotlib(
-                    atom_list, modified_atoms, df_pdf, rmin, rmax, bins,
-                    compute_rdf_weighted, config, weight
-                )
-                st.pyplot(fig)
+                config = load_or_create_plot_config_matplotlib(all_pairs)
+            else:
+                config = load_or_create_plot_config(all_pairs)
 
-                # Download buttons for Matplotlib
-                buf_png = io.BytesIO()
-                fig.savefig(buf_png, format='png', bbox_inches='tight')
-                st.download_button(
-                    "Download as PNG", buf_png.getvalue(),
-                    file_name="rdf_plot.png", mime="image/png"
-                )
+            if st.button("Compute RDF"):
+                if lib == "Matplotlib":
+                    fig, df_all = plot_rdf_pdf_matplotlib(
+                        atom_list, modified_atoms, df_pdf, rmin, rmax, bins,
+                        compute_rdf_weighted, config, weight
+                    )
+                    st.pyplot(fig)
 
-                buf_pdf = io.BytesIO()
-                fig.savefig(buf_pdf, format='pdf', bbox_inches='tight')
-                st.download_button(
-                    "Download as PDF", buf_pdf.getvalue(),
-                    file_name="rdf_plot.pdf", mime="application/pdf"
-                )
+                    buf_png = io.BytesIO()
+                    fig.savefig(buf_png, format='png', bbox_inches='tight')
+                    st.download_button(
+                        "Download as PNG", buf_png.getvalue(),
+                        file_name="rdf_plot.png", mime="image/png"
+                    )
 
-            else:  # Plotly
-                fig_rdf, df_all = plot_rdf_pdf(
-                    atom_list, modified_atoms, df_pdf, rmax, bins,
-                    compute_rdf_weighted, config, weight
-                )
-                st.plotly_chart(fig_rdf, use_container_width=True)
+                    buf_pdf = io.BytesIO()
+                    fig.savefig(buf_pdf, format='pdf', bbox_inches='tight')
+                    st.download_button(
+                        "Download as PDF", buf_pdf.getvalue(),
+                        file_name="rdf_plot.pdf", mime="application/pdf"
+                    )
 
-                # # Download buttons for Plotly
-                # png_bytes = fig_rdf.to_image(format="png")
-                # st.download_button(
-                #     "Download as PNG", png_bytes,
-                #     file_name="rdf_plot.png", mime="image/png"
-                # )
-                #
-                # pdf_bytes = fig_rdf.to_image(format="pdf")
-                # st.download_button(
-                #     "Download as PDF", pdf_bytes,
-                #     file_name="rdf_plot.pdf", mime="application/pdf"
-                # )
+                else:
+                    fig_rdf, df_all = plot_rdf_pdf(
+                        atom_list, modified_atoms, df_pdf, rmax, bins,
+                        compute_rdf_weighted, config, weight
+                    )
+                    st.plotly_chart(fig_rdf, use_container_width=True)
 
-            # Show data table
-            with st.expander("View simulated RDF data"):
-                st.dataframe(df_all, use_container_width=True, hide_index=True)
+                with st.expander("View simulated RDF data"):
+                    st.dataframe(df_all, use_container_width=True, hide_index=True)
 
+        if PDF_workflow in {"Simulate PDF", "Plot RDF"}:
+            st.stop()
 
-        st.divider()
-        st.subheader("Optional: Compare Experimental vs. Simulated PDF")
+        if PDF_workflow == "Convert reduced PDF to g(r)":
+            st.subheader("Convert Reduced PDF to g(r)")
+
+            exp_file2 = st.file_uploader(
+                "Upload experimental .gr file",
+                type=["gr"],
+                key="gr_uploader2",
+            )
+
+            if exp_file2 is not None:
+                content = exp_file2.read().decode("utf-8", errors="ignore").splitlines()
+                idx = next((i for i, L in enumerate(content) if L.strip().startswith("#### start data")), None)
+
+                if idx is None:
+                    st.error("Couldn't find '#### start data' in the .gr file.")
+                else:
+                    data_lines = content[idx + 3:]
+
+                    try:
+                        df_exp2 = pd.read_csv(
+                            io.StringIO("\n".join(data_lines)),
+                            sep=r"\s+",
+                            header=None,
+                            names=["r", "G_exp"],
+                        ).pipe(lambda d: d[(d.r >= rmin) & (d.r <= rmax)].reset_index(drop=True))
+
+                        fig_pdf = px.line(
+                            df_exp2,
+                            x="r",
+                            y="G_exp",
+                            labels={"r": "r (Å)", "G_exp": "G(r)"},
+                            title="Uploaded Reduced PDF",
+                        )
+                        fig_pdf.update_layout(
+                            height=450,
+                            template="plotly_white",
+                            margin=dict(l=20, r=20, t=50, b=20),
+                        )
+                        fig_pdf.update_traces(line=dict(width=2))
+                        st.plotly_chart(fig_pdf, use_container_width=True)
+
+                        st.markdown("### Number density, ρ₀")
+
+                        cif_file = st.file_uploader(
+                            "Optional: Upload CIF file to infer ρ₀ automatically",
+                            type=["cif"],
+                            key="cif_uploader_rho0",
+                        )
+
+                        rho0_auto = None
+                        if cif_file is not None:
+                            try:
+                                rho0_auto, n_atoms, volume = infer_rho0_from_cif(cif_file.read())
+                                st.success(
+                                    f"Inferred from CIF: ρ₀ = {rho0_auto:.6f} atoms/Å³ "
+                                    f"(N = {n_atoms}, V = {volume:.3f} Å³)"
+                                )
+                            except Exception as e:
+                                st.warning(f"Could not infer ρ₀ from CIF: {e}")
+
+                        use_auto_rho0 = st.checkbox(
+                            "Use CIF-inferred ρ₀",
+                            value=rho0_auto is not None,
+                            disabled=rho0_auto is None,
+                            key="use_auto_rho0_checkbox",
+                        )
+
+                        rho0_manual = st.number_input(
+                            "Manual ρ₀ (atoms/Å³)",
+                            min_value=0.0,
+                            value=float(rho0_auto) if rho0_auto is not None else 0.05,
+                            step=0.001,
+                            format="%.6f",
+                            key="rho0_input",
+                        )
+
+                        rho0 = rho0_auto if (use_auto_rho0 and rho0_auto is not None) else rho0_manual
+                        st.info(f"Using ρ₀ = {rho0:.6f} atoms/Å³")
+
+                        if st.button("Convert reduced PDF to g(r)", key="convert_pdf_to_gr"):
+                            st.session_state["df_gr_converted"] = reduced_pdf_to_gr(df_exp2, rho0)
+                            st.session_state["rho0_used_for_gr"] = rho0
+
+                        if "df_gr_converted" in st.session_state:
+                            df_gr = st.session_state["df_gr_converted"]
+                            rho0_used = st.session_state.get("rho0_used_for_gr", rho0)
+
+                            fig_gr = px.line(
+                                df_gr,
+                                x="r",
+                                y="g_r",
+                                labels={"r": "r (Å)", "g_r": "g(r)"},
+                                title="Converted Radial Distribution Function",
+                            )
+                            fig_gr.update_layout(
+                                height=450,
+                                template="plotly_white",
+                                margin=dict(l=20, r=20, t=50, b=20),
+                            )
+                            fig_gr.update_traces(line=dict(width=2))
+                            st.plotly_chart(fig_gr, use_container_width=True)
+
+                            st.markdown("### Integrate g(r) over an r-window")
+
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                r_int_min = st.number_input(
+                                    "Integration r min (Å)",
+                                    min_value=float(df_gr["r"].min()),
+                                    max_value=float(df_gr["r"].max()),
+                                    value=float(df_gr["r"].min()),
+                                    step=0.1,
+                                    key="gr_int_min",
+                                )
+                            with c2:
+                                r_int_max = st.number_input(
+                                    "Integration r max (Å)",
+                                    min_value=float(df_gr["r"].min()),
+                                    max_value=float(df_gr["r"].max()),
+                                    value=min(float(df_gr["r"].min()) + 2.0, float(df_gr["r"].max())),
+                                    step=0.1,
+                                    key="gr_int_max",
+                                )
+
+                            if st.button("Integrate g(r)", key="integrate_gr_button"):
+                                if r_int_max <= r_int_min:
+                                    st.warning("Integration r max must be greater than r min.")
+                                else:
+                                    res = integrate_gr_window(df_gr, r_int_min, r_int_max, rho0=rho0_used)
+                                    if res is None:
+                                        st.warning("Not enough points in the selected r-window for integration.")
+                                    else:
+                                        st.write(
+                                            f"**∫ g(r) dr** from {r_int_min:.3f} to {r_int_max:.3f} Å = "
+                                            f"{res['integral_gdr']:.6f}"
+                                        )
+                                        st.write(
+                                            f"**4πρ₀ ∫ r²g(r) dr** from {r_int_min:.3f} to {r_int_max:.3f} Å = "
+                                            f"{res['coordination_like']:.6f}"
+                                        )
+
+                                        fig_window = px.line(
+                                            df_gr,
+                                            x="r",
+                                            y="g_r",
+                                            labels={"r": "r (Å)", "g_r": "g(r)"},
+                                            title="g(r) with Integration Window",
+                                        )
+                                        fig_window.add_vrect(
+                                            x0=r_int_min,
+                                            x1=r_int_max,
+                                            opacity=0.2,
+                                            line_width=0,
+                                        )
+                                        fig_window.update_layout(
+                                            height=450,
+                                            template="plotly_white",
+                                            margin=dict(l=20, r=20, t=50, b=20),
+                                        )
+                                        fig_window.update_traces(line=dict(width=2))
+                                        st.plotly_chart(fig_window, use_container_width=True)
+
+                            csv_data = df_gr.to_csv(index=False).encode("utf-8")
+                            st.download_button(
+                                "Download g(r) as CSV",
+                                data=csv_data,
+                                file_name="converted_gr.csv",
+                                mime="text/csv",
+                                key="download_gr_csv",
+                            )
+
+                    except Exception as e:
+                        st.error(f"Failed to parse or convert file: {e}")
+
+            st.stop()
+
+        st.subheader("Compare Experimental vs. Simulated PDF")
 
 
         # -------------------------------------------------------------------------
@@ -2370,6 +2587,8 @@ if current_atoms is not None:
                     legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
                 )
                 st.plotly_chart(fig_int, use_container_width=True)
+
+        st.stop()
 
         st.divider()
         st.subheader("Optional: Convert Reduced PDF to g(r)")
@@ -3655,56 +3874,292 @@ if plot_pdos_option:
     )
 
     # File uploader for all DOS files
-    uploaded_files = st.file_uploader("Upload Total DOS and element DOS files:", type=['dat', 'txt'],
-                                      accept_multiple_files=True)
+    uploaded_files = st.file_uploader(
+        "Upload Total DOS and element DOS files:",
+        type=['dat', 'txt'],
+        accept_multiple_files=True,
+        key=f"pdos_file_uploader_{st.session_state.pdos_file_uploader_key}",
+    )
+    pdos_file_signature = tuple(file.name for file in uploaded_files or [])
+    if pdos_file_signature != st.session_state.pdos_file_signature:
+        clear_pdos_results()
+        st.session_state.pdos_file_signature = pdos_file_signature
 
-    # Input for shift value
-    shift = float(st.number_input("Enter shift value:", value=0.00))
+    roles = detect_pdos_file_roles(uploaded_files)
+    if uploaded_files:
+        st.markdown("**Detected files**")
+        role_messages = []
+        if roles["total"]:
+            role_messages.append("Total DOS: " + ", ".join(f"`{name}`" for name in roles["total"]))
+        if roles["projected"]:
+            projected_labels = [
+                f"`{item['name']}` as `{item['element']}`" for item in roles["projected"]
+            ]
+            role_messages.append("Element DOS: " + ", ".join(projected_labels))
+        if roles["unrecognized"]:
+            role_messages.append("Ignored: " + ", ".join(f"`{name}`" for name in roles["unrecognized"]))
+        for message in role_messages:
+            st.caption(message)
+    else:
+        st.info("Upload `KS_DOS_total.dat` and one or more `*_l_proj_dos.dat` files.")
+
+    pdos_trace_options = []
+    pdos_trace_preview_error = None
+    if uploaded_files:
+        try:
+            preview_dos_data, _, _ = parse_pdos_uploads(uploaded_files)
+            pdos_trace_options = get_pdos_trace_options(preview_dos_data)
+        except Exception as exc:
+            pdos_trace_preview_error = str(exc)
+
+    st.markdown("**Plot controls**")
+    control_col1, control_col2 = st.columns(2)
+    with control_col1:
+        shift = float(st.number_input("Energy shift (eV):", value=0.00, key="pdos_shift"))
+        plot_range = st.slider(
+            "Energy range (eV):",
+            min_value=-30.0,
+            max_value=30.0,
+            value=(-2.0, 5.0),
+            step=1.0,
+            key="pdos_energy_range",
+        )
+    with control_col2:
+        use_dos_range = st.checkbox("Set DOS axis range", value=False, key="pdos_use_dos_range")
+        dos_range = None
+        if use_dos_range:
+            dos_min_col, dos_max_col = st.columns(2)
+            with dos_min_col:
+                dos_min = st.number_input("DOS min:", value=0.0, key="pdos_dos_min")
+            with dos_max_col:
+                dos_max = st.number_input("DOS max:", value=50.0, key="pdos_dos_max")
+            if dos_min < dos_max:
+                dos_range = (dos_min, dos_max)
+            else:
+                st.warning("DOS min must be smaller than DOS max.")
+        figure_height = st.slider(
+            "Figure height:",
+            min_value=500,
+            max_value=1200,
+            value=850,
+            step=50,
+            key="pdos_figure_height",
+        )
+        plot_width_choice = st.selectbox(
+            "Plot area width:",
+            options=["Full", "Wide", "Medium", "Narrow"],
+            index=0,
+            key="pdos_plot_width_choice",
+            on_change=clear_pdos_results,
+        )
+    smooth_pdos_traces = st.checkbox(
+        "Smooth traces",
+        value=False,
+        key="pdos_smooth_traces",
+        on_change=clear_pdos_results,
+    )
+    smoothing_window = None
+    if smooth_pdos_traces:
+        smoothing_window = st.slider(
+            "Smoothing window:",
+            min_value=3,
+            max_value=51,
+            value=9,
+            step=2,
+            help="Applies a centered moving average to DOS values while keeping the energy grid unchanged.",
+            key="pdos_smoothing_window",
+            on_change=clear_pdos_results,
+        )
+    show_pdos_table = st.checkbox("Show parsed data table", value=True, key="pdos_show_table")
+    if pdos_trace_options:
+        selected_pdos_traces = st.multiselect(
+            "Contributions to plot",
+            options=pdos_trace_options,
+            default=pdos_trace_options,
+            help="Select the parsed total/species/orbital traces to include in the plot.",
+            key=f"pdos_selected_traces_{st.session_state.pdos_file_signature}",
+        )
+    else:
+        selected_pdos_traces = []
+        if pdos_trace_preview_error:
+            st.caption(f"Contribution selection is unavailable: {pdos_trace_preview_error}")
+    custom_pdos_combinations = st.text_area(
+        "Custom contribution formulas",
+        value="",
+        placeholder="PbI = Pb(s) + Pb(p) + I\nI without p = I - I(p)",
+        help="Use one formula per line. Terms must match parsed table columns, with + or - between terms.",
+        key="pdos_custom_combinations",
+    )
+    pdos_color_defaults = [
+        "#000000",
+        "#8a2be2",
+        "#5f9ea0",
+        "#dc143c",
+        "#228b22",
+        "#ff7f50",
+        "#4169e1",
+        "#b8860b",
+    ]
+    custom_pdos_labels = get_pdos_combination_labels(custom_pdos_combinations)
+    pdos_color_labels = list(dict.fromkeys([*selected_pdos_traces, *custom_pdos_labels]))
+    pdos_trace_colors = {}
+    if pdos_color_labels:
+        with st.expander("Trace colors"):
+            st.caption("Saved colors are reused for matching trace names in later sessions.")
+            color_columns = st.columns(2)
+            for color_index, trace_name in enumerate(pdos_color_labels):
+                default_color = pdos_color_defaults[color_index % len(pdos_color_defaults)]
+                if trace_name == "Total DOS":
+                    default_color = "#000000"
+                default_color = st.session_state.pdos_saved_trace_colors.get(
+                    trace_name,
+                    default_color,
+                )
+                with color_columns[color_index % 2]:
+                    pdos_trace_colors[trace_name] = st.color_picker(
+                        trace_name,
+                        value=default_color,
+                        key=f"pdos_trace_color_{trace_name}",
+                    )
+            save_color_col, reset_color_col = st.columns(2)
+            with save_color_col:
+                if st.button("Save trace colors", key="pdos_save_trace_colors", use_container_width=True):
+                    saved_trace_colors = dict(st.session_state.pdos_saved_trace_colors)
+                    saved_trace_colors.update(pdos_trace_colors)
+                    _save_pdos_color_preferences(saved_trace_colors)
+                    st.session_state.pdos_saved_trace_colors = saved_trace_colors
+                    st.success("Trace colors saved.")
+            with reset_color_col:
+                if st.button("Reset saved colors", key="pdos_reset_trace_colors", use_container_width=True):
+                    if PDOS_COLOR_PREFERENCES_PATH.exists():
+                        PDOS_COLOR_PREFERENCES_PATH.unlink()
+                    st.session_state.pdos_saved_trace_colors = {}
+                    _clear_pdos_color_picker_state()
+                    st.success("Saved trace colors reset.")
+                    st.rerun()
     st.session_state.shift = shift
 
-    # Input field for plot_range variable
-    plot_range = st.slider("Select plot range:", min_value=-30.0, max_value=30.0, value=(-2.0, 5.0), step=1.0)
+    # Plot and file-reset controls
+    plot_col, clean_col = st.columns(2)
+    with plot_col:
+        plot_button = st.button("Plot", key="plot_pdos_button", use_container_width=True)
+    with clean_col:
+        clean_files_button = st.button("Clean files", key="clean_pdos_files_button", use_container_width=True)
 
+    if clean_files_button:
+        clear_pdos_results()
+        st.session_state.pdos_file_signature = None
+        st.session_state.pdos_file_uploader_key += 1
+        st.rerun()
 
-    # Plot button
-    plot_button = st.button("Plot")
-
-    # Process the uploaded files to create dos_data dictionary
     if plot_button:
         if uploaded_files:
-            dos_data = {}
+            try:
+                dos_data, pdos_table, roles = parse_pdos_uploads(uploaded_files)
+                fig = plot_pdos_streamlit(
+                    dos_data,
+                    st.session_state.shift,
+                    plot_range,
+                    dos_range=dos_range,
+                    figure_height=figure_height,
+                    selected_trace_names=selected_pdos_traces,
+                    trace_colors=pdos_trace_colors,
+                    smoothing_window=smoothing_window,
+                )
 
-            for file in uploaded_files:
-                if file.name == "KS_DOS_total.dat":
-                    dos_data['Total'] = np.loadtxt(file)
+                if custom_pdos_combinations.strip():
+                    try:
+                        pdos_table, combination_columns = add_pdos_combinations(
+                            pdos_table,
+                            custom_pdos_combinations,
+                        )
+                        add_pdos_combination_traces(
+                            fig,
+                            pdos_table,
+                            combination_columns,
+                            st.session_state.shift,
+                            trace_colors=pdos_trace_colors,
+                            smoothing_window=smoothing_window,
+                        )
+                    except Exception as exc:
+                        st.warning(f"Custom contribution formulas were skipped: {exc}")
+
+                if not fig.data:
+                    clear_pdos_results()
+                    st.warning("Select at least one contribution or add a valid custom formula.")
                 else:
-                    # Extract element name from the file name
-                    element_name = re.match(r'(\w+)_l_proj_dos.dat', file.name)
-                    if element_name:
-                        element_name = element_name.group(1)
-                        dos_data[element_name] = np.loadtxt(file)
+                    st.session_state.pdos_table = pdos_table
+                    st.session_state.pdos_figure = fig
+                    st.session_state.pdos_roles = roles
+            except Exception as exc:
+                clear_pdos_results()
+                st.error(str(exc))
+        else:
+            clear_pdos_results()
+            st.warning("Upload PDOS files before plotting.")
 
-            # Check if Total DOS data is provided
-            if 'Total' in dos_data:
-                energy_values = dos_data['Total'][:, 0]
-                total_dos = dos_data['Total'][:, 1]
+    if st.session_state.pdos_figure is not None:
+        if show_pdos_table and st.session_state.pdos_table is not None:
+            st.dataframe(st.session_state.pdos_table, hide_index=True, use_container_width=True)
 
-                # Create a DataFrame with the energy column
-                df = pd.DataFrame({'Energy': energy_values, 'Total DOS': total_dos})
-
-                # Add each element's DOS to the DataFrame
-                for element, data in dos_data.items():
-                    if element != 'Total':  # Assuming you don't want to include the Total's DOS again
-                        df[element] = data[:, 1]  # Add the second column (DOS values) of each element
-
-                st.dataframe(pd.DataFrame(df), hide_index=True, use_container_width=True)
-                # Call the plot_pdos_streamlit function and display the plot
-                fig = plot_pdos_streamlit(dos_data, st.session_state.shift, plot_range)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.error("Total DOS file (KS_DOS_total.dat) not found in the uploaded files.")
-        # else:
-        #     st.warning("Please upload the required files.")
+        if plot_width_choice == "Full":
+            st.plotly_chart(st.session_state.pdos_figure, use_container_width=True)
+        else:
+            width_ratios = {
+                "Wide": [1, 6, 1],
+                "Medium": [1, 4, 1],
+                "Narrow": [2, 3, 2],
+            }
+            _, plot_area_col, _ = st.columns(width_ratios[plot_width_choice])
+            with plot_area_col:
+                st.plotly_chart(st.session_state.pdos_figure, use_container_width=True)
+        st.markdown("**Export**")
+        csv_data = st.session_state.pdos_table.to_csv(index=False)
+        html_data = pio.to_html(
+            st.session_state.pdos_figure,
+            include_plotlyjs="cdn",
+            full_html=True,
+        )
+        export_col1, export_col2 = st.columns(2)
+        with export_col1:
+            st.download_button(
+                label="CSV",
+                data=csv_data,
+                file_name="pdos_data.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with export_col2:
+            st.download_button(
+                label="HTML",
+                data=html_data,
+                file_name="pdos_plot.html",
+                mime="text/html",
+                use_container_width=True,
+            )
+        if st.checkbox("Prepare PNG/PDF exports", value=False, key="pdos_prepare_static_exports"):
+            try:
+                png_bytes = pio.to_image(st.session_state.pdos_figure, format="png", scale=3)
+                pdf_bytes = pio.to_image(st.session_state.pdos_figure, format="pdf")
+                static_export_col1, static_export_col2 = st.columns(2)
+                with static_export_col1:
+                    st.download_button(
+                        label="PNG",
+                        data=png_bytes,
+                        file_name="pdos_plot.png",
+                        mime="image/png",
+                        use_container_width=True,
+                    )
+                with static_export_col2:
+                    st.download_button(
+                        label="PDF",
+                        data=pdf_bytes,
+                        file_name="pdos_plot.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+            except Exception as exc:
+                st.info(f"PNG/PDF export needs Kaleido: {exc}")
 
 if plot_bs_option:
     st.markdown(
@@ -4631,6 +5086,11 @@ def format_subscripts(text):
     """Convert any _X to $_{X}$ (e.g., A_2BC_4 → A$_{2}$BC$_{4}$)"""
     return re.sub(r'_(\w)', r'$_{\1}$', text)
 
+
+def _option_index(options, value, default=0):
+    return options.index(value) if value in options else default
+
+
 # def convert_underscores_to_subscripts(text):
 #     return re.sub(r'_(\w)', r'$_{\1}$', text)
 
@@ -4806,6 +5266,9 @@ if xy_plot_option:
                 )
 
             dataset_info = []
+            plot_type_options = ["Line", "Scatter", "Line + Scatter"]
+            marker_options = ["None", "o", "s", "D", "^", "x", "*"]
+            linestyle_options = ["solid", "dashed", "dashdot", "dotted"]
             for i in range(num_datasets):
                 with st.expander(f"📊 Dataset {i + 1}"):
                     ds_cfg = config_data["datasets"][i] if config_data and "datasets" in config_data and i < len(
@@ -4823,20 +5286,38 @@ if xy_plot_option:
 
                     color = st.color_picker(f"Color for Dataset {i + 1}", value=ds_cfg.get("color", "#1f77b4"),
                                             key=f"color{i}")
-                    marker = st.selectbox(f"Marker for Dataset {i + 1}", ["None", "o", "s", "D", "^", "x", "*"],
-                                          index=["None", "o", "s", "D", "^", "x", "*"].index(ds_cfg.get("marker", "o")),
+                    plot_type = st.selectbox(
+                        f"Plot Type for Dataset {i + 1}",
+                        plot_type_options,
+                        index=_option_index(plot_type_options, ds_cfg.get("plot_type", "Line")),
+                        key=f"plot_type{i}"
+                    )
+                    marker = st.selectbox(f"Marker for Dataset {i + 1}", marker_options,
+                                          index=_option_index(marker_options, ds_cfg.get("marker", "o")),
                                           key=f"marker{i}")
+                    marker_size = st.slider(
+                        f"Marker Size for Dataset {i + 1}",
+                        10,
+                        200,
+                        value=int(ds_cfg.get("marker_size", 45)),
+                        step=5,
+                        key=f"marker_size{i}"
+                    )
                     linestyle = st.selectbox(f"Line Style for Dataset {i + 1}",
-                                             ["solid", "dashed", "dashdot", "dotted"],
-                                             index=["solid", "dashed", "dashdot", "dotted"].index(
-                                                 ds_cfg.get("linestyle", "solid")), key=f"linestyle{i}")
+                                             linestyle_options,
+                                             index=_option_index(
+                                                 linestyle_options,
+                                                 ds_cfg.get("linestyle", "solid")
+                                             ), key=f"linestyle{i}")
 
                     dataset_info.append({
                         "x": x_col,
                         "y": y_col,
                         "label": format_subscripts(label),
                         "color": color,
+                        "plot_type": plot_type,
                         "marker": None if marker == "None" else marker,
+                        "marker_size": marker_size,
                         "linestyle": linestyle
                     })
 
@@ -4944,12 +5425,31 @@ if xy_plot_option:
 
 
                 for ds in dataset_info:
-                    ax.plot(df[ds["x"]], df[ds["y"]],
+                    label = ds["label"] if show_legend else None
+                    if ds["plot_type"] == "Scatter":
+                        ax.scatter(
+                            df[ds["x"]],
+                            df[ds["y"]],
                             color=ds["color"],
-                            linewidth=2.0,
-                            marker=ds["marker"],
-                            linestyle=ds["linestyle"],
-                            label=ds["label"] if show_legend else None)
+                            marker=ds["marker"] or "o",
+                            s=ds["marker_size"],
+                            label=label,
+                        )
+                    elif ds["plot_type"] == "Line + Scatter":
+                        ax.plot(df[ds["x"]], df[ds["y"]],
+                                color=ds["color"],
+                                linewidth=2.0,
+                                marker=ds["marker"] or "o",
+                                markersize=np.sqrt(ds["marker_size"]),
+                                linestyle=ds["linestyle"],
+                                label=label)
+                    else:
+                        ax.plot(df[ds["x"]], df[ds["y"]],
+                                color=ds["color"],
+                                linewidth=2.0,
+                                marker=ds["marker"],
+                                linestyle=ds["linestyle"],
+                                label=label)
 
                 ax.set_xlabel(format_subscripts(x_label), fontsize=label_size, weight=label_weight, family=font_family)
                 ax.set_ylabel(format_subscripts(y_label), fontsize=label_size, weight=label_weight, family=font_family)
@@ -5002,7 +5502,9 @@ if xy_plot_option:
                             "label": ds["label"].replace("$_{", "_").replace("}$", ""),
                             # Convert back to original input
                             "color": ds["color"],
+                            "plot_type": ds["plot_type"],
                             "marker": ds["marker"] if ds["marker"] else "None",
+                            "marker_size": ds["marker_size"],
                             "linestyle": ds["linestyle"]
                         }
                         for ds in dataset_info

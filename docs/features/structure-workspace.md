@@ -75,9 +75,12 @@ When a structure is loaded, the workspace shows a persistent summary card with:
 
 ### PDF Analysis
 
-- PDF analysis
+- Simulate PDF
+- Plot RDF
+- Compare experimental PDF
+- Convert reduced PDF to g(r)
 
-The PDF workflow also exposes optional RDF generation and optional comparison with uploaded experimental `.gr` data.
+Each PDF task opens as its own workflow instead of appearing as an optional section on the same page.
 
 ## Transformations View
 

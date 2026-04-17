@@ -13,6 +13,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from hps.services.runtime import DEPENDENCY_GROUPS, full_install_command, pdf_install_command
+from hps.ui.navigation import tool_options
 from hps.ui.sidebar import SIDEBAR_SECTIONS
 
 
@@ -68,6 +69,21 @@ class PackageLayoutTests(unittest.TestCase):
     def test_packaged_pdf_wrapper_uses_packaged_module(self) -> None:
         wrapper = (ROOT / "src" / "hps" / "domain" / "pdf.py").read_text()
         self.assertIn("from hps.domain import pdf_analysis as _impl", wrapper)
+
+    def test_pdf_analysis_workflows_are_separate_tools(self) -> None:
+        self.assertEqual(
+            tool_options("Structure", "Analysis", "PDF Analysis"),
+            [
+                "Simulate PDF",
+                "Plot RDF",
+                "Compare experimental PDF",
+                "Convert reduced PDF to g(r)",
+            ],
+        )
+
+    def test_pdf_analysis_exports_diffpy_structure_loader(self) -> None:
+        pdf_analysis = (ROOT / "src" / "hps" / "domain" / "pdf_analysis.py").read_text()
+        self.assertIn("from diffpy.structure import loadStructure", pdf_analysis)
 
     def test_plot_band_is_import_safe(self) -> None:
         plot_band = (ROOT / "src" / "hps" / "tools" / "plot_band.py").read_text()

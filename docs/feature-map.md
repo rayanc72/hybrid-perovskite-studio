@@ -21,7 +21,10 @@
       - Calculate octahedral distortions
       - Calculate percentage deviation (between two structures)
     - Pair Distribution Function Analysis
-      - PDF analysis
+      - Simulate PDF
+      - Plot RDF
+      - Compare experimental PDF
+      - Convert reduced PDF to g(r)
   - Transformations
     - Molecule Operations
       - Rotation

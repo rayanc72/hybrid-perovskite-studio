@@ -9,6 +9,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from diffpy.structure import loadStructure
 from ase.data import atomic_numbers
 from ase.neighborlist import neighbor_list
 from diffpy.pdffit2 import PdfFit

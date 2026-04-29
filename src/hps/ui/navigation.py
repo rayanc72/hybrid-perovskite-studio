@@ -5,7 +5,7 @@ from __future__ import annotations
 
 NAVIGATION_REGISTRY = {
     "Structure": {
-        "description": "Upload structures, inspect geometry, run transformations, and access <strong>PDF analysis</strong>.",
+        "description": "Upload structures, inspect geometry, run transformations, and access <strong>PDF</strong> and <strong>PXRD</strong> analysis.",
         "views": {
             "Overview": {
                 "summary": [
@@ -35,6 +35,11 @@ NAVIGATION_REGISTRY = {
                             "Calculate atomic distances",
                             "Calculate octahedral distortions",
                             "Calculate percentage deviation",
+                        ]
+                    },
+                    "PXRD Analysis": {
+                        "tools": [
+                            "Simulate PXRD",
                         ]
                     },
                     "PDF Analysis": {

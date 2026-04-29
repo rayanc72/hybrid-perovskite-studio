@@ -28,6 +28,7 @@ from ase.io import write
 from ase.spacegroup import get_spacegroup
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.io.cif import CifWriter
+from pymatgen.analysis.diffraction.xrd import XRDCalculator
 from pymatgen.analysis.structure_matcher import StructureMatcher
 import zipfile
 import tempfile
@@ -1095,6 +1096,97 @@ def generate_symmetrized_structure(atoms, symprec, angle_tol):
         _suppress_spglib_dict_deprecation()
         space_group_analyzer = SpacegroupAnalyzer(structure, symprec=symprec, angle_tolerance=angle_tol)
         return space_group_analyzer.get_symmetrized_structure()
+
+
+def _two_theta_to_q(two_theta_values, wavelength):
+    theta_radians = np.radians(np.asarray(two_theta_values, dtype=float) / 2.0)
+    return (4.0 * np.pi * np.sin(theta_radians)) / float(wavelength)
+
+
+def simulate_pxrd(
+    atoms,
+    wavelength=1.5406,
+    two_theta_range=(5.0, 80.0),
+    fwhm=0.1,
+    x_axis="2theta",
+    scaled=True,
+    num_points=4000,
+):
+    if wavelength <= 0:
+        raise ValueError("Wavelength must be positive.")
+    if fwhm < 0:
+        raise ValueError("FWHM broadening must be non-negative.")
+    if len(two_theta_range) != 2 or two_theta_range[0] >= two_theta_range[1]:
+        raise ValueError("two_theta_range must be an increasing (min, max) pair.")
+    if x_axis not in {"2theta", "q"}:
+        raise ValueError("x_axis must be either '2theta' or 'q'.")
+    if num_points < 2:
+        raise ValueError("num_points must be at least 2.")
+
+    structure = AseAtomsAdaptor.get_structure(atoms)
+    calculator = XRDCalculator(wavelength=wavelength)
+    pattern = calculator.get_pattern(
+        structure,
+        scaled=scaled,
+        two_theta_range=(float(two_theta_range[0]), float(two_theta_range[1])),
+    )
+
+    peak_positions = np.asarray(pattern.x, dtype=float)
+    peak_intensities = np.asarray(pattern.y, dtype=float)
+
+    reflections_df = pd.DataFrame(
+        {
+            "2theta (deg)": peak_positions,
+            "Intensity": peak_intensities,
+            "d (A)": np.asarray(pattern.d_hkls, dtype=float),
+            "hkl": [
+                ", ".join(
+                    f"{entry['hkl']} x{entry['multiplicity']}"
+                    for entry in peak_group
+                )
+                for peak_group in pattern.hkls
+            ],
+        }
+    )
+
+    two_theta_grid = np.linspace(two_theta_range[0], two_theta_range[1], int(num_points))
+    profile_intensity = np.zeros_like(two_theta_grid)
+
+    if peak_positions.size:
+        if fwhm == 0:
+            nearest_indices = np.abs(two_theta_grid[:, None] - peak_positions[None, :]).argmin(axis=0)
+            np.add.at(profile_intensity, nearest_indices, peak_intensities)
+        else:
+            sigma = float(fwhm) / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+            deltas = two_theta_grid[:, None] - peak_positions[None, :]
+            profile_intensity = np.exp(-0.5 * (deltas / sigma) ** 2) @ peak_intensities
+
+    if scaled and profile_intensity.max() > 0:
+        profile_intensity = 100.0 * profile_intensity / profile_intensity.max()
+
+    if x_axis == "q":
+        profile_x = _two_theta_to_q(two_theta_grid, wavelength)
+        reflection_x = _two_theta_to_q(peak_positions, wavelength)
+        x_label = "q (A^-1)"
+    else:
+        profile_x = two_theta_grid
+        reflection_x = peak_positions
+        x_label = "2theta (deg)"
+
+    profile_df = pd.DataFrame(
+        {
+            x_label: profile_x,
+            "Intensity": profile_intensity,
+        }
+    )
+    if x_axis == "q":
+        reflections_df.insert(1, x_label, reflection_x)
+
+    return {
+        "profile": profile_df,
+        "reflections": reflections_df,
+        "x_label": x_label,
+    }
 
 
 

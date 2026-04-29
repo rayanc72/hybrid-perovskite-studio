@@ -2,6 +2,9 @@ import copy
 import importlib
 import io
 import json
+import hashlib
+import base64
+import time
 import numpy as np
 import pandas as pd
 
@@ -10,6 +13,12 @@ from hps.domain import md_analysis as md_analysis_module
 from hps.domain import molecule_builder as molecule_builder_module
 from hps.domain import structure_manager as structure_manager_module
 from hps.io.paths import APP_TMP_DIR
+from hps.services.backend_client import (
+    BackendClientError,
+    get_artifact,
+    get_job,
+    submit_job,
+)
 from hps.ui.navigation import (
     build_feature_tree,
     group_names,
@@ -74,6 +83,194 @@ def _clear_pdos_color_picker_state():
     for key in list(st.session_state.keys()):
         if str(key).startswith("pdos_trace_color_"):
             del st.session_state[key]
+
+
+def _structure_upload_signature(file_name, file_bytes):
+    digest = hashlib.sha256()
+    digest.update(file_name.encode("utf-8"))
+    digest.update(b":")
+    digest.update(file_bytes)
+    return digest.hexdigest()
+
+
+def _reset_structure_backend_state():
+    st.session_state.structure_summary_signature = None
+    st.session_state.structure_summary_job_id = None
+    st.session_state.structure_summary_data = None
+    st.session_state.structure_summary_status = None
+    st.session_state.structure_summary_error = None
+
+
+def _prime_structure_summary_job(uploaded_name, uploaded_bytes):
+    signature = _structure_upload_signature(uploaded_name, uploaded_bytes)
+    if st.session_state.structure_summary_signature == signature:
+        return
+
+    _reset_structure_backend_state()
+    st.session_state.structure_summary_signature = signature
+    payload = {
+        "file_name": uploaded_name,
+        "file_bytes_b64": base64.b64encode(uploaded_bytes).decode("utf-8"),
+        "exceptions": [["F", "I"]],
+        "bond_padding": 0.0,
+    }
+
+    try:
+        job = submit_job("structure_context", payload)
+    except BackendClientError as exc:
+        st.session_state.structure_summary_error = str(exc)
+        st.session_state.structure_summary_status = "failed"
+        return
+
+    st.session_state.structure_summary_job_id = job["job_id"]
+    st.session_state.structure_summary_status = job["state"]
+
+
+def _refresh_structure_summary_status():
+    job_id = st.session_state.get("structure_summary_job_id")
+    if not job_id:
+        return
+
+    if st.session_state.get("structure_summary_data") is not None:
+        return
+
+    try:
+        job = get_job(job_id)
+    except BackendClientError as exc:
+        st.session_state.structure_summary_error = str(exc)
+        st.session_state.structure_summary_status = "failed"
+        return
+
+    st.session_state.structure_summary_status = job["state"]
+    if job["state"] == "completed" and job.get("result_ref"):
+        try:
+            st.session_state.structure_summary_data = get_artifact(job["result_ref"])
+        except BackendClientError as exc:
+            st.session_state.structure_summary_error = str(exc)
+            st.session_state.structure_summary_status = "failed"
+    elif job["state"] == "failed":
+        st.session_state.structure_summary_error = job.get("error") or "Background structure summary failed."
+
+
+def _normalize_backend_payload(value):
+    if isinstance(value, dict):
+        return {str(key): _normalize_backend_payload(val) for key, val in sorted(value.items())}
+    if isinstance(value, (list, tuple)):
+        return [_normalize_backend_payload(item) for item in value]
+    return value
+
+
+def _backend_workflow_signature(workflow, payload):
+    digest = hashlib.sha256()
+    digest.update(workflow.encode("utf-8"))
+    digest.update(b":")
+    digest.update(
+        json.dumps(_normalize_backend_payload(payload), sort_keys=True, separators=(",", ":")).encode("utf-8")
+    )
+    return digest.hexdigest()
+
+
+def _get_backend_workflow_registry():
+    if "backend_workflows" not in st.session_state:
+        st.session_state.backend_workflows = {}
+    return st.session_state.backend_workflows
+
+
+def _backend_named_file_payload(uploaded_files):
+    payload_files = []
+    for uploaded_file in uploaded_files or []:
+        payload_files.append(
+            {
+                "name": uploaded_file.name,
+                "content_b64": base64.b64encode(uploaded_file.getvalue()).decode("utf-8"),
+            }
+        )
+    return payload_files
+
+
+def _run_backend_workflow(workflow, payload, state_key, *, start=False, poll_timeout=6.0):
+    registry = _get_backend_workflow_registry()
+    signature = _backend_workflow_signature(workflow, payload)
+    state = registry.get(
+        state_key,
+        {
+            "signature": None,
+            "job_id": None,
+            "status": None,
+            "result": None,
+            "error": None,
+            "messages": [],
+        },
+    )
+
+    if state.get("signature") != signature:
+        state = {
+            "signature": signature,
+            "job_id": None,
+            "status": None,
+            "result": None,
+            "error": None,
+            "messages": [],
+        }
+
+    if state.get("result") is not None:
+        registry[state_key] = state
+        return state["result"]
+
+    if state.get("job_id") is None and start:
+        try:
+            submitted_job = submit_job(workflow, payload)
+        except BackendClientError as exc:
+            state["status"] = "failed"
+            state["error"] = str(exc)
+            registry[state_key] = state
+            return None
+        state["job_id"] = submitted_job["job_id"]
+        state["status"] = submitted_job["state"]
+        state["messages"] = submitted_job.get("messages", [])
+        state["error"] = submitted_job.get("error")
+        if submitted_job["state"] == "completed" and submitted_job.get("result_ref"):
+            try:
+                state["result"] = get_artifact(submitted_job["result_ref"])
+            except BackendClientError as exc:
+                state["status"] = "failed"
+                state["error"] = str(exc)
+            registry[state_key] = state
+            return state.get("result")
+
+    if state.get("job_id") is None:
+        registry[state_key] = state
+        return None
+
+    deadline = time.time() + poll_timeout
+    while time.time() < deadline:
+        try:
+            job = get_job(state["job_id"])
+        except BackendClientError as exc:
+            state["status"] = "failed"
+            state["error"] = str(exc)
+            break
+
+        state["status"] = job["state"]
+        state["messages"] = job.get("messages", [])
+        state["error"] = job.get("error")
+        if job["state"] == "completed" and job.get("result_ref"):
+            try:
+                state["result"] = get_artifact(job["result_ref"])
+            except BackendClientError as exc:
+                state["status"] = "failed"
+                state["error"] = str(exc)
+            break
+        if job["state"] in {"failed", "cancelled"}:
+            break
+        time.sleep(0.1)
+
+    registry[state_key] = state
+    return state.get("result")
+
+
+def _get_backend_workflow_state(state_key):
+    return _get_backend_workflow_registry().get(state_key, {})
 
 
 def _detect_spin_texture_bundle_files(uploaded_files):
@@ -436,6 +633,16 @@ if "pdos_file_signature" not in st.session_state:
     st.session_state.pdos_file_signature = None
 if "pdos_saved_trace_colors" not in st.session_state:
     st.session_state.pdos_saved_trace_colors = _load_pdos_color_preferences()
+if "structure_summary_signature" not in st.session_state:
+    st.session_state.structure_summary_signature = None
+if "structure_summary_job_id" not in st.session_state:
+    st.session_state.structure_summary_job_id = None
+if "structure_summary_data" not in st.session_state:
+    st.session_state.structure_summary_data = None
+if "structure_summary_status" not in st.session_state:
+    st.session_state.structure_summary_status = None
+if "structure_summary_error" not in st.session_state:
+    st.session_state.structure_summary_error = None
 
 symmetry_option = False
 com_option = False
@@ -719,6 +926,7 @@ def clear_loaded_structure():
     st.session_state.structure_uploader_key += 1
     st.session_state.show_structure_details = False
     st.session_state.load_initial_structure_viewer = False
+    _reset_structure_backend_state()
 
 
 def clear_pdos_results():
@@ -827,6 +1035,10 @@ if primary_section == "Structure":
         st.session_state.uploaded_structure_name = structure_upload.name
         st.session_state.uploaded_structure_bytes = structure_upload.getvalue()
         st.session_state.file_name = structure_upload.name
+        _prime_structure_summary_job(
+            st.session_state.uploaded_structure_name,
+            st.session_state.uploaded_structure_bytes,
+        )
         _debug_log(
             f"structure workspace: stored upload file={structure_upload.name} bytes={len(st.session_state.uploaded_structure_bytes)}"
         )
@@ -838,6 +1050,22 @@ if primary_section == "Structure":
         if st.button("Remove current structure", key="remove_structure_workspace"):
             clear_loaded_structure()
             st.rerun()
+
+    if st.session_state.uploaded_structure_name and st.session_state.uploaded_structure_bytes is not None:
+        _prime_structure_summary_job(
+            st.session_state.uploaded_structure_name,
+            st.session_state.uploaded_structure_bytes,
+        )
+        _refresh_structure_summary_status()
+
+        summary_status = st.session_state.structure_summary_status
+        summary_error = st.session_state.structure_summary_error
+        if summary_status in {"queued", "running"}:
+            st.caption("Backend cache is preparing a structure summary in the background.")
+        elif summary_status == "completed":
+            st.caption("Backend cache is ready for the current structure.")
+        elif summary_error:
+            st.warning(f"Backend summary unavailable: {summary_error}")
 
     structure_mode = st.radio(
         "View",
@@ -948,7 +1176,8 @@ elif primary_section == "Utilities":
 
 uploaded_structure_name = st.session_state.uploaded_structure_name
 uploaded_structure_bytes = st.session_state.uploaded_structure_bytes
-if uploaded_structure_name and uploaded_structure_bytes is not None:
+structure_summary_data = st.session_state.get("structure_summary_data")
+if uploaded_structure_name and uploaded_structure_bytes is not None and primary_section == "Structure":
     structure_buffer = io.BytesIO(uploaded_structure_bytes)
     structure_buffer.name = uploaded_structure_name
     try:
@@ -1022,8 +1251,23 @@ if current_atoms is not None and primary_section == "Structure":
         meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4)
         meta_col1.metric("File", st.session_state.file_name)
         meta_col2.metric("Format", get_file_format(st.session_state.file_name))
-        meta_col3.metric("Atoms", len(current_atoms))
-        meta_col4.metric("Molecule Groups", len(current_molecules))
+        meta_col3.metric(
+            "Atoms",
+            structure_summary_data.get("atom_count", len(current_atoms)) if structure_summary_data else len(current_atoms),
+        )
+        meta_col4.metric(
+            "Molecule Groups",
+            structure_summary_data.get("molecule_group_count", len(current_molecules))
+            if structure_summary_data
+            else len(current_molecules),
+        )
+
+        if structure_summary_data:
+            st.caption(
+                "Backend summary: "
+                f"{structure_summary_data.get('formula', 'Unknown formula')} | "
+                f"{structure_summary_data.get('space_group', 'Unknown space group')}"
+            )
 
         action_col1, action_col2, action_col3 = st.columns(3)
         with action_col1:
@@ -1994,7 +2238,6 @@ if current_atoms is not None:
         with st.form(key="symmetry_form"):
             symprec_lower = st.number_input("Enter the lower bound for tolerance", value=1e-3, step=1e-3, format="%.4f")
             symprec_upper = st.number_input("Enter the upper bound for tolerance", value=1e-1, step=1e-3, format="%.4f")
-            symprec_list = np.linspace(symprec_lower, symprec_upper, 6)
             angle_tol = st.number_input("Enter a tolerance for angles", value=5.0, step=1e-3, format="%.4f")
 
             if symprec_lower > symprec_upper:
@@ -2002,21 +2245,32 @@ if current_atoms is not None:
 
             form_submitted = st.form_submit_button("Get Space Groups")
 
-        # Update space groups if form_submitted is True or if space groups have not been calculated yet
-        if form_submitted or 'space_groups' not in st.session_state:
-            # Here, calculate_space_groups should return both symprec_list and space_groups
-            st.session_state['symprec_list'], st.session_state['space_groups'] = calculate_space_groups(modified_atoms,
-                                                                                                        symprec_lower,
-                                                                                                        symprec_upper,
-                                                                                                        angle_tol)
-            st.session_state['space_group_strings'] = get_space_group_strings(st.session_state['symprec_list'],
-                                                                              st.session_state['space_groups'])
+        symmetry_payload = {
+            "file_name": st.session_state.file_name,
+            "file_bytes_b64": base64.b64encode(uploaded_structure_bytes).decode("utf-8"),
+            "symprec_lower": float(symprec_lower),
+            "symprec_upper": float(symprec_upper),
+            "angle_tol": float(angle_tol),
+        }
+        symmetry_state_key = f"structure_symmetry::{st.session_state.file_name}"
+        symmetry_result = _run_backend_workflow(
+            "structure_symmetry",
+            symmetry_payload,
+            symmetry_state_key,
+            start=form_submitted and symprec_lower <= symprec_upper,
+        )
+        symmetry_state = _get_backend_workflow_state(symmetry_state_key)
+        if form_submitted and symmetry_result is None and symmetry_state.get("status") not in {"failed", "cancelled"}:
+            st.info("Computing symmetry candidates in the backend. Re-run this action in a moment if they do not appear immediately.")
+        if symmetry_state.get("error"):
+            st.error(f"Symmetry analysis failed: {symmetry_state['error']}")
 
-        # Ensure that 'space_group_strings' and 'symprec_list' are available for the dropdown and button actions
-        if 'space_group_strings' in st.session_state and 'symprec_list' in st.session_state:
-            selected_string = st.selectbox("Select the desired space group",
-                                          options=st.session_state.space_group_strings,
-                                          index=0)
+        if symmetry_result and symmetry_result.get("space_groups"):
+            selected_string = st.selectbox(
+                "Select the desired space group",
+                options=[entry["label"] for entry in symmetry_result["space_groups"]],
+                index=0,
+            )
 
             if st.button("Generate CIF"):
                 try:
@@ -2160,20 +2414,33 @@ if current_atoms is not None:
         else:
             two_theta_range = (range_min, range_max)
 
-        try:
-            pxrd_result = simulate_pxrd(
-                modified_atoms,
-                wavelength=wavelength,
-                two_theta_range=two_theta_range,
-                fwhm=fwhm,
-                x_axis=x_axis_label,
-            )
-        except Exception as exc:
-            st.error(f"PXRD simulation failed: {exc}")
+        pxrd_payload = {
+            "file_name": st.session_state.file_name,
+            "file_bytes_b64": base64.b64encode(uploaded_structure_bytes).decode("utf-8"),
+            "wavelength": float(wavelength),
+            "two_theta_range": [float(two_theta_range[0]), float(two_theta_range[1])],
+            "fwhm": float(fwhm),
+            "x_axis": x_axis_label,
+            "scaled": True,
+            "num_points": 4000,
+        }
+        pxrd_state_key = f"structure_pxrd::{st.session_state.file_name}"
+        pxrd_result = _run_backend_workflow(
+            "structure_pxrd",
+            pxrd_payload,
+            pxrd_state_key,
+            start=True,
+        )
+        pxrd_state = _get_backend_workflow_state(pxrd_state_key)
+        if pxrd_result is None:
+            if pxrd_state.get("error"):
+                st.error(f"PXRD simulation failed: {pxrd_state['error']}")
+            else:
+                st.info("PXRD simulation is still running in the backend. Re-run the action shortly if the plot does not appear immediately.")
             st.stop()
 
-        df_pxrd = pxrd_result["profile"]
-        df_pxrd_reflections = pxrd_result["reflections"]
+        df_pxrd = pd.DataFrame(pxrd_result["profile"])
+        df_pxrd_reflections = pd.DataFrame(pxrd_result["reflections"])
         x_column = pxrd_result["x_label"]
         df_pxrd_experimental = None
         plot_simulated_intensity = df_pxrd["Intensity"].to_numpy(copy=True)
@@ -4270,7 +4537,19 @@ if plot_pdos_option:
         clear_pdos_results()
         st.session_state.pdos_file_signature = pdos_file_signature
 
-    roles = detect_pdos_file_roles(uploaded_files)
+    pdos_payload = {
+        "files": _backend_named_file_payload(uploaded_files),
+        "combination_text": "",
+    }
+    pdos_preview_state_key = "electronic_pdos_preview"
+    pdos_preview_result = _run_backend_workflow(
+        "electronic_pdos",
+        pdos_payload,
+        pdos_preview_state_key,
+        start=bool(uploaded_files),
+    )
+    preview_state = _get_backend_workflow_state(pdos_preview_state_key)
+    roles = pdos_preview_result.get("roles", {"total": [], "projected": [], "unrecognized": []}) if pdos_preview_result else {"total": [], "projected": [], "unrecognized": []}
     if uploaded_files:
         st.markdown("**Detected files**")
         role_messages = []
@@ -4291,11 +4570,10 @@ if plot_pdos_option:
     pdos_trace_options = []
     pdos_trace_preview_error = None
     if uploaded_files:
-        try:
-            preview_dos_data, _, _ = parse_pdos_uploads(uploaded_files)
-            pdos_trace_options = get_pdos_trace_options(preview_dos_data)
-        except Exception as exc:
-            pdos_trace_preview_error = str(exc)
+        if pdos_preview_result is not None:
+            pdos_trace_options = pdos_preview_result.get("trace_options", [])
+        elif preview_state.get("error"):
+            pdos_trace_preview_error = preview_state["error"]
 
     st.markdown("**Plot controls**")
     control_col1, control_col2 = st.columns(2)
@@ -4439,25 +4717,42 @@ if plot_pdos_option:
 
     if plot_button:
         if uploaded_files:
-            try:
-                dos_data, pdos_table, roles = parse_pdos_uploads(uploaded_files)
-                fig = plot_pdos_streamlit(
-                    dos_data,
-                    st.session_state.shift,
-                    plot_range,
-                    dos_range=dos_range,
-                    figure_height=figure_height,
-                    selected_trace_names=selected_pdos_traces,
-                    trace_colors=pdos_trace_colors,
-                    smoothing_window=smoothing_window,
-                )
-
-                if custom_pdos_combinations.strip():
-                    try:
-                        pdos_table, combination_columns = add_pdos_combinations(
-                            pdos_table,
-                            custom_pdos_combinations,
-                        )
+            pdos_result = _run_backend_workflow(
+                "electronic_pdos",
+                {
+                    "files": _backend_named_file_payload(uploaded_files),
+                    "combination_text": custom_pdos_combinations,
+                },
+                "electronic_pdos_plot",
+                start=True,
+            )
+            pdos_state = _get_backend_workflow_state("electronic_pdos_plot")
+            if pdos_result is None:
+                clear_pdos_results()
+                if pdos_state.get("error"):
+                    st.error(str(pdos_state["error"]))
+                else:
+                    st.info("PDOS parsing is still running in the backend. Re-run the plot action if the figure does not appear immediately.")
+            else:
+                try:
+                    dos_data = {
+                        element: np.asarray(data)
+                        for element, data in pdos_result["dos_data"].items()
+                    }
+                    pdos_table = pd.DataFrame(pdos_result["pdos_table"], columns=pdos_result.get("pdos_columns"))
+                    roles = pdos_result["roles"]
+                    combination_columns = pdos_result.get("combination_columns", [])
+                    fig = plot_pdos_streamlit(
+                        dos_data,
+                        st.session_state.shift,
+                        plot_range,
+                        dos_range=dos_range,
+                        figure_height=figure_height,
+                        selected_trace_names=selected_pdos_traces,
+                        trace_colors=pdos_trace_colors,
+                        smoothing_window=smoothing_window,
+                    )
+                    if combination_columns:
                         add_pdos_combination_traces(
                             fig,
                             pdos_table,
@@ -4466,19 +4761,17 @@ if plot_pdos_option:
                             trace_colors=pdos_trace_colors,
                             smoothing_window=smoothing_window,
                         )
-                    except Exception as exc:
-                        st.warning(f"Custom contribution formulas were skipped: {exc}")
 
-                if not fig.data:
+                    if not fig.data:
+                        clear_pdos_results()
+                        st.warning("Select at least one contribution or add a valid custom formula.")
+                    else:
+                        st.session_state.pdos_table = pdos_table
+                        st.session_state.pdos_figure = fig
+                        st.session_state.pdos_roles = roles
+                except Exception as exc:
                     clear_pdos_results()
-                    st.warning("Select at least one contribution or add a valid custom formula.")
-                else:
-                    st.session_state.pdos_table = pdos_table
-                    st.session_state.pdos_figure = fig
-                    st.session_state.pdos_roles = roles
-            except Exception as exc:
-                clear_pdos_results()
-                st.error(str(exc))
+                    st.error(str(exc))
         else:
             clear_pdos_results()
             st.warning("Upload PDOS files before plotting.")
@@ -4918,7 +5211,22 @@ if MD_option:
                                       key="file_buffer_md")
 
     if file_buffer_md:
-        df = process_streams(file_buffer_md)
+        md_parse_result = _run_backend_workflow(
+            "md_parse",
+            {"files": _backend_named_file_payload(file_buffer_md)},
+            "md_parse_outputs",
+            start=True,
+            poll_timeout=8.0,
+        )
+        md_parse_state = _get_backend_workflow_state("md_parse_outputs")
+        if md_parse_result is None:
+            if md_parse_state.get("error"):
+                st.error(f"MD parsing failed: {md_parse_state['error']}")
+            else:
+                st.info("MD output parsing is still running in the backend. Re-run shortly if the plots do not appear immediately.")
+            st.stop()
+
+        df = pd.DataFrame(md_parse_result["table"], columns=md_parse_result.get("columns"))
         plot_data(df)
 
 

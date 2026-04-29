@@ -41,6 +41,7 @@ Issues = "https://github.com/rayanc72/hybrid-perovskite-studio/issues"
 
 [project.scripts]
 hps = "hps.cli:main"
+hps-backend = "hps.api.server:main"
 
 [project.optional-dependencies]
 core = [
@@ -80,10 +81,16 @@ viz = [
 auth = [
   "streamlit-authenticator",
 ]
+backend = [
+  "fastapi",
+  "pydantic",
+  "uvicorn",
+]
 full = [
   "ase",
   "bokeh",
   "colorcet",
+  "fastapi",
   "holoviews",
   "kaleido",
   "matplotlib",
@@ -95,6 +102,7 @@ full = [
   "pandas",
   "pillow",
   "plotly",
+  "pydantic",
   "pymatgen",
   "pyyaml",
   "requests",
@@ -106,8 +114,10 @@ full = [
   "streamlit-extras",
   "streamlit-ketcher",
   "streamlit-lottie",
+  "uvicorn",
 ]
 dev = [
+  "httpx",
   "pytest",
   "ruff",
 ]

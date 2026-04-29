@@ -76,6 +76,16 @@ DEPENDENCY_GROUPS: tuple[DependencyGroup, ...] = (
             "streamlit_authenticator": "streamlit-authenticator",
         },
     ),
+    DependencyGroup(
+        name="backend",
+        title="Backend service",
+        install_hint="pip install -e '.[backend]'",
+        modules={
+            "fastapi": "fastapi",
+            "pydantic": "pydantic",
+            "uvicorn": "uvicorn",
+        },
+    ),
 )
 
 
@@ -123,3 +133,7 @@ def full_install_command() -> str:
 
 def pdf_install_command() -> str:
     return "pip install -e '.[pdf]'"
+
+
+def backend_install_command() -> str:
+    return "pip install -e '.[backend]'"

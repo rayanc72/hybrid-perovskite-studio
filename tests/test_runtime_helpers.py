@@ -11,6 +11,9 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from hps.io.paths import (
+    APP_BACKEND_ARTIFACTS_DIR,
+    APP_BACKEND_DIR,
+    APP_CACHE_DIR,
     APP_OUTPUT_DIR,
     APP_TMP_DIR,
     REPO_ROOT,
@@ -28,6 +31,9 @@ class RuntimeHelperTests(unittest.TestCase):
         ensure_runtime_dirs()
         self.assertTrue(APP_OUTPUT_DIR.exists())
         self.assertTrue(APP_TMP_DIR.exists())
+        self.assertTrue(APP_CACHE_DIR.exists())
+        self.assertTrue(APP_BACKEND_DIR.exists())
+        self.assertTrue(APP_BACKEND_ARTIFACTS_DIR.exists())
 
 
 if __name__ == "__main__":

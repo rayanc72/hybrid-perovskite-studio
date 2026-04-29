@@ -46,8 +46,24 @@ pip install "hybrid-perovskite-studio[full]"
 For local development:
 
 ```bash
-pip install -e ".[full]"
-streamlit run src/hps/app.py
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[full,backend,dev]"
+hps
+```
+
+To run the local backend service directly:
+
+```bash
+source .venv/bin/activate
+hps-backend --host 127.0.0.1 --port 8765
+```
+
+To run the current backend-focused regression suite:
+
+```bash
+source .venv/bin/activate
+python -m pytest tests/test_backend_store.py tests/test_backend_api.py tests/test_core_workflows.py -q
 ```
 
 ## Docs
@@ -55,6 +71,8 @@ streamlit run src/hps/app.py
 - [Getting Started](docs/user-guide/getting-started.md)
 - [Feature Map](docs/feature-map.md)
 - [Workspace Guides](docs/index.md)
+- [Backend Modernization](docs/reference/backend-modernization.md)
+- [Development TODO](TODO.md)
 
 To preview the documentation locally:
 
@@ -84,6 +102,9 @@ mkdocs build
 ## Notes
 
 - PyPI/package entrypoint: `hps`
+- Local backend entrypoint: `hps-backend`
 - Main entrypoint: `streamlit run src/hps/app.py`
 - Runtime files belong under `tmp/` and `output/`
 - Navigation is defined in `src/hps/ui/navigation.py`
+- The Streamlit app now attempts to auto-start a local backend service for cached/background workflows
+- Backend-migrated workflows currently include structure context, symmetry sweep, PXRD simulation, PDOS parsing, and MD output parsing

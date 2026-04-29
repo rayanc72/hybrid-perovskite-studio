@@ -11,6 +11,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from hps.services.runtime import legacy_app_is_runnable
+from hps.services.backend_runtime import ensure_local_backend_running
 from hps.ui import render_bootstrap_page
 
 
@@ -38,6 +39,11 @@ def _patch_streamlit_watcher() -> None:
 def main() -> None:
     os.environ.setdefault("STREAMLIT_SERVER_FILE_WATCHER_TYPE", "none")
     _patch_streamlit_watcher()
+    try:
+        ensure_local_backend_running()
+    except Exception:
+        # The UI can still render without the backend and surface a softer warning.
+        pass
     if legacy_app_is_runnable():
         module_name = "hps.ui.app_main"
         if module_name in sys.modules:

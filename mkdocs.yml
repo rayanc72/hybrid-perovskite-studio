@@ -28,5 +28,6 @@ nav:
       - Utilities Workspace: features/utilities-workspace.md
   - Reference:
       - Architecture: architecture.md
+      - Backend Modernization: reference/backend-modernization.md
       - Documentation Workflow: reference/documentation-workflow.md
       - Changelog: changelog.md

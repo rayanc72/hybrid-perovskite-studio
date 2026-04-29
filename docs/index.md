@@ -9,6 +9,7 @@ This documentation set is organized around the current workspace-based UI. The g
 - [Feature Map](feature-map.md)
 - [Navigation and Workspaces](user-guide/navigation-and-workspaces.md)
 - [Architecture](architecture.md)
+- [Backend Modernization](reference/backend-modernization.md)
 - [Documentation Workflow](reference/documentation-workflow.md)
 - [Changelog](changelog.md)
 
@@ -29,6 +30,7 @@ The docs focus on:
 - the major tools available in each workspace
 - what inputs and outputs each workspace expects
 - where the active code lives
+- which workflows already use the local backend job/cache layer
 
 ## Source Of Truth For Navigation
 

@@ -12,7 +12,12 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from hps.services.runtime import DEPENDENCY_GROUPS, full_install_command, pdf_install_command
+from hps.services.runtime import (
+    DEPENDENCY_GROUPS,
+    backend_install_command,
+    full_install_command,
+    pdf_install_command,
+)
 from hps.ui.navigation import tool_options
 from hps.ui.sidebar import SIDEBAR_SECTIONS
 
@@ -23,6 +28,8 @@ class PackageLayoutTests(unittest.TestCase):
             ROOT / "src" / "hps" / "domain",
             ROOT / "src" / "hps" / "io",
             ROOT / "src" / "hps" / "services",
+            ROOT / "src" / "hps" / "api",
+            ROOT / "src" / "hps" / "core",
             ROOT / "src" / "hps" / "ui",
             ROOT / "docs",
             ROOT / "tests",
@@ -32,9 +39,10 @@ class PackageLayoutTests(unittest.TestCase):
 
     def test_required_dependency_groups_exist(self) -> None:
         names = {group.name for group in DEPENDENCY_GROUPS}
-        self.assertTrue({"core", "md", "pdf", "viz", "auth"}.issubset(names))
+        self.assertTrue({"core", "md", "pdf", "viz", "auth", "backend"}.issubset(names))
         self.assertEqual(full_install_command(), "pip install -e '.[full]'")
         self.assertEqual(pdf_install_command(), "pip install -e '.[pdf]'")
+        self.assertEqual(backend_install_command(), "pip install -e '.[backend]'")
 
     def test_sidebar_catalog_is_not_empty(self) -> None:
         titles = {section.title for section in SIDEBAR_SECTIONS}
@@ -45,7 +53,7 @@ class PackageLayoutTests(unittest.TestCase):
     def test_pyproject_has_expected_extras(self) -> None:
         data = tomllib.loads((ROOT / "pyproject.toml").read_text())
         extras = data["project"]["optional-dependencies"]
-        for extra in ("core", "md", "pdf", "viz", "auth", "full", "dev"):
+        for extra in ("core", "md", "pdf", "viz", "auth", "backend", "full", "dev"):
             self.assertIn(extra, extras)
 
     def test_requirements_uses_editable_package_install(self) -> None:
@@ -65,6 +73,12 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn('module_name = "hps.ui.app_main"', entrypoint)
         self.assertIn("importlib.reload(sys.modules[module_name])", entrypoint)
         self.assertIn("importlib.import_module(module_name)", entrypoint)
+        self.assertIn("ensure_local_backend_running()", entrypoint)
+
+    def test_backend_entrypoint_is_declared(self) -> None:
+        pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        scripts = pyproject["project"]["scripts"]
+        self.assertEqual(scripts["hps-backend"], "hps.api.server:main")
 
     def test_packaged_pdf_wrapper_uses_packaged_module(self) -> None:
         wrapper = (ROOT / "src" / "hps" / "domain" / "pdf.py").read_text()

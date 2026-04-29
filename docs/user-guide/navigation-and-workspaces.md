@@ -58,6 +58,14 @@ The Structure workspace is more layered than the others:
 
 `Analysis` and `Transformations` each introduce a second selection level such as `Group` and then `Tool`.
 
+The current `Structure -> Analysis` groups include:
+
+- `Symmetry`
+- `Molecules`
+- `Structure Metrics`
+- `PXRD Analysis`
+- `PDF Analysis`
+
 ## Other Workspaces
 
 - Electronic uses `View` plus `Tool`.

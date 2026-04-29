@@ -19,3 +19,23 @@ def calculate_space_groups(atoms, symprec_lower, symprec_upper, angle_tol):
 
 def extended_symmetry_info(atoms, symprec=1e-3):
     return _impl.extended_symmetry_info(atoms, symprec=symprec)
+
+
+def simulate_pxrd(
+    atoms,
+    wavelength=1.5406,
+    two_theta_range=(5.0, 80.0),
+    fwhm=0.1,
+    x_axis="2theta",
+    scaled=True,
+    num_points=4000,
+):
+    return _impl.simulate_pxrd(
+        atoms,
+        wavelength=wavelength,
+        two_theta_range=two_theta_range,
+        fwhm=fwhm,
+        x_axis=x_axis,
+        scaled=scaled,
+        num_points=num_points,
+    )

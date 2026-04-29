@@ -1,6 +1,9 @@
 import copy
 import importlib
+import io
 import json
+import numpy as np
+import pandas as pd
 
 from hps.domain import electronic_property as electronic_property_module
 from hps.domain import md_analysis as md_analysis_module
@@ -129,6 +132,7 @@ if pdf_analysis_module is not None:
 _debug_log("startup: injected public names from packaged modules")
 
 import plotly.express as px
+import plotly.graph_objects as go
 import plotly.io as pio
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.io.cif import CifWriter
@@ -148,10 +152,6 @@ from streamlit_extras.jupyterlite import jupyterlite
 import matplotlib as mpl
 from itertools import combinations_with_replacement
 import matplotlib.pyplot as plt
-# import io
-# import numpy as np
-# import pandas as pd
-# import plotly.graph_objects as go
 # from scipy.optimize import minimize
 # from scipy.stats import pearsonr
 # import tempfile
@@ -162,6 +162,114 @@ import matplotlib.pyplot as plt
 # from pymatgen.io.cif import CifWriter
 mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
+mpl.rcParams["font.family"] = "Arial"
+
+
+def _build_secondary_d_axis_ticks(x_values, x_axis_label, wavelength, count=6):
+    tickvals = np.linspace(float(np.min(x_values)), float(np.max(x_values)), count)
+    d_values = _x_values_to_d_spacing(tickvals, x_axis_label, wavelength)
+    finite_mask = np.isfinite(d_values) & (d_values > 0)
+    tickvals = tickvals[finite_mask]
+    ticktext = [f"{value:.3g}" for value in d_values[finite_mask]]
+    return tickvals, ticktext
+
+
+def _publication_pxrd_pdf_bytes(
+    x_values,
+    simulated_intensity,
+    x_label,
+    y_label,
+    wavelength,
+    show_d_spacing_axis=False,
+    experimental_x=None,
+    experimental_intensity=None,
+    reflection_x=None,
+    reflection_intensity=None,
+):
+    fig, ax = plt.subplots(figsize=(8, 6), constrained_layout=True)
+
+    ax.plot(
+        x_values,
+        simulated_intensity,
+        color="black",
+        linewidth=1.8,
+        label="Simulated",
+        zorder=3,
+    )
+
+    if experimental_x is not None and experimental_intensity is not None:
+        ax.plot(
+            experimental_x,
+            experimental_intensity,
+            color="#c23b22",
+            linewidth=1.5,
+            label="Experimental",
+            zorder=2,
+        )
+
+    if reflection_x is not None and reflection_intensity is not None:
+        ax.vlines(
+            reflection_x,
+            0.0,
+            reflection_intensity,
+            color="#4169e1",
+            linewidth=0.8,
+            alpha=0.65,
+            label="Bragg reflections",
+            zorder=1,
+        )
+
+    if x_label == "q (A^-1)":
+        matplotlib_x_label = r"$q\ (\mathrm{\AA}^{-1})$"
+    else:
+        matplotlib_x_label = r"$2\theta\ (^\circ)$"
+
+    ax.set_xlabel(matplotlib_x_label, fontsize=16)
+    ax.set_ylabel(y_label, fontsize=16)
+    ax.tick_params(axis="both", which="major", labelsize=13, direction="in", length=8, width=1.8)
+    ax.minorticks_off()
+    ax.margins(x=0.01)
+
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.8)
+
+    if show_d_spacing_axis:
+        secondary_axis = ax.twiny()
+        secondary_axis.set_xlim(ax.get_xlim())
+        secondary_tickvals, secondary_ticktext = _build_secondary_d_axis_ticks(
+            x_values,
+            x_label,
+            wavelength,
+        )
+        secondary_axis.set_xticks(secondary_tickvals)
+        secondary_axis.set_xticklabels(secondary_ticktext)
+        secondary_axis.set_xlabel(r"$d\ (\mathrm{\AA})$", fontsize=16)
+        secondary_axis.tick_params(axis="x", which="major", labelsize=13, direction="in", length=8, width=1.8)
+        secondary_axis.minorticks_off()
+        for spine in secondary_axis.spines.values():
+            spine.set_linewidth(1.8)
+
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(frameon=False, fontsize=20, loc="best")
+
+    pdf_buffer = io.BytesIO()
+    fig.savefig(pdf_buffer, format="pdf", bbox_inches="tight")
+    plt.close(fig)
+    pdf_buffer.seek(0)
+    return pdf_buffer.getvalue()
+
+
+def _x_values_to_d_spacing(x_values, x_axis_label, wavelength):
+    x_array = np.asarray(x_values, dtype=float)
+    if x_axis_label == "q":
+        with np.errstate(divide="ignore", invalid="ignore"):
+            d_values = 2.0 * np.pi / x_array
+    else:
+        theta_radians = np.radians(x_array / 2.0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            d_values = wavelength / (2.0 * np.sin(theta_radians))
+    return d_values
 
 def render_section_header(title, kicker=None, subtitle=None):
     kicker_html = f'<div class="section-kicker">{kicker}</div>' if kicker else ""
@@ -337,6 +445,8 @@ distance_option = False
 distortion_option = False
 deviation_calculation_option = False
 ADP_table_option = False
+PXRD_option = False
+PXRD_workflow = None
 PDF_option = False
 PDF_workflow = None
 charge_analysis_option = False
@@ -774,6 +884,8 @@ if primary_section == "Structure":
         distortion_option = analysis_tool == "Calculate octahedral distortions"
         deviation_calculation_option = analysis_tool == "Calculate percentage deviation"
         ADP_table_option = analysis_tool == "Anisotropic displacement parameters"
+        PXRD_option = analysis_group == "PXRD Analysis"
+        PXRD_workflow = analysis_tool if PXRD_option else None
         PDF_option = analysis_group == "PDF Analysis"
         PDF_workflow = analysis_tool if PDF_option else None
         charge_analysis_option = analysis_tool == "Charge analysis"
@@ -868,6 +980,7 @@ structure_tool_selected = any(
         distortion_option,
         deviation_calculation_option,
         ADP_table_option,
+        PXRD_option,
         PDF_option,
         charge_analysis_option,
         rotate_option,
@@ -888,7 +1001,10 @@ if current_atoms is None and structure_tool_selected:
     distortion_option = False
     deviation_calculation_option = False
     ADP_table_option = False
+    PXRD_option = False
+    PXRD_workflow = None
     PDF_option = False
+    PDF_workflow = None
     charge_analysis_option = False
     rotate_option = False
     reflect_option = False
@@ -1904,7 +2020,7 @@ if current_atoms is not None:
 
             if st.button("Generate CIF"):
                 try:
-                    file_name_m = os.path.splitext(file_name)[0]
+                    file_name_m = os.path.splitext(st.session_state.file_name or "structure")[0]
                     output_cif_file = f"{file_name_m}_high_symm.cif"
                     selected_symprec = extract_symprec_from_string(selected_string)
                     pymatgen_structure = generate_symmetrized_structure(modified_atoms, selected_symprec, angle_tol)
@@ -1961,6 +2077,275 @@ if current_atoms is not None:
         miller_direction = normalize_fractional_direction(dipole_frac)
 
         st.write(miller_direction)
+
+    if PXRD_option:
+        pxrd_workflow_titles = {
+            "Simulate PXRD": "Simulate powder X-ray diffraction",
+        }
+        render_section_header(
+            pxrd_workflow_titles.get(PXRD_workflow, "PXRD Analysis"),
+            kicker="Structure Workspace",
+            subtitle="Simulate a PXRD pattern for the loaded structure with configurable wavelength, broadening, and axis units.",
+        )
+
+        wavelength = st.number_input(
+            "Wavelength (A)",
+            min_value=0.01,
+            value=1.5406,
+            step=0.0001,
+            format="%.4f",
+        )
+        x_axis_label = st.radio(
+            "Plot x-axis as",
+            options=("2theta", "q"),
+            horizontal=True,
+            format_func=lambda value: "2theta (deg)" if value == "2theta" else "q (A^-1)",
+        )
+        pxrd_range_columns = st.columns(2)
+        with pxrd_range_columns[0]:
+            range_min_input = st.text_input(
+                "2theta min (deg)" if x_axis_label == "2theta" else "q min (A^-1)",
+                value="0.5",
+                key="pxrd_range_min_2theta" if x_axis_label == "2theta" else "pxrd_range_min_q",
+            )
+        with pxrd_range_columns[1]:
+            range_max_input = st.text_input(
+                "2theta max (deg)" if x_axis_label == "2theta" else "q max (A^-1)",
+                value="50" if x_axis_label == "2theta" else "5.0",
+                key="pxrd_range_max_2theta" if x_axis_label == "2theta" else "pxrd_range_max_q",
+            )
+        fwhm = st.number_input(
+            "FWHM broadening (deg)",
+            min_value=0.0,
+            value=0.1,
+            step=0.01,
+            format="%.2f",
+            help="Applied in degrees of 2theta before any optional conversion of the plotted x-axis to q. Set to 0 to show unbroadened stick intensities on the sampled grid.",
+        )
+        show_bragg_reflections = st.checkbox("Show Bragg reflections", value=False)
+        show_d_spacing_axis = st.checkbox("Show d-spacing axis", value=False)
+        experimental_pxrd_file = st.file_uploader(
+            "Optional experimental PXRD data",
+            type=["csv", "txt", "xy", "dat", "chi"],
+            help="Upload a two-column dataset with x and intensity values for comparison, including .chi files with '#' header lines.",
+            key="pxrd_experimental_uploader",
+        )
+        experimental_x_axis_label = None
+        if experimental_pxrd_file is not None:
+            experimental_x_axis_label = st.radio(
+                "Experimental x-axis units",
+                options=("2theta", "q"),
+                horizontal=True,
+                index=0,
+                format_func=lambda value: "2theta (deg)" if value == "2theta" else "q (A^-1)",
+            )
+
+        try:
+            range_min = float(range_min_input)
+            range_max = float(range_max_input)
+        except ValueError:
+            st.error("Enter numeric values for the selected x-axis range.")
+            st.stop()
+
+        if range_min >= range_max:
+            st.error("The minimum range value must be smaller than the maximum range value.")
+            st.stop()
+
+        if x_axis_label == "q":
+            q_argument = wavelength * np.array([range_min, range_max], dtype=float) / (4.0 * np.pi)
+            if np.any(q_argument <= 0) or np.any(q_argument >= 1.0):
+                st.error("For the selected wavelength, q-range values must be positive and smaller than 4pi/lambda.")
+                st.stop()
+            two_theta_range = tuple(np.degrees(2.0 * np.arcsin(q_argument)))
+        else:
+            two_theta_range = (range_min, range_max)
+
+        try:
+            pxrd_result = simulate_pxrd(
+                modified_atoms,
+                wavelength=wavelength,
+                two_theta_range=two_theta_range,
+                fwhm=fwhm,
+                x_axis=x_axis_label,
+            )
+        except Exception as exc:
+            st.error(f"PXRD simulation failed: {exc}")
+            st.stop()
+
+        df_pxrd = pxrd_result["profile"]
+        df_pxrd_reflections = pxrd_result["reflections"]
+        x_column = pxrd_result["x_label"]
+        df_pxrd_experimental = None
+        plot_simulated_intensity = df_pxrd["Intensity"].to_numpy(copy=True)
+        plot_experimental_intensity = None
+        plot_reflection_intensity = df_pxrd_reflections["Intensity"].to_numpy(copy=True)
+
+        if experimental_pxrd_file is not None:
+            try:
+                experimental_bytes = experimental_pxrd_file.getvalue()
+                experimental_text = experimental_bytes.decode("utf-8", errors="ignore")
+                df_pxrd_experimental = pd.read_csv(
+                    io.StringIO(experimental_text),
+                    sep=None,
+                    engine="python",
+                    comment="#",
+                    header=None,
+                )
+                if df_pxrd_experimental.shape[1] < 2:
+                    raise ValueError("Expected at least two columns.")
+                df_pxrd_experimental = (
+                    df_pxrd_experimental.iloc[:, :2]
+                    .rename(columns={0: "x", 1: "Intensity"})
+                    .apply(pd.to_numeric, errors="coerce")
+                    .dropna()
+                )
+                if df_pxrd_experimental.empty:
+                    raise ValueError("No numeric data rows were found.")
+                if experimental_x_axis_label == "2theta" and x_axis_label == "q":
+                    df_pxrd_experimental["x"] = (
+                        4.0
+                        * np.pi
+                        * np.sin(np.radians(df_pxrd_experimental["x"].to_numpy() / 2.0))
+                        / wavelength
+                    )
+                elif experimental_x_axis_label == "q" and x_axis_label == "2theta":
+                    q_argument = wavelength * df_pxrd_experimental["x"].to_numpy() / (4.0 * np.pi)
+                    if np.any(np.abs(q_argument) > 1.0):
+                        raise ValueError("Experimental q values are out of range for the selected wavelength.")
+                    df_pxrd_experimental["x"] = np.degrees(2.0 * np.arcsin(q_argument))
+                df_pxrd_experimental = df_pxrd_experimental.rename(columns={"x": x_column})
+                simulated_x_min = float(df_pxrd[x_column].min())
+                simulated_x_max = float(df_pxrd[x_column].max())
+                df_pxrd_experimental = df_pxrd_experimental[
+                    df_pxrd_experimental[x_column].between(simulated_x_min, simulated_x_max)
+                ].reset_index(drop=True)
+                if df_pxrd_experimental.empty:
+                    raise ValueError("No experimental data points fall within the simulated x-axis range.")
+                plot_experimental_intensity = df_pxrd_experimental["Intensity"].to_numpy(copy=True)
+            except Exception as exc:
+                st.error(f"Could not parse experimental PXRD data: {exc}")
+                st.stop()
+
+        if plot_experimental_intensity is not None:
+            sim_max = float(np.max(plot_simulated_intensity)) if plot_simulated_intensity.size else 0.0
+            exp_max = float(np.max(plot_experimental_intensity)) if plot_experimental_intensity.size else 0.0
+            if sim_max > 0:
+                plot_simulated_intensity = plot_simulated_intensity / sim_max
+                if plot_reflection_intensity.size:
+                    plot_reflection_intensity = plot_reflection_intensity / sim_max
+            if exp_max > 0:
+                plot_experimental_intensity = plot_experimental_intensity / exp_max
+
+        fig_pxrd = go.Figure()
+        fig_pxrd.add_trace(
+            go.Scatter(
+                x=df_pxrd[x_column],
+                y=plot_simulated_intensity,
+                mode="lines",
+                name="Broadened profile" if fwhm > 0 else "Sampled profile",
+                line=dict(width=2.5),
+            )
+        )
+
+        if df_pxrd_experimental is not None:
+            fig_pxrd.add_trace(
+                go.Scatter(
+                    x=df_pxrd_experimental[x_column],
+                    y=plot_experimental_intensity,
+                    mode="lines",
+                    name="Experimental data",
+                    line=dict(width=2),
+                )
+            )
+
+        if show_bragg_reflections:
+            fig_pxrd.add_trace(
+                go.Bar(
+                    x=df_pxrd_reflections[x_column],
+                    y=plot_reflection_intensity,
+                    name="Bragg reflections",
+                    opacity=0.3,
+                )
+            )
+        plot_y_label = (
+            "Normalized intensity"
+            if df_pxrd_experimental is not None
+            else ("Relative intensity" if fwhm > 0 else "Intensity")
+        )
+        layout_updates = dict(
+            xaxis_title=x_column,
+            yaxis_title=plot_y_label,
+            template="plotly_white",
+            margin=dict(t=90 if show_d_spacing_axis else 40, b=40, l=40, r=40),
+        )
+        if show_d_spacing_axis:
+            secondary_tickvals, secondary_ticktext = _build_secondary_d_axis_ticks(
+                df_pxrd[x_column].to_numpy(),
+                x_axis_label,
+                wavelength,
+            )
+            if secondary_tickvals.size:
+                fig_pxrd.add_trace(
+                    go.Scatter(
+                        x=secondary_tickvals,
+                        y=[None] * len(secondary_tickvals),
+                        mode="markers",
+                        marker=dict(opacity=0),
+                        showlegend=False,
+                        hoverinfo="skip",
+                        xaxis="x2",
+                        yaxis="y",
+                    )
+                )
+            layout_updates["xaxis2"] = dict(
+                title="d (A)",
+                anchor="y",
+                overlaying="x",
+                matches="x",
+                side="top",
+                tickmode="array",
+                tickvals=secondary_tickvals.tolist(),
+                ticktext=secondary_ticktext,
+                showgrid=False,
+                showline=True,
+                showticklabels=True,
+                ticks="outside",
+            )
+        fig_pxrd.update_layout(**layout_updates)
+        st.plotly_chart(fig_pxrd, use_container_width=True)
+
+        pdf_plot_bytes = _publication_pxrd_pdf_bytes(
+            x_values=df_pxrd[x_column].to_numpy(),
+            simulated_intensity=plot_simulated_intensity,
+            x_label=x_column,
+            y_label=plot_y_label,
+            wavelength=wavelength,
+            show_d_spacing_axis=show_d_spacing_axis,
+            experimental_x=None if df_pxrd_experimental is None else df_pxrd_experimental[x_column].to_numpy(),
+            experimental_intensity=plot_experimental_intensity,
+            reflection_x=df_pxrd_reflections[x_column].to_numpy() if show_bragg_reflections else None,
+            reflection_intensity=plot_reflection_intensity if show_bragg_reflections else None,
+        )
+        download_file_root = os.path.splitext(st.session_state.file_name or "structure")[0]
+        st.download_button(
+            "Download Plot",
+            data=pdf_plot_bytes,
+            file_name=f"{download_file_root}_pxrd_plot.pdf",
+            mime="application/pdf",
+            key="pxrd_plot_pdf_download",
+        )
+
+        with st.expander("View simulated PXRD profile"):
+            st.dataframe(df_pxrd, use_container_width=True, hide_index=True)
+
+        with st.expander("View PXRD reflection table"):
+            st.dataframe(df_pxrd_reflections, use_container_width=True, hide_index=True)
+
+        if df_pxrd_experimental is not None:
+            with st.expander("View experimental PXRD data"):
+                st.dataframe(df_pxrd_experimental, use_container_width=True, hide_index=True)
+
+        st.stop()
 
     if PDF_option:
         pdf_workflow_titles = {

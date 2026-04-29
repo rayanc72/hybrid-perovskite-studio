@@ -34,6 +34,10 @@
 
 - Renamed the app-facing product name to `Hybrid Perovskite Studio`.
 - Added feature-oriented documentation under `docs/features/`.
+- Added a `PXRD Analysis` workflow to the `Structure` workspace using `pymatgen` for simulated powder X-ray diffraction.
+- Added manual `2theta` and `q` range entry, optional Bragg-reflection overlays, optional `d`-spacing top axes, and optional experimental PXRD comparison uploads including `.chi` files.
+- Added normalization and x-range clipping for simulated versus experimental PXRD comparisons.
+- Added publication-style PDF export for PXRD plots with Matplotlib.
 - Added a Structure Workspace labelling tool that exports custom-labelled `geometry.in` files for one or more selected molecule groups.
 - Updated the labelling export so non-selected atoms keep their plain element symbols while selected atoms receive user-defined labels.
 - Updated AIMS-format labelling exports to preserve the original uploaded `geometry.in` line structure when only atom labels change.

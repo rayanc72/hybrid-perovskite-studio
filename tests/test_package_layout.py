@@ -81,9 +81,22 @@ class PackageLayoutTests(unittest.TestCase):
             ],
         )
 
+    def test_pxrd_analysis_workflow_is_registered(self) -> None:
+        self.assertEqual(
+            tool_options("Structure", "Analysis", "PXRD Analysis"),
+            [
+                "Simulate PXRD",
+            ],
+        )
+
     def test_pdf_analysis_exports_diffpy_structure_loader(self) -> None:
         pdf_analysis = (ROOT / "src" / "hps" / "domain" / "pdf_analysis.py").read_text()
         self.assertIn("from diffpy.structure import loadStructure", pdf_analysis)
+
+    def test_symmetrize_structure_uses_loaded_structure_filename(self) -> None:
+        app_main = (ROOT / "src" / "hps" / "ui" / "app_main.py").read_text()
+        self.assertIn('os.path.splitext(st.session_state.file_name or "structure")[0]', app_main)
+        self.assertNotIn("os.path.splitext(file_name)[0]\n                    output_cif_file", app_main)
 
     def test_plot_band_is_import_safe(self) -> None:
         plot_band = (ROOT / "src" / "hps" / "tools" / "plot_band.py").read_text()

@@ -7,6 +7,7 @@ __pycache__/
 *.pyd
 .pytest_cache/
 .ruff_cache/
+.playwright-cli/
 
 .venv/
 .venv-build/

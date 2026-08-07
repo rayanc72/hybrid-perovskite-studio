@@ -16,7 +16,8 @@ PYTHON=.venv/bin/python scripts/check_release.sh
 
 The gate must pass all of the following:
 
-- undefined-name lint checks for the packaged application and tests;
+- import, syntax, statement-style, and correctness lint checks for maintained package layers;
+- undefined-name lint checks for the full test suite;
 - unit, API, scientific-regression, cache-performance, and Streamlit smoke tests;
 - a strict MkDocs build;
 - isolated source-distribution and wheel builds.
@@ -40,6 +41,10 @@ The gate must pass all of the following:
 - [ ] Check README installation commands from a fresh environment.
 - [ ] Verify the public documentation site and repository links.
 - [ ] Review the changelog, known limitations, license, citation, security, and contribution files.
+
+The maintained release limitations are documented in
+[Known limitations](known-limitations.md). Release notes must distinguish these accepted
+constraints from regressions that block publication.
 
 ## Publication
 

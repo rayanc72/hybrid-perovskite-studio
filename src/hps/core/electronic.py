@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from io import StringIO
 import re
+from io import StringIO
 
 import numpy as np
 import pandas as pd
-
 
 PDOS_TOTAL_FILENAME = "ks_dos_total.dat"
 PDOS_PROJECTED_RE = re.compile(r"(.+)_l_proj_dos\.dat$", re.IGNORECASE)
@@ -257,16 +256,23 @@ def parse_pdos_payload(
         "combination_columns": combination_columns,
         "pdos_table": pdos_table.to_dict(orient="records"),
         "pdos_columns": list(pdos_table.columns),
-        "dos_data": {
-            element: data.tolist()
-            for element, data in dos_data.items()
-        },
+        "dos_data": {element: data.tolist() for element, data in dos_data.items()},
     }
 
 
 SPIN_TEXTURE_COLUMNS = [
-    "k_point", "kx", "ky", "kz", "state", "eigenvalue",
-    "sigma_x", "sigma_y", "sigma_z", "rel_kx", "rel_ky", "rel_kz",
+    "k_point",
+    "kx",
+    "ky",
+    "kz",
+    "state",
+    "eigenvalue",
+    "sigma_x",
+    "sigma_y",
+    "sigma_z",
+    "rel_kx",
+    "rel_ky",
+    "rel_kz",
 ]
 
 
@@ -277,7 +283,8 @@ def parse_band_payload(
 
     band_files = sorted(
         (
-            file for file in uploaded_files
+            file
+            for file in uploaded_files
             if re.fullmatch(r"band\d{4}\.out", str(file["name"]), re.IGNORECASE)
         ),
         key=lambda file: int(str(file["name"])[4:8]),
@@ -322,10 +329,7 @@ def parse_band_payload(
 def parse_spin_texture_payload(uploaded_files: list[dict[str, object]]) -> dict[str, object]:
     """Parse a spin-texture table once for both 2D and 3D UI renderers."""
 
-    candidates = [
-        file for file in uploaded_files
-        if str(file["name"]).lower().endswith(".dat")
-    ]
+    candidates = [file for file in uploaded_files if str(file["name"]).lower().endswith(".dat")]
     if len(candidates) != 1:
         raise ValueError("Provide exactly one spin-texture `.dat` file.")
     file = candidates[0]

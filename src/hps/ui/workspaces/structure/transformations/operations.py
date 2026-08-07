@@ -30,7 +30,6 @@ from hps.domain.structure_manager import (
     translate_molecule,
 )
 
-
 TRANSLATION_AXES = ("x", "y", "z", "xy", "xz", "yz", "xyz", "custom")
 
 

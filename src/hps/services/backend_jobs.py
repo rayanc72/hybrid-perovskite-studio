@@ -205,9 +205,7 @@ def execute_workflow_profiled(
     return result, duration_ms
 
 
-def persist_workflow_result(
-    store: BackendStore, workflow: str, result: dict[str, object]
-) -> str:
+def persist_workflow_result(store: BackendStore, workflow: str, result: dict[str, object]) -> str:
     """Persist a workflow's downloads and compact JSON result as backend artifacts."""
 
     persisted_result = dict(result)
@@ -284,7 +282,9 @@ class BackendJobManager:
         if cached_job is not None:
             return cached_job
 
-        job_id = self.store.create_job(workflow=workflow, request_hash=request_hash, payload=payload)
+        job_id = self.store.create_job(
+            workflow=workflow, request_hash=request_hash, payload=payload
+        )
         self.store.update_job(
             job_id,
             state="running",
@@ -295,7 +295,11 @@ class BackendJobManager:
         future = self._executor.submit(execute_workflow_profiled, workflow, payload)
         with self._lock:
             self._futures[job_id] = future
-        future.add_done_callback(lambda done_future, current_job_id=job_id, current_workflow=workflow: self._finalize_job(current_job_id, current_workflow, done_future))
+        future.add_done_callback(
+            lambda done_future, current_job_id=job_id, current_workflow=workflow: (
+                self._finalize_job(current_job_id, current_workflow, done_future)
+            )
+        )
         return self.store.get_job(job_id)
 
     def get_job(self, job_id: str) -> dict[str, object] | None:

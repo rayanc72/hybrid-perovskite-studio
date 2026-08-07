@@ -85,8 +85,6 @@ def evaluate_math_expression(
             args = [evaluate(argument) for argument in node.args]
             kwargs = {keyword.arg: evaluate(keyword.value) for keyword in node.keywords}
             return functions[node.func.id](*args, **kwargs)
-        raise UnsafeExpressionError(
-            f"Unsupported expression syntax: {type(node).__name__}."
-        )
+        raise UnsafeExpressionError(f"Unsupported expression syntax: {type(node).__name__}.")
 
     return evaluate(tree)

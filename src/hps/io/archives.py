@@ -52,9 +52,7 @@ def safe_extract_zip(
                 raise UnsafeArchiveError(f"Symbolic links are not allowed: {entry.filename!r}.")
             file_type = stat.S_IFMT(unix_mode)
             if file_type and file_type not in {stat.S_IFREG, stat.S_IFDIR}:
-                raise UnsafeArchiveError(
-                    f"Unsupported archive entry type: {entry.filename!r}."
-                )
+                raise UnsafeArchiveError(f"Unsupported archive entry type: {entry.filename!r}.")
             if entry.file_size > max_file_size:
                 raise UnsafeArchiveError(
                     f"Archive entry exceeds the {max_file_size}-byte limit: {entry.filename!r}."

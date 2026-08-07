@@ -23,7 +23,10 @@ def _payload_for_storage(value: object, key: str | None = None) -> object:
             "sha256": hashlib.sha256(value.encode("ascii")).hexdigest(),
         }
     if isinstance(value, dict):
-        return {str(item_key): _payload_for_storage(item, str(item_key)) for item_key, item in value.items()}
+        return {
+            str(item_key): _payload_for_storage(item, str(item_key))
+            for item_key, item in value.items()
+        }
     if isinstance(value, list):
         return [_payload_for_storage(item) for item in value]
     return value

@@ -28,7 +28,9 @@ def ensure_backend_ready() -> str:
     return ensure_local_backend_running()
 
 
-def _request_json(method: str, path: str, payload: dict[str, object] | None = None) -> dict[str, object]:
+def _request_json(
+    method: str, path: str, payload: dict[str, object] | None = None
+) -> dict[str, object]:
     url = f"{ensure_backend_ready().rstrip('/')}{path}"
     body = None
     headers = {"Accept": "application/json"}

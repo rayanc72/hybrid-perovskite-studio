@@ -13,7 +13,9 @@ def main() -> int:
 
     import uvicorn
 
-    uvicorn.run("hps.api.app:app", host=args.host, port=args.port, reload=False, log_level="warning")
+    uvicorn.run(
+        "hps.api.app:app", host=args.host, port=args.port, reload=False, log_level="warning"
+    )
     return 0
 
 

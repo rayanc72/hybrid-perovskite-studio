@@ -99,7 +99,11 @@ def _is_available(module_name: str) -> bool:
 def grouped_missing_modules() -> dict[str, list[str]]:
     missing: dict[str, list[str]] = {}
     for group in DEPENDENCY_GROUPS:
-        absent = [pkg_name for module_name, pkg_name in group.modules.items() if not _is_available(module_name)]
+        absent = [
+            pkg_name
+            for module_name, pkg_name in group.modules.items()
+            if not _is_available(module_name)
+        ]
         if absent:
             missing[group.name] = absent
     return missing

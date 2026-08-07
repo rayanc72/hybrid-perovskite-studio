@@ -204,13 +204,13 @@ def render_rotation(
                 # draw randoms, respecting fixed values
                 h = fixed_h if fixed_h is not None else np.random.randint(low, high + 1)
                 k = fixed_k if fixed_k is not None else np.random.randint(low, high + 1)
-                l = fixed_l if fixed_l is not None else np.random.randint(low, high + 1)
+                l_index = fixed_l if fixed_l is not None else np.random.randint(low, high + 1)
 
                 # avoid (0,0,0)
-                if h == 0 and k == 0 and l == 0:
+                if h == 0 and k == 0 and l_index == 0:
                     continue
 
-                hkl = np.array([h, k, l], dtype=int)
+                hkl = np.array([h, k, l_index], dtype=int)
 
                 if reduce_colinear:
                     g = np.gcd.reduce(np.abs(hkl))
@@ -461,7 +461,11 @@ def render_rotation(
                 if not st.session_state.sym_pairs:
                     st.warning("Add at least one partner pair first.")
                 else:
-                    import copy, io, zipfile, tempfile
+                    import copy
+                    import io
+                    import tempfile
+                    import zipfile
+
                     from ase.io import write as ase_write
 
                     base_atoms = modified_atoms  # keep original reference
@@ -603,7 +607,11 @@ def render_rotation(
                 if not target_indices:
                     st.warning("Please select at least one molecule.")
                 else:
-                    import copy, io, zipfile, tempfile
+                    import copy
+                    import io
+                    import tempfile
+                    import zipfile
+
                     from ase.io import write as ase_write
 
                     base_atoms = modified_atoms

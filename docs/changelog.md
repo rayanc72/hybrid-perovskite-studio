@@ -54,6 +54,9 @@ No changes yet.
 - Replaced unrestricted dataset-expression evaluation with an allowlisted mathematical expression engine.
 - Added safe trajectory ZIP extraction with traversal, symlink, file-count, and expanded-size protections.
 - Added backend upload and numerical range validation.
+- Removed the broken legacy geometry-ZIP action after the unlicensed external Perl helper
+  was removed from the public repository; trajectory analysis continues through validated
+  uploaded ZIP archives.
 - Added CI, reproducible release checks, strict documentation builds, and package build verification.
 - Added public contribution, conduct, security, and citation metadata.
 - Made package imports safe in headless environments by removing eager tool imports and import-time plotting during tests.

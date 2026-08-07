@@ -1,4 +1,6 @@
+import base64
 import os
+from pathlib import Path
 
 import matplotlib as mpl
 import streamlit as st
@@ -49,6 +51,19 @@ from hps.ui.workspaces.structure.transformations.operations import (
 )
 from hps.ui.workspaces.structure.transformations.rotation import render_rotation
 from hps.ui.workspaces.utilities import render_utilities_workspace
+
+_SPIN_VALLEY_ASSET = Path(__file__).with_name("assets") / "spinvalley.svg"
+_SPIN_VALLEY_DATA_URI = (
+    "data:image/svg+xml;base64,"
+    + base64.b64encode(_SPIN_VALLEY_ASSET.read_bytes()).decode("ascii")
+)
+_LAYERED_PEROVSKITE_ASSET = (
+    Path(__file__).with_name("assets") / "layered-perovskite.svg"
+)
+_LAYERED_PEROVSKITE_DATA_URI = (
+    "data:image/svg+xml;base64,"
+    + base64.b64encode(_LAYERED_PEROVSKITE_ASSET.read_bytes()).decode("ascii")
+)
 
 
 def _debug_log(message):
@@ -710,9 +725,9 @@ st.markdown(
     .hp-lattice {
         position: absolute;
         z-index: 1;
-        top: 50%;
-        right: max(-5rem, calc((100vw - 90rem) / 2));
-        width: min(57vw, 54rem);
+        top: 45%;
+        right: max(-3rem, calc((100vw - 90rem) / 2));
+        width: min(49vw, 46rem);
         height: auto;
         opacity: 0.95;
         transform: translateY(-50%);
@@ -720,6 +735,25 @@ st.markdown(
         animation: hp-lattice-in 1.1s cubic-bezier(.22, .85, .3, 1) both,
                    hp-float 9s ease-in-out 1.1s infinite;
     }
+    .hp-spin-field {
+        position: absolute;
+        z-index: 0;
+        top: 74%;
+        right: max(8rem, calc((100vw - 90rem) / 2 + 12rem));
+        left: auto;
+        width: min(51vw, 50rem);
+        height: auto;
+        opacity: 0.34;
+        pointer-events: none;
+        transform: translateY(-50%) rotate(-1deg);
+        filter: saturate(1.04) contrast(1.02) brightness(1.04)
+                drop-shadow(0 18px 32px rgba(0, 0, 0, 0.16));
+        -webkit-mask-image: radial-gradient(ellipse 74% 70% at 50% 52%, #000 50%, transparent 100%);
+        mask-image: radial-gradient(ellipse 74% 70% at 50% 52%, #000 50%, transparent 100%);
+        animation: hp-spin-in 1.25s cubic-bezier(.22, .85, .3, 1) 0.2s both,
+                   hp-spin-drift 14s ease-in-out 1.45s infinite;
+    }
+    .hp-spin-field-draft, .hp-lattice-draft { display: none; }
     .hp-section-label {
         margin: 2.9rem 0 0.55rem;
         color: var(--hp-accent);
@@ -785,6 +819,14 @@ st.markdown(
         0%, 100% { transform: translateY(-50%); }
         50% { transform: translateY(calc(-50% - 10px)); }
     }
+    @keyframes hp-spin-in {
+        from { opacity: 0; transform: translate(42px, -46%) rotate(-3deg) scale(0.97); }
+        to { opacity: 0.34; transform: translate(0, -50%) rotate(-1deg) scale(1); }
+    }
+    @keyframes hp-spin-drift {
+        0%, 100% { transform: translateY(-50%) rotate(-1deg); }
+        50% { transform: translate(-8px, calc(-50% + 7px)) rotate(-0.4deg); }
+    }
     @keyframes hp-float-mobile {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-8px); }
@@ -808,17 +850,29 @@ st.markdown(
         .hp-hero-copy p { max-width: 26rem; }
         .hp-lattice {
             top: auto;
-            right: -8rem;
-            bottom: -9rem;
-            width: 38rem;
+            right: -6rem;
+            bottom: -1rem;
+            width: 31rem;
             opacity: 0.32;
             animation: hp-float-mobile 10s ease-in-out infinite;
+        }
+        .hp-spin-field {
+            top: auto;
+            right: auto;
+            left: -2rem;
+            bottom: 2rem;
+            width: 38rem;
+            opacity: 0.18;
+            transform: rotate(-2deg);
+            animation: none;
+            -webkit-mask-image: radial-gradient(ellipse 68% 62% at 52% 54%, #000 42%, transparent 100%);
+            mask-image: radial-gradient(ellipse 68% 62% at 52% 54%, #000 42%, transparent 100%);
         }
         .hp-depth { grid-template-columns: 1fr; gap: 1.45rem; }
         .app-brand-subtitle { display: none; }
     }
     @media (prefers-reduced-motion: reduce) {
-        .hp-hero-copy, .hp-lattice { animation: none; }
+        .hp-hero-copy, .hp-lattice, .hp-spin-field { animation: none; }
         *, *::before, *::after { scroll-behavior: auto !important; }
     }
     .feature-map-title {
@@ -906,7 +960,7 @@ if feature_map_view:
 
 if primary_section is None:
     st.markdown(
-        """
+        f"""
         <section class="hp-hero" aria-labelledby="hp-hero-title">
             <div class="hp-hero-inner">
                 <div class="hp-hero-copy">
@@ -927,57 +981,215 @@ if primary_section is None:
                     </div>
                 </div>
             </div>
-            <svg class="hp-lattice" viewBox="0 0 820 720" fill="none"
-                 xmlns="http://www.w3.org/2000/svg" role="img"
-                aria-label="Abstract hybrid perovskite crystal lattice">
+            <img class="hp-spin-field" src="{_SPIN_VALLEY_DATA_URI}" alt="" aria-hidden="true"/>
+            <svg class="hp-spin-field-draft" viewBox="0 0 820 720" fill="none"
+                 xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <defs>
-                    <linearGradient id="hp-cell" x1="140" y1="100" x2="650" y2="590"
-                                    gradientUnits="userSpaceOnUse">
-                        <stop stop-color="#C8FFF7" stop-opacity=".4"/>
-                        <stop offset="1" stop-color="#56D9CB" stop-opacity=".82"/>
+                    <linearGradient id="hp-spin-surface-lower" x1="142" y1="442"
+                                    x2="711" y2="478" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#4BA9F8" stop-opacity=".42"/>
+                        <stop offset=".42" stop-color="#C7FFF7" stop-opacity=".18"/>
+                        <stop offset=".62" stop-color="#F5FBF8" stop-opacity=".12"/>
+                        <stop offset="1" stop-color="#FF8F7E" stop-opacity=".44"/>
                     </linearGradient>
-                    <radialGradient id="hp-a-site" cx="35%" cy="28%" r="70%">
-                        <stop stop-color="#F2FFFD"/>
-                        <stop offset=".35" stop-color="#77EBDD"/>
-                        <stop offset="1" stop-color="#087D89"/>
-                    </radialGradient>
-                    <radialGradient id="hp-b-site" cx="35%" cy="25%" r="70%">
+                    <linearGradient id="hp-spin-surface-upper" x1="160" y1="305"
+                                    x2="692" y2="354" gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#FF9B87" stop-opacity=".3"/>
+                        <stop offset=".5" stop-color="#B9FFF5" stop-opacity=".12"/>
+                        <stop offset="1" stop-color="#58B5FF" stop-opacity=".3"/>
+                    </linearGradient>
+                    <g id="hp-spin-arrow-blue" fill="none" stroke="#76BCFF"
+                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M0 0H13M8-4L13 0L8 4" vector-effect="non-scaling-stroke"/>
+                    </g>
+                    <g id="hp-spin-arrow-red" fill="none" stroke="#FF9A88"
+                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M0 0H13M8-4L13 0L8 4" vector-effect="non-scaling-stroke"/>
+                    </g>
+                    <clipPath id="hp-spin-lower-clip">
+                        <path d="M116 408C190 340 255 525 347 430C439 325 490 575 585 455C640 370 690 375 725 382L693 523C619 591 554 676 462 568C370 463 319 687 227 582C172 517 160 538 147 545Z"/>
+                    </clipPath>
+                </defs>
+                <g>
+                    <path class="spin-surface upper"
+                          d="M154 302C220 250 276 410 350 330C428 245 480 445 560 348C615 283 660 276 695 283L670 386C604 438 548 478 474 428C396 375 344 540 264 445C209 380 186 393 166 400Z"/>
+                    <g class="spin-mesh upper">
+                        <path d="M154 302C220 250 276 410 350 330C428 245 480 445 560 348C615 283 660 276 695 283"/>
+                        <path d="M158 335C224 283 280 443 354 363C432 278 484 478 564 381C619 316 660 309 687 316"/>
+                        <path d="M162 367C228 315 284 475 358 395C436 310 488 510 568 413C623 348 652 342 679 349"/>
+                        <path d="M166 400C232 348 288 508 362 428C440 343 492 543 572 446C627 381 650 379 670 386"/>
+                        <path d="M154 302C158 334 162 368 166 400M276 410C280 442 284 476 288 508M350 330C354 362 358 396 362 428M480 445C484 477 488 511 492 543M560 348C564 380 568 414 572 446M695 283C687 315 679 353 670 386"/>
+                    </g>
+                </g>
+                <g>
+                    <path class="spin-surface lower"
+                          d="M116 408C190 340 255 525 347 430C439 325 490 575 585 455C640 370 690 375 725 382L693 523C619 591 554 676 462 568C370 463 319 687 227 582C172 517 160 538 147 545Z"/>
+                    <g class="spin-mesh">
+                        <path d="M116 408C190 340 255 525 347 430C439 325 490 575 585 455C640 370 690 375 725 382"/>
+                        <path d="M124 442C198 374 263 559 355 464C447 359 498 609 593 489C648 404 688 409 717 416"/>
+                        <path d="M132 476C206 408 271 593 363 498C455 393 506 643 601 523C656 438 684 443 709 450"/>
+                        <path d="M140 510C214 442 279 627 371 532C463 427 514 677 609 557C664 472 676 477 701 486"/>
+                        <path d="M147 545C221 477 286 662 378 567C470 462 521 712 616 592C671 507 680 516 693 523"/>
+                        <path d="M116 408C124 441 132 477 147 545M255 525C263 558 271 594 286 662M347 430C355 463 363 499 378 567M490 575C498 608 506 644 521 712M585 455C593 488 601 524 616 592M725 382C717 415 709 451 693 523"/>
+                    </g>
+                    <g class="spin-arrow-field" clip-path="url(#hp-spin-lower-clip)">
+                        <g transform="translate(270 575) rotate(12) scale(1 .62)">
+                            <use href="#hp-spin-arrow-blue" transform="rotate(0) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(30) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(60) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(90) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(120) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(150) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(180) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(210) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(240) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(270) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(300) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(330) translate(22) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(0) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(30) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(60) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(90) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(120) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(150) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(180) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(210) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(240) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(270) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(300) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(330) translate(52) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(0) translate(82) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(45) translate(82) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(90) translate(82) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(135) translate(82) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(180) translate(82) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(225) translate(82) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(270) translate(82) rotate(180)"/>
+                            <use href="#hp-spin-arrow-blue" transform="rotate(315) translate(82) rotate(180)"/>
+                        </g>
+                        <g transform="translate(510 610) rotate(12) scale(1 .62)">
+                            <use href="#hp-spin-arrow-red" transform="rotate(0) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(30) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(60) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(90) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(120) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(150) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(180) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(210) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(240) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(270) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(300) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(330) translate(22)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(0) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(30) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(60) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(90) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(120) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(150) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(180) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(210) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(240) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(270) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(300) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(330) translate(52)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(0) translate(82)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(45) translate(82)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(90) translate(82)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(135) translate(82)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(180) translate(82)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(225) translate(82)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(270) translate(82)"/>
+                            <use href="#hp-spin-arrow-red" transform="rotate(315) translate(82)"/>
+                        </g>
+                    </g>
+                </g>
+            </svg>
+            <img class="hp-lattice" src="{_LAYERED_PEROVSKITE_DATA_URI}"
+                 alt="Layered two-dimensional hybrid perovskite with organic cations"/>
+            <svg class="hp-lattice-draft" viewBox="0 0 900 720" fill="none"
+                 xmlns="http://www.w3.org/2000/svg" role="img"
+                 aria-label="Layered two-dimensional hybrid perovskite with organic cations">
+                <defs>
+                    <linearGradient id="hp-octa-face" x1="-54" y1="-52" x2="54" y2="58"
+                                    gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#C8FFF7" stop-opacity=".34"/>
+                        <stop offset="1" stop-color="#2DB7B2" stop-opacity=".08"/>
+                    </linearGradient>
+                    <radialGradient id="hp-metal" cx="34%" cy="27%" r="72%">
                         <stop stop-color="#FFF4C7"/>
-                        <stop offset=".4" stop-color="#F6C866"/>
-                        <stop offset="1" stop-color="#B46620"/>
+                        <stop offset=".42" stop-color="#F3BE54"/>
+                        <stop offset="1" stop-color="#A75B1A"/>
+                    </radialGradient>
+                    <radialGradient id="hp-halide" cx="34%" cy="27%" r="72%">
+                        <stop stop-color="#E9FFFB"/>
+                        <stop offset=".38" stop-color="#72E8DB"/>
+                        <stop offset="1" stop-color="#087985"/>
                     </radialGradient>
                     <filter id="hp-glow" x="-90%" y="-90%" width="280%" height="280%">
-                        <feGaussianBlur stdDeviation="5" result="blur"/>
+                        <feGaussianBlur stdDeviation="4" result="blur"/>
                         <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
                     </filter>
+                    <g id="hp-octahedron">
+                        <g fill="url(#hp-octa-face)" stroke="#AFFFF3" stroke-width="1.5">
+                            <path d="M0-62L-58 0L-13-27Z"/>
+                            <path d="M0-62L-13-27L58 0Z" fill-opacity=".22"/>
+                            <path d="M0-62L58 0L14 29Z" fill-opacity=".13"/>
+                            <path d="M0 62L14 29L58 0Z" fill-opacity=".25"/>
+                            <path d="M0 62L-58 0L14 29Z" fill-opacity=".16"/>
+                            <path d="M-58 0L-13-27L58 0L14 29Z" fill-opacity=".1"/>
+                        </g>
+                        <g stroke="#D4FFF9" stroke-width="1.35" stroke-opacity=".8">
+                            <path d="M0-62L0 62M-58 0L58 0"/>
+                            <path d="M0-62L-13-27M0-62L14 29M0 62L-13-27M0 62L14 29"/>
+                        </g>
+                        <g fill="url(#hp-halide)" filter="url(#hp-glow)">
+                            <circle cy="-62" r="6.5"/><circle cy="62" r="6.5"/>
+                            <circle cx="-58" r="6.5"/><circle cx="58" r="6.5"/>
+                            <circle cx="-13" cy="-27" r="5.5"/><circle cx="14" cy="29" r="5.5"/>
+                        </g>
+                        <circle r="10" fill="url(#hp-metal)"/>
+                    </g>
+                    <g id="hp-organic">
+                        <path d="M0 0V-17L13-31L4-47L18-62L9-78" stroke="#B9F6ED"
+                              stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle r="8.5" fill="url(#hp-halide)"/>
+                        <circle cx="13" cy="-31" r="3.5" fill="#F2BE58"/>
+                        <circle cx="18" cy="-62" r="3.5" fill="#F2BE58"/>
+                        <circle cx="9" cy="-78" r="4.5" fill="#D8FFF8"/>
+                    </g>
                 </defs>
-                <g fill="rgba(79, 215, 200, .025)" stroke="url(#hp-cell)" stroke-width="2.2">
-                    <path d="M160 120H480V440H160V120Z"/>
-                    <path d="M280 220H600V540H280V220Z"/>
-                    <path d="M160 120L280 220M480 120L600 220M480 440L600 540M160 440L280 540"/>
+                <g opacity=".72">
+                    <g transform="translate(232 266)"><use href="#hp-organic"/></g>
+                    <g transform="translate(332 256) scale(.94)"><use href="#hp-organic"/></g>
+                    <g transform="translate(432 266)"><use href="#hp-organic"/></g>
+                    <g transform="translate(532 256) scale(.94)"><use href="#hp-organic"/></g>
+                    <g transform="translate(632 266)"><use href="#hp-organic"/></g>
+                    <g transform="translate(732 256) scale(.94)"><use href="#hp-organic"/></g>
                 </g>
-                <g stroke="#B8FFF4" stroke-width="2">
-                    <path d="M380 170L440 380L540 330L380 170Z" fill="#65E6D4" fill-opacity=".09"/>
-                    <path d="M380 170L320 280L220 330L380 170Z" fill="#65E6D4" fill-opacity=".05"/>
-                    <path d="M380 490L440 380L540 330L380 490Z" fill="#65E6D4" fill-opacity=".13"/>
-                    <path d="M380 490L320 280L220 330L380 490Z" fill="#65E6D4" fill-opacity=".07"/>
-                    <path d="M380 170L440 380L380 490L320 280L380 170Z" fill="none"/>
-                    <path d="M220 330L320 280L540 330L440 380L220 330Z" fill="none"/>
+                <g transform="translate(0 8) skewX(-10)">
+                    <path d="M208 304L674 304L718 458L252 458Z" fill="#35BFB7" fill-opacity=".035"
+                          stroke="#73E9DD" stroke-opacity=".24" stroke-width="2"/>
+                    <g opacity=".9">
+                        <g transform="translate(270 360) scale(.78)"><use href="#hp-octahedron"/></g>
+                        <g transform="translate(360.48 360) scale(.78)"><use href="#hp-octahedron"/></g>
+                        <g transform="translate(450.96 360) scale(.78)"><use href="#hp-octahedron"/></g>
+                        <g transform="translate(541.44 360) scale(.78)"><use href="#hp-octahedron"/></g>
+                        <g transform="translate(631.92 360) scale(.78)"><use href="#hp-octahedron"/></g>
+                        <g transform="translate(291.06 403.68) scale(.78)"><use href="#hp-octahedron"/></g>
+                        <g transform="translate(381.54 403.68) scale(.78)"><use href="#hp-octahedron"/></g>
+                        <g transform="translate(472.02 403.68) scale(.78)"><use href="#hp-octahedron"/></g>
+                        <g transform="translate(562.5 403.68) scale(.78)"><use href="#hp-octahedron"/></g>
+                        <g transform="translate(652.98 403.68) scale(.78)"><use href="#hp-octahedron"/></g>
+                    </g>
                 </g>
-                <g fill="url(#hp-a-site)" filter="url(#hp-glow)">
-                    <circle cx="160" cy="120" r="13"/><circle cx="480" cy="120" r="13"/>
-                    <circle cx="480" cy="440" r="13"/><circle cx="160" cy="440" r="13"/>
-                    <circle cx="280" cy="220" r="14"/><circle cx="600" cy="220" r="14"/>
-                    <circle cx="600" cy="540" r="14"/><circle cx="280" cy="540" r="14"/>
+                <g opacity=".62">
+                    <g transform="translate(262 501) rotate(180)"><use href="#hp-organic"/></g>
+                    <g transform="translate(362 511) rotate(180) scale(.94)"><use href="#hp-organic"/></g>
+                    <g transform="translate(462 501) rotate(180)"><use href="#hp-organic"/></g>
+                    <g transform="translate(562 511) rotate(180) scale(.94)"><use href="#hp-organic"/></g>
+                    <g transform="translate(662 501) rotate(180)"><use href="#hp-organic"/></g>
+                    <g transform="translate(762 511) rotate(180) scale(.94)"><use href="#hp-organic"/></g>
                 </g>
-                <g fill="#D5FFF9" filter="url(#hp-glow)">
-                    <circle cx="380" cy="170" r="8"/><circle cx="380" cy="490" r="8"/>
-                    <circle cx="220" cy="330" r="8"/><circle cx="540" cy="330" r="8"/>
-                    <circle cx="320" cy="280" r="8"/><circle cx="440" cy="380" r="8"/>
-                </g>
-                <circle cx="380" cy="330" r="24" fill="#F2B84F" opacity=".12"
-                        filter="url(#hp-glow)"/>
-                <circle cx="380" cy="330" r="16" fill="url(#hp-b-site)"/>
             </svg>
         </section>
         <div id="workspaces" class="hp-section-label">Four focused workspaces</div>

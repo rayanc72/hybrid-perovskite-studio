@@ -19,6 +19,9 @@ site/
 
 tmp/
 output/
+docs/HPS_App_Copy_Map.json
+docs/HPS_App_Copy_Review.docx
+~$*.docx
 pdfanalysis_temp/
 src/hps/pdfanalysis_temp/
 

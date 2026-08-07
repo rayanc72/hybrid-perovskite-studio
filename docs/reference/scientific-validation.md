@@ -71,8 +71,8 @@ The automated fixture suite checks:
 - MD archive safety, ordering, atom consistency, cell volume, and first/last centers of mass.
 
 Exact machine-readable values are in
-`tests/fixtures/scientific/expected_results.json`. Detailed derivation and original
-checksums are in `tests/fixtures/scientific/PROVENANCE.md`.
+`src/hps/examples/data/expected_results.json`. Detailed derivation and original
+checksums are in `src/hps/examples/data/PROVENANCE.md`.
 
 ## Maintainer approval
 

@@ -1,1 +1,1 @@
-recursive-include tests/fixtures/scientific *.dat *.in *.json *.md *.out
+recursive-include src/hps/examples *.dat *.in *.json *.md *.out

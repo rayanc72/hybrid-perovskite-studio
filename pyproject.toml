@@ -42,6 +42,7 @@ Issues = "https://github.com/rayanc72/hybrid-perovskite-studio/issues"
 [project.scripts]
 hps = "hps.cli:main"
 hps-backend = "hps.api.server:main"
+hps-examples = "hps.examples:main"
 
 [project.optional-dependencies]
 core = [
@@ -136,6 +137,16 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "hps.ui" = ["assets/*.js"]
+"hps.examples" = [
+  "projects/*.json",
+  "data/*.json",
+  "data/*.md",
+  "data/bands/*.out",
+  "data/md/frames/*.in",
+  "data/pdos/*.dat",
+  "data/spin/*.dat",
+  "data/structure/*.in",
+]
 
 [tool.setuptools.dynamic]
 version = {attr = "hps.__version__"}

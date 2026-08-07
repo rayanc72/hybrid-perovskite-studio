@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "electronic",
+  "title": "Band, PDOS, and spin-texture walkthrough",
+  "description": "Explore compact published electronic-structure outputs while retaining representative band edges, orbital contributions, and spin states.",
+  "license": "Apache-2.0",
+  "citations": [
+    {
+      "short": "Chakraborty et al., J. Am. Chem. Soc. 146 (2024), 34811–34821",
+      "doi": "10.1021/jacs.4c13597"
+    }
+  ],
+  "file_sets": [
+    {"role": "band_segments", "path": "data/bands", "pattern": "*.out", "count": 3, "sha256": "fbd5705458cceedf7376b4b9882b7bfb7c75f489dfb4f003b93b0519cf6f2b37"},
+    {"role": "pdos", "path": "data/pdos", "pattern": "*.dat", "count": 6, "sha256": "0cc8e0db0af66c8b82052a95dfd71db7b306933dfe00fbcd659148a858e7880c"},
+    {"role": "spin_texture", "path": "data/spin", "pattern": "*.dat", "count": 1, "sha256": "49fc960a81918e42af9d702627b579092a476efd39ddff2bde97d28b3b0dfc76"}
+  ],
+  "guide": [
+    {"workspace": "Electronic", "view": "Bands and Spin", "action": "Load the three band segments and compare the gaps with expected_results.json."},
+    {"workspace": "Electronic", "view": "Bands and Spin", "action": "Load all six PDOS files and try PbI = Pb(s) + Pb(p) + I."},
+    {"workspace": "Electronic", "view": "Bands and Spin", "action": "Load spin_texture.dat and inspect retained states 1929 and 1930."}
+  ]
+}

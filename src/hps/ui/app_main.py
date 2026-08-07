@@ -970,8 +970,8 @@ if primary_section is None:
                         From atomic structure to materials insight.
                     </h2>
                     <p>
-                        Prepare structures, interrogate simulation outputs, and move between
-                        geometry, electronic, and dynamics workflows in one research workspace.
+                        Model structures, analyze simulation outputs, and experimental data, and move between
+                        geometry, electronic, and dynamics workflows in one workspace.
                     </p>
                     <div class="hp-hero-actions">
                         <a class="hp-hero-primary" href="#workspaces">Choose a workspace&nbsp; →</a>
@@ -1192,8 +1192,8 @@ if primary_section is None:
                 </g>
             </svg>
         </section>
-        <div id="workspaces" class="hp-section-label">Four focused workspaces</div>
-        <div class="hp-section-title">Begin with the material question in front of you.</div>
+        <div id="workspaces" class="hp-section-label">Focused workspaces</div>
+        <div class="hp-section-title">Start here.</div>
         """,
         unsafe_allow_html=True,
     )
@@ -1249,7 +1249,7 @@ if primary_section is None:
             </div>
             <div class="hp-depth-item">
                 <span>03</span><strong>Resolve</strong>
-                <p>Analyze trajectories and export publication-ready scientific outputs.</p>
+                <p>Analyze and export publication-ready scientific outputs.</p>
             </div>
         </div>
         """,

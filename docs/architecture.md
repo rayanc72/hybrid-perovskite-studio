@@ -16,11 +16,12 @@ The repository now runs from a package-centered layout under `src/hps/`.
 - `src/hps/ui/workspaces/structure/analysis/` contains focused symmetry, PXRD, PDF, structure-metric, and charge-parser modules
 - `src/hps/ui/workspaces/structure/transformations/rotation.py` owns the rotation workflow family
 - `src/hps/ui/workspaces/structure/transformations/operations.py` owns reflection, translation, deletion, labelling, and interpolation rendering
+- `src/hps/ui/workspaces/electronic.py`, `dynamics.py`, and `utilities.py` own their workspace renderers
 - `src/hps/io/paths.py` defines shared runtime locations for `output/` and `tmp/`
 - `src/hps/api/` exposes the local FastAPI backend
 - `src/hps/core/` holds Streamlit-free workflow helpers extracted from the monolith
 
-- `src/hps/ui/app_main.py` remains the legacy workspace coordinator while feature renderers move into `src/hps/ui/workspaces/`; it now delegates Structure overview, navigation, major analysis workflows, and all transformation rendering
+- `src/hps/ui/app_main.py` is the workspace coordinator and delegates feature rendering to `src/hps/ui/workspaces/`
 - `src/hps/ui/navigation.py` is the single source of truth for workspace names, workspace descriptions, and the feature-map tree
 - `src/hps/domain/pdf_analysis.py` contains the packaged PDF analysis implementation copied from the legacy module
 
@@ -31,19 +32,22 @@ The local backend/job layer is now used for the highest-value parsing and prepro
 - structure context / upload summary
 - structure symmetry sweeps
 - PXRD simulation
+- PDF simulation
 - PDOS parsing and table preparation
+- bandstructure and spin-texture preprocessing
 - MD output parsing
+- trajectory archive validation and inventory
 
 These workflows currently flow through:
 
 - `src/hps/ui/workspaces/structure/analysis/` for Structure symmetry, PXRD, and PDF submission and result rendering
-- `src/hps/ui/app_main.py` for the remaining UI submission and result rendering
+- focused modules under `src/hps/ui/workspaces/` for UI submission and result rendering
 - `src/hps/services/backend_client.py` for local API calls
 - `src/hps/api/app.py` for HTTP endpoints
 - `src/hps/services/backend_jobs.py` for workflow registration and caching
 - `src/hps/core/` for Streamlit-free execution helpers
 
-The remaining expensive workflows, especially PDF analysis and zipped trajectory analysis, still need to move over incrementally.
+Artifact retention, cache-hit accounting, and stale-job recovery are handled by the backend store and configured through the `HPS_ARTIFACT_*` and `HPS_STALE_JOB_SECONDS` environment variables.
 
 ## Boundaries
 

@@ -78,8 +78,11 @@ class PackageLayoutTests(unittest.TestCase):
 
     def test_app_uses_explicit_dependencies(self) -> None:
         app_main = (ROOT / "src" / "hps" / "ui" / "app_main.py").read_text()
-        self.assertIn("from hps.domain.structure_manager import (", app_main)
-        self.assertIn("from hps.ui.backend_workflows import (", app_main)
+        self.assertIn("from hps.ui.backend_workflows import ensure_workflow_registry", app_main)
+        self.assertIn("from hps.ui.workspaces.dynamics import render_dynamics_workspace", app_main)
+        self.assertIn("from hps.ui.workspaces.electronic import (", app_main)
+        self.assertIn("from hps.ui.workspaces.utilities import render_utilities_workspace", app_main)
+        self.assertNotIn("from hps.domain.", app_main)
         self.assertIn("render_structure_upload_panel(st.session_state", app_main)
         self.assertIn("render_current_structure_card(", app_main)
         self.assertIn("structure_selection = render_structure_navigation()", app_main)

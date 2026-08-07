@@ -121,6 +121,35 @@ class BackendApiTests(unittest.TestCase):
         job_two = response_two.json()
         self.assertEqual(job_two["state"], "completed")
         self.assertEqual(job_one["job_id"], job_two["job_id"])
+        self.assertTrue(job_two["cache_hit"])
+
+    def test_electronic_band_and_spin_contracts(self) -> None:
+        band = base64.b64encode(
+            b"1 0 0 0 1 -2 0 1\n2 0.5 0 0 1 -1 0 2\n"
+        ).decode("utf-8")
+        band_response = self.client.post(
+            "/jobs/electronic_band",
+            json={
+                "files": [{"name": "band0001.out", "content_b64": band}],
+                "energy_shift": 0.0,
+            },
+        )
+        self.assertEqual(band_response.status_code, 200)
+        band_job = self._await_job(band_response.json()["job_id"])
+        band_result = self.client.get(f"/artifacts/{band_job['result_ref']}").json()
+        self.assertEqual(band_result["band_count"], 2)
+
+        spin = base64.b64encode(
+            b"1 0 0 0 7 -1 0.1 0.2 0.3\n2 0.1 0 0 8 1 0.4 0.5 0.6\n"
+        ).decode("utf-8")
+        spin_response = self.client.post(
+            "/jobs/electronic_spin",
+            json={"files": [{"name": "spin_texture.dat", "content_b64": spin}]},
+        )
+        self.assertEqual(spin_response.status_code, 200)
+        spin_job = self._await_job(spin_response.json()["job_id"])
+        spin_result = self.client.get(f"/artifacts/{spin_job['result_ref']}").json()
+        self.assertEqual(spin_result["state_range"], [7, 8])
 
     def test_md_parse_invalid_payload_is_rejected(self) -> None:
         response = self.client.post("/jobs/md_parse", json={"files": [{"name": "broken.out"}]})

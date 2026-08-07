@@ -23,10 +23,16 @@ The following workflows are now submitted through the backend instead of being p
   - used for space-group sweep generation in the Structure workspace
 - `structure_pxrd`
   - used for PXRD profile and reflection-table generation
+- `structure_pdf`
+  - used for optional PDF simulation before PDF/RDF plotting and comparison
 - `electronic_pdos`
   - used for PDOS file-role detection, parsing, table generation, and combination preparation
+- `electronic_band` and `electronic_spin`
+  - used for reusable band-segment and spin-texture preprocessing
 - `md_parse`
   - used for parsing AIMS MD output files into tabular timeseries data
+- `md_trajectory_prepare`
+  - used for safe archive validation, frame inventory, and duration metadata
 
 ## Why This Matters
 
@@ -37,14 +43,20 @@ These migrations reduce repeated parsing work inside `src/hps/ui/app_main.py` an
 - expose stable backend contracts for future UI refactors
 - profile execution in a more controlled service layer
 
+## Artifact Lifecycle
+
+Backend startup recovers abandoned queued/running jobs and prunes derived artifacts according to:
+
+- `HPS_STALE_JOB_SECONDS` (default `3600`)
+- `HPS_ARTIFACT_MAX_AGE_DAYS` (default `30`)
+- `HPS_ARTIFACT_MAX_BYTES` (default `2000000000`)
+- `HPS_ARTIFACT_KEEP_AT_LEAST` (default `20`)
+
+Completed-job cache hits are recorded, missing artifacts are never returned as cache hits, and jobs whose artifacts are pruned transition to `expired`.
+
 ## What Still Needs To Move
 
-The largest remaining candidates are:
-
-- Structure/PDF analysis workflows
-- zipped trajectory-analysis workflows in the Dynamics workspace
-- additional electronic workflows such as bandstructure and spin-texture preprocessing
-- export generation that still happens directly in Streamlit
+Reusable export generation and the individual trajectory-analysis calculations remain candidates for later backend expansion. Archive validation and trajectory inventory now run behind the backend contract.
 
 ## Current Architectural Rule Of Thumb
 

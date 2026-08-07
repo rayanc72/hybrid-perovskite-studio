@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -67,6 +68,39 @@ class BackendStoreTests(unittest.TestCase):
             cached_job = store.find_completed_job(workflow="structure_summary", request_hash="hash-1")
             self.assertIsNotNone(cached_job)
             self.assertEqual(cached_job["job_id"], job_id)
+            self.assertTrue(cached_job["cache_hit"])
+
+    def test_stale_jobs_are_recovered(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            store = BackendStore(root / "jobs.sqlite3", root / "artifacts")
+            job_id = store.create_job(
+                workflow="structure_summary", request_hash="stale", payload={}
+            )
+            store.update_job(job_id, state="running")
+            with sqlite3.connect(root / "jobs.sqlite3") as conn:
+                conn.execute(
+                    "UPDATE jobs SET updated_at = datetime('now', '-2 hours') WHERE job_id = ?",
+                    (job_id,),
+                )
+            assert store.recover_stale_jobs(stale_after_seconds=60) == 1
+            assert store.get_job(job_id)["state"] == "failed"
+
+    def test_artifact_retention_expires_cached_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            store = BackendStore(root / "jobs.sqlite3", root / "artifacts")
+            job_id = store.create_job(
+                workflow="electronic_band", request_hash="old", payload={}
+            )
+            artifact_id = store.create_artifact(kind="electronic_band", data=b"result")
+            store.update_job(job_id, state="completed", progress=1.0, result_ref=artifact_id)
+            result = store.prune_artifacts(
+                max_age_days=0, max_total_bytes=0, keep_at_least=0
+            )
+            assert result["deleted_count"] == 1
+            assert store.get_artifact(artifact_id) is None
+            assert store.get_job(job_id)["state"] == "expired"
 
 
 if __name__ == "__main__":

@@ -70,6 +70,52 @@ class StructurePxrdRequest(BaseModel):
         return self
 
 
+class StructurePdfRequest(BaseModel):
+    file_name: str = Field(min_length=1, max_length=255)
+    file_bytes_b64: str = Field(min_length=1, max_length=MAX_UPLOAD_BASE64_CHARS)
+    q_range: tuple[float, float] = (1.0, 20.0)
+    r_range: tuple[float, float] = (0.1, 20.0)
+    qdamp: float = Field(default=0.06, ge=0.0, le=10.0)
+    qbroad: float = Field(default=0.06, ge=0.0, le=10.0)
+
+    _valid_upload = field_validator("file_bytes_b64")(_validate_base64_upload)
+
+    @model_validator(mode="after")
+    def validate_ranges(self):
+        if self.q_range[0] < 0 or self.q_range[0] >= self.q_range[1]:
+            raise ValueError("q_range must be increasing and non-negative.")
+        if self.r_range[0] < 0 or self.r_range[0] >= self.r_range[1]:
+            raise ValueError("r_range must be increasing and non-negative.")
+        return self
+
+
+class StructurePdfCompareRequest(BaseModel):
+    simulated_r: list[float] = Field(min_length=2, max_length=200_000)
+    simulated_g: list[float] = Field(min_length=2, max_length=200_000)
+    experimental_r: list[float] = Field(min_length=2, max_length=200_000)
+    experimental_g: list[float] = Field(min_length=2, max_length=200_000)
+    normalization: Literal["zscore", "minmax"] = "zscore"
+
+    @model_validator(mode="after")
+    def validate_lengths(self):
+        if len(self.simulated_r) != len(self.simulated_g):
+            raise ValueError("simulated_r and simulated_g lengths must match.")
+        if len(self.experimental_r) != len(self.experimental_g):
+            raise ValueError("experimental_r and experimental_g lengths must match.")
+        return self
+
+
+class StructureRdfRequest(BaseModel):
+    file_name: str = Field(min_length=1, max_length=255)
+    file_bytes_b64: str = Field(min_length=1, max_length=MAX_UPLOAD_BASE64_CHARS)
+    atom_list: list[str] = Field(min_length=1, max_length=20)
+    r_max: float = Field(gt=0.0, le=1_000.0)
+    bins: int = Field(ge=10, le=100_000)
+    weighted: bool = True
+
+    _valid_upload = field_validator("file_bytes_b64")(_validate_base64_upload)
+
+
 class NamedContentFile(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     content_b64: str = Field(min_length=1, max_length=MAX_UPLOAD_BASE64_CHARS)
@@ -88,6 +134,27 @@ class ElectronicPdosRequest(BaseModel):
         return self
 
 
+class ElectronicBandRequest(BaseModel):
+    files: list[NamedContentFile] = Field(min_length=1, max_length=MAX_BATCH_FILES)
+    energy_shift: float = Field(default=0.0, ge=-1_000.0, le=1_000.0)
+
+    @model_validator(mode="after")
+    def validate_total_upload_size(self):
+        if sum(len(file.content_b64) for file in self.files) > MAX_UPLOAD_BASE64_CHARS:
+            raise ValueError("Combined uploads exceed the request size limit.")
+        return self
+
+
+class ElectronicSpinRequest(BaseModel):
+    files: list[NamedContentFile] = Field(min_length=1, max_length=MAX_BATCH_FILES)
+
+    @model_validator(mode="after")
+    def validate_total_upload_size(self):
+        if sum(len(file.content_b64) for file in self.files) > MAX_UPLOAD_BASE64_CHARS:
+            raise ValueError("Combined uploads exceed the request size limit.")
+        return self
+
+
 class MdParseRequest(BaseModel):
     files: list[NamedContentFile] = Field(default_factory=list, max_length=MAX_BATCH_FILES)
 
@@ -98,6 +165,14 @@ class MdParseRequest(BaseModel):
         return self
 
 
+class MdTrajectoryRequest(BaseModel):
+    file_name: str = Field(min_length=1, max_length=255)
+    file_bytes_b64: str = Field(min_length=1, max_length=MAX_UPLOAD_BASE64_CHARS)
+    timestep_fs: float = Field(gt=0.0, le=1_000_000.0)
+
+    _valid_upload = field_validator("file_bytes_b64")(_validate_base64_upload)
+
+
 class JobStatusResponse(BaseModel):
     job_id: str
     workflow: str
@@ -106,6 +181,7 @@ class JobStatusResponse(BaseModel):
     messages: list[str]
     result_ref: str | None = None
     error: str | None = None
+    cache_hit: bool = False
 
 
 class HealthResponse(BaseModel):

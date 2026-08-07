@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from io import BytesIO
 import re
+import tempfile
+from pathlib import Path
 
 import pandas as pd
+from ase.io import read as read_structure
+
+from hps.io.archives import safe_extract_zip
 
 
 def try_float_conversion(value):
@@ -83,3 +88,52 @@ def parse_md_outputs(files: list[dict[str, bytes]]) -> dict[str, object]:
         "file_count": len(sorted_files),
         "row_count": int(len(dataframe)),
     }
+
+
+def inspect_trajectory_archive(content: bytes, timestep_fs: float) -> dict[str, object]:
+    """Validate and inventory a trajectory archive outside the Streamlit process."""
+
+    if timestep_fs <= 0:
+        raise ValueError("timestep_fs must be positive.")
+    with tempfile.TemporaryDirectory(prefix="hps-trajectory-backend-") as tmpdir:
+        root = Path(tmpdir).resolve()
+        paths = safe_extract_zip(BytesIO(content), root)
+        files = sorted(path for path in paths if path.is_file())
+        geometry_files = [
+            path for path in files
+            if path.suffix.lower() in {".in", ".cif", ".xyz", ".pdb"}
+        ]
+        if not geometry_files:
+            raise ValueError("Trajectory archive contains no supported structure frames.")
+        sizes = [path.stat().st_size for path in files]
+        frame_count = len(geometry_files)
+        metrics = []
+        expected_atoms = None
+        for frame_index, path in enumerate(geometry_files):
+            atoms = read_structure(path)
+            if expected_atoms is None:
+                expected_atoms = len(atoms)
+            elif len(atoms) != expected_atoms:
+                raise ValueError("Trajectory frames do not contain a consistent atom count.")
+            center = atoms.get_center_of_mass()
+            metrics.append(
+                {
+                    "frame": frame_index,
+                    "name": path.relative_to(root).as_posix(),
+                    "atom_count": len(atoms),
+                    "formula": atoms.get_chemical_formula(),
+                    "cell_volume": float(atoms.get_volume()) if any(atoms.pbc) else None,
+                    "center_of_mass": [float(value) for value in center],
+                    "time_ps": float(frame_index * timestep_fs / 1000.0),
+                }
+            )
+        return {
+            "file_count": len(files),
+            "frame_count": frame_count,
+            "total_uncompressed_bytes": int(sum(sizes)),
+            "timestep_fs": float(timestep_fs),
+            "estimated_duration_ps": float(max(0, frame_count - 1) * timestep_fs / 1000.0),
+            "frame_names": [path.relative_to(root).as_posix() for path in geometry_files],
+            "metrics": metrics,
+            "atom_count": int(expected_atoms or 0),
+        }

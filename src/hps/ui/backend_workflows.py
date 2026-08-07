@@ -14,6 +14,16 @@ from hps.services.backend_client import BackendClientError, get_artifact, get_jo
 WorkflowState = dict[str, Any]
 
 
+def ensure_workflow_registry(
+    session_state: MutableMapping[str, Any],
+) -> MutableMapping[str, WorkflowState]:
+    """Return the shared backend workflow registry for a UI session."""
+
+    if "backend_workflows" not in session_state:
+        session_state["backend_workflows"] = {}
+    return session_state["backend_workflows"]
+
+
 def normalize_payload(value: Any) -> Any:
     """Return a deterministic JSON-compatible representation of a request payload."""
 

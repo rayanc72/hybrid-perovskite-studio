@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import io
+import base64
 import json
 import os
-import tempfile
 from collections.abc import Callable
 from importlib import import_module
 from itertools import combinations_with_replacement
-from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -18,22 +17,17 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from pymatgen.io.cif import CifWriter
 
 from hps.domain.pdf import (
-    calculate_pdf,
-    compute_pcc,
-    compute_rdf_weighted,
     infer_rho0_from_cif,
     integrate_gr_window,
     load_or_create_plot_config,
     load_or_create_plot_config_matplotlib,
-    load_structure,
     plot_rdf_pdf,
     plot_rdf_pdf_matplotlib,
     reduced_pdf_to_gr,
 )
-from hps.domain.structure_manager import generate_symmetrized_structure
+from hps.ui.backend_workflows import get_workflow_state, run_workflow
 
 
 PDF_WORKFLOW_TITLES = {
@@ -85,6 +79,9 @@ def render_pdf_analysis(
     workflow: str | None,
     modified_atoms: Any,
     *,
+    file_name: str,
+    file_bytes: bytes,
+    workflow_registry: dict,
     render_section_header: Callable[..., None],
 ) -> None:
     """Render the selected Structure PDF workflow."""
@@ -117,25 +114,32 @@ def render_pdf_analysis(
     rmin, rmax = st.slider("r (Å)", 0.0, 30.0, (0.1, 20.0))
 
     if needs_simulated_pdf:
-        pymatgen_structure = generate_symmetrized_structure(modified_atoms, 0.01, 0.1)
-        with tempfile.TemporaryDirectory(prefix="hps-pdf-") as tmpdir:
-            path = Path(tmpdir) / "structure_clean.cif"
-            CifWriter(pymatgen_structure).write_file(str(path))
-            diffpy_structure = load_structure(str(path))
-            r1, g1 = calculate_pdf(
-                diffpy_structure,
-                diffpy_structure_attributes={"Uisoequiv": 0.01},
-                pdf_calculator_kwargs={
-                    "qmin": qmin,
-                    "qmax": qmax,
-                    "rmin": rmin,
-                    "rmax": rmax,
-                    "qdamp": 0.06,
-                    "qbroad": 0.06
-                }
-            )
-
-        df_pdf = pd.DataFrame({"r (Å)": r1, "G_sim(r)": g1})
+        payload = {
+            "file_name": file_name,
+            "file_bytes_b64": base64.b64encode(file_bytes).decode("utf-8"),
+            "q_range": [qmin, qmax],
+            "r_range": [rmin, rmax],
+            "qdamp": 0.06,
+            "qbroad": 0.06,
+        }
+        result = run_workflow(
+            workflow_registry,
+            "structure_pdf",
+            payload,
+            "structure_pdf_simulation",
+            start=True,
+            poll_timeout=10.0,
+        )
+        state = get_workflow_state(workflow_registry, "structure_pdf_simulation")
+        if result is None:
+            if state.get("error"):
+                st.error(f"PDF simulation failed: {state['error']}")
+            else:
+                st.info("PDF simulation is still running in the backend.")
+            st.stop()
+        df_pdf = pd.DataFrame(result["profile"]).rename(columns={"r (A)": "r (Å)"})
+        r1 = df_pdf["r (Å)"].to_numpy()
+        g1 = df_pdf["G_sim(r)"].to_numpy()
 
     if PDF_workflow == "Simulate PDF":
         with st.expander("View simulated PDF data"):
@@ -189,10 +193,43 @@ def render_pdf_analysis(
             config = load_or_create_plot_config(all_pairs)
 
         if st.button("Compute RDF"):
+            rdf_result = run_workflow(
+                workflow_registry,
+                "structure_rdf",
+                {
+                    "file_name": file_name,
+                    "file_bytes_b64": base64.b64encode(file_bytes).decode("utf-8"),
+                    "atom_list": atom_list,
+                    "r_max": rmax,
+                    "bins": bins,
+                    "weighted": weight,
+                },
+                "structure_rdf_simulation",
+                start=True,
+                poll_timeout=10.0,
+            )
+            rdf_state = get_workflow_state(workflow_registry, "structure_rdf_simulation")
+            if rdf_result is None:
+                if rdf_state.get("error"):
+                    st.error(f"RDF simulation failed: {rdf_state['error']}")
+                else:
+                    st.info("RDF simulation is still running in the backend.")
+                st.stop()
+            rdf_lookup = {
+                tuple(item["pair"]): (
+                    np.asarray(item["r"], dtype=float),
+                    np.asarray(item["g"], dtype=float),
+                )
+                for item in rdf_result["pairs"]
+            }
+
+            def backend_rdf(_structure, pair, **_kwargs):
+                return rdf_lookup.get(tuple(pair), (None, None))
+
             if lib == "Matplotlib":
                 fig, df_all = plot_rdf_pdf_matplotlib(
                     atom_list, modified_atoms, df_pdf, rmin, rmax, bins,
-                    compute_rdf_weighted, config, weight
+                    backend_rdf, config, weight
                 )
                 st.pyplot(fig)
 
@@ -213,7 +250,7 @@ def render_pdf_analysis(
             else:
                 fig_rdf, df_all = plot_rdf_pdf(
                     atom_list, modified_atoms, df_pdf, rmax, bins,
-                    compute_rdf_weighted, config, weight
+                    backend_rdf, config, weight
                 )
                 st.plotly_chart(fig_rdf, use_container_width=True)
 
@@ -408,97 +445,48 @@ def render_pdf_analysis(
             st.error(str(exc))
         else:
 
-            # interpolate simulation onto experimental r-grid
-            g_sim_interp = np.interp(df_exp.r, r1, g1)
+            comparison = run_workflow(
+                workflow_registry,
+                "structure_pdf_compare",
+                {
+                    "simulated_r": r1.tolist(),
+                    "simulated_g": g1.tolist(),
+                    "experimental_r": df_exp.r.tolist(),
+                    "experimental_g": df_exp.G_exp.tolist(),
+                    "normalization": (
+                        "zscore" if norm_method.startswith("Z-score") else "minmax"
+                    ),
+                },
+                "structure_pdf_comparison",
+                start=True,
+                poll_timeout=10.0,
+            )
+            comparison_state = get_workflow_state(
+                workflow_registry, "structure_pdf_comparison"
+            )
+            if comparison is None:
+                if comparison_state.get("error"):
+                    st.error(f"PDF comparison failed: {comparison_state['error']}")
+                else:
+                    st.info("PDF comparison is still running in the backend.")
+                st.stop()
 
-            # -------------------------------
-            # 1) Normalize y-data for fitting
-            # -------------------------------
-            eps = 1e-12
-
-            if norm_method.startswith("Z-score"):
-                # stats for original (needed for back-transform)
-                mu_x, sig_x = float(np.mean(g_sim_interp)), float(np.std(g_sim_interp))
-                mu_y, sig_y = float(np.mean(df_exp.G_exp)), float(np.std(df_exp.G_exp))
-                sig_x = sig_x if sig_x > eps else eps
-                sig_y = sig_y if sig_y > eps else eps
-
-                x_norm = (g_sim_interp - mu_x) / sig_x
-                y_norm = (df_exp.G_exp - mu_y) / sig_y
-
-
-                # mapping from normalized fit back to original:
-                # y_fit = mu_y + sig_y * (a * (x - mu_x)/sig_x + b)
-                def back_transform(a_hat, b_hat, x_orig):
-                    A_eff = (sig_y * a_hat) / sig_x
-                    B_eff = mu_y + sig_y * b_hat - A_eff * mu_x
-                    return A_eff, B_eff, A_eff * x_orig + B_eff
-
-            else:  # Min-max
-                x_min, x_max = float(np.min(g_sim_interp)), float(np.max(g_sim_interp))
-                y_min, y_max = float(np.min(df_exp.G_exp)), float(np.max(df_exp.G_exp))
-                x_rng = (x_max - x_min) if (x_max - x_min) > eps else eps
-                y_rng = (y_max - y_min) if (y_max - y_min) > eps else eps
-
-                x_norm = (g_sim_interp - x_min) / x_rng
-                y_norm = (df_exp.G_exp - y_min) / y_rng
-
-
-                # mapping from normalized fit back to original:
-                # y_fit = y_min + y_rng * (a * (x - x_min)/x_rng + b)
-                def back_transform(a_hat, b_hat, x_orig):
-                    A_eff = (y_rng * a_hat) / x_rng
-                    B_eff = y_min + y_rng * b_hat - A_eff * x_min
-                    return A_eff, B_eff, A_eff * x_orig + B_eff
-
-            # ---------------------------------------
-            # 2) Fit in normalized space: y' = a x' + b
-            # ---------------------------------------
-            from scipy.optimize import curve_fit
-
-
-            def linear_model(G_sim_norm, a, b):
-                return a * G_sim_norm + b
-
-
-            popt, pcov = curve_fit(linear_model, x_norm, y_norm, p0=[1.0, 0.0])
-            a_norm, b_norm = map(float, popt)
-
-            # ---------------------------------------
-            # 3) Back-transform fit to original units
-            # ---------------------------------------
-            A_eff, B_eff, g_fit = back_transform(a_norm, b_norm, g_sim_interp)
-            residual = df_exp.G_exp - g_fit
-
-            # Compute correlations (both original and normalized, optional)
-            pcc_value_orig = compute_pcc((df_exp.r, df_exp.G_exp), (df_exp.r, g_sim_interp))
-            pcc_value_norm = compute_pcc((df_exp.r, y_norm), (df_exp.r, x_norm))
-
-            # For reference, the normalized fitted values (if you want to display)
-            g_fit_norm = linear_model(x_norm, a_norm, b_norm)
-
-            df_combined = pd.DataFrame({
-                "r (Å)": df_exp.r,
-                "G_sim": g_sim_interp,
-                "G_exp": df_exp.G_exp,
-                "G_fit": g_fit,  # fit mapped back to original units
-                "Residual": residual,
-                "G_sim (norm)": x_norm,
-                "G_exp (norm)": y_norm,
-                "G_fit (norm)": g_fit_norm,
-            })
+            df_combined = pd.DataFrame(comparison["table"]).rename(
+                columns={"r (A)": "r (Å)"}
+            )
+            A_eff = comparison["effective_slope"]
+            B_eff = comparison["effective_intercept"]
+            pcc_value_orig = comparison["pcc_original"]
+            pcc_value_norm = comparison["pcc_normalized"]
 
             with st.expander("View combined PDF data"):
                 st.dataframe(df_combined, use_container_width=True, hide_index=True)
 
-            # Optional: show fit parameters
             with st.expander("Fit details (normalized → original)"):
                 st.markdown(
-                    f"- Normalized fit: y' = **{a_norm:.4f}** · x' + **{b_norm:.4f}**\n"
                     f"- Effective original-units mapping: y ≈ **{A_eff:.4f}** · x + **{B_eff:.4f}**\n"
                     f"- PCC (original): **{pcc_value_orig:.4f}**, PCC (normalized): **{pcc_value_norm:.4f}**"
                 )
-
     # --- 6) Plotting: customization, trigger button, downloads, and interactive Plotly ---
     # Load saved customization if provide
         with st.expander("Plot customization"):

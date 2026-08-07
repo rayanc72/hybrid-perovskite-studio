@@ -27,6 +27,13 @@ hybrid perovskite modelling, analysis, and visualization.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install hybrid-perovskite-studio
+hps
+```
+
+The base package provides the launcher and dependency guidance. To install the functional application stack directly:
+
+```bash
+pip install "hybrid-perovskite-studio[full]"
 ```
 
 ## Run
@@ -35,20 +42,12 @@ pip install hybrid-perovskite-studio
 hps
 ```
 
-For the full optional stack:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install "hybrid-perovskite-studio[full]"
-```
-
 For local development:
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[full,backend,dev]"
+pip install -e ".[full,dev,docs]"
 hps
 ```
 

@@ -1,6 +1,7 @@
 import hashlib
+import math
+from collections import defaultdict
 from functools import lru_cache
-from importlib import import_module
 from importlib.resources import files
 import json
 import os
@@ -22,6 +23,7 @@ import numpy as np
 from ase import Atom, Atoms
 from ase.io import read
 from pymatgen.core import Structure
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 import shutil
 from shutil import make_archive
 from ase.io import write
@@ -29,7 +31,12 @@ from ase.spacegroup import get_spacegroup
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.io.cif import CifWriter
 from pymatgen.analysis.diffraction.xrd import XRDCalculator
-from pymatgen.analysis.structure_matcher import StructureMatcher
+try:
+    from pymatgen.core.structure_matcher import StructureMatcher
+    from pymatgen.core.local_env import CovalentBondNN
+except ModuleNotFoundError:
+    from pymatgen.analysis.structure_matcher import StructureMatcher
+    from pymatgen.analysis.local_env import CovalentBondNN
 import zipfile
 import tempfile
 import pandas as pd
@@ -52,21 +59,14 @@ from bokeh.plotting import figure, show
 from typing import List, Tuple
 from io import BytesIO
 import re
+from scipy.interpolate import PchipInterpolator
 
+from hps.domain.molecule_builder import (
+    draw_molecule_graph,
+    get_connected_coordinates,
+    get_molecule_object,
+)
 
-def _inject_public_names(module):
-    for name in dir(module):
-        if not name.startswith("_"):
-            globals().setdefault(name, getattr(module, name))
-
-
-for _module_name in (
-    "pymatgen.analysis.dimensionality",
-    "pymatgen.analysis.local_env",
-    "scipy.interpolate",
-    "hps.domain.molecule_builder",
-):
-    _inject_public_names(import_module(_module_name))
 
 def image_to_base64(image_path):
     with open(image_path, "rb") as img_file:
@@ -1231,6 +1231,33 @@ def delete_molecules(atoms, molecules, molecule_indices):
 
     return modified_atoms
 
+
+def _is_twofold_rotation(rotation_matrix, tolerance=1e-7):
+    matrix = np.asarray(rotation_matrix, dtype=float)
+    identity = np.eye(3)
+    return (
+        matrix.shape == (3, 3)
+        and np.allclose(matrix.T @ matrix, identity, atol=tolerance)
+        and np.isclose(np.linalg.det(matrix), 1.0, atol=tolerance)
+        and np.allclose(matrix @ matrix, identity, atol=tolerance)
+        and not np.allclose(matrix, identity, atol=tolerance)
+        and np.isclose(np.trace(matrix), -1.0, atol=tolerance)
+    )
+
+
+def _rotation_axis(rotation_matrix, tolerance=1e-10):
+    matrix = np.asarray(rotation_matrix, dtype=float)
+    _, _, right_vectors = np.linalg.svd(matrix - np.eye(3))
+    axis = right_vectors[-1]
+    norm = np.linalg.norm(axis)
+    if norm <= tolerance:
+        raise ValueError("Could not determine a rotation axis.")
+    axis = axis / norm
+    first_nonzero = next((value for value in axis if abs(value) > tolerance), 1.0)
+    if first_nonzero < 0:
+        axis = -axis
+    return tuple(np.round(axis, 12))
+
 def find_twofold_rotation_axes(initial_space_group, final_space_group):
     initial_sg_analyzer = SpacegroupAnalyzer(Structure.from_spacegroup(initial_space_group, Lattice.cubic(1), "X", [[0, 0, 0]]))
     final_sg_analyzer = SpacegroupAnalyzer(Structure.from_spacegroup(final_space_group, Lattice.cubic(1), "X", [[0, 0, 0]]))
@@ -1243,8 +1270,8 @@ def find_twofold_rotation_axes(initial_space_group, final_space_group):
 
     for op in lost_operations:
         rotation_matrix = op.rotation_matrix
-        if is_two_fold_rotation(rotation_matrix):
-            axis = find_rotation_axis(rotation_matrix)
+        if _is_twofold_rotation(rotation_matrix):
+            axis = _rotation_axis(rotation_matrix)
             if axis not in twofold_rotation_axes:
                 twofold_rotation_axes.append(axis)
 
@@ -1586,7 +1613,10 @@ def get_perpendicular_axis(atoms, index1, index2, index3):
 
     # Calculate the angle between the normal vector and the z-axis
     z_axis = np.array([0, 0, 1])
-    angle = get_angles(normal, z_axis, index1)
+    normal_norm = np.linalg.norm(normal)
+    if normal_norm == 0:
+        raise ValueError("The selected atoms do not define a plane.")
+    angle = np.arccos(np.clip(np.dot(normal / normal_norm, z_axis), -1.0, 1.0))
 
     # If the angle is close to 0 or 180 degrees, use the x-axis instead
     if np.isclose(angle, 0) or np.isclose(angle, np.pi):
@@ -1782,7 +1812,15 @@ def rotate_molecules_individually(atoms, molecules, rotation_parameters):
     rotated_atoms = atoms.copy()
 
     for i, (molecule, (axis, angle, centroid_option, custom_centroid)) in enumerate(zip(molecules, rotation_parameters)):
-        rotated_atoms = rotate_molecules(rotated_atoms, molecules, [i], axis, angle, centroid_option, custom_centroid)
+        rotated_atoms = rotate_molecules_v3(
+            rotated_atoms,
+            molecules,
+            [i + 1],
+            axis,
+            angle,
+            centroid_option,
+            custom_centroid,
+        )
 
     return rotated_atoms
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hybrid-perovskite-studio"
-version = "0.1.4"
+dynamic = ["version"]
 description = "Workspace-oriented Streamlit toolkit for hybrid perovskite modeling, analysis, and visualization."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -117,9 +117,15 @@ full = [
   "uvicorn",
 ]
 dev = [
+  "build",
   "httpx",
   "pytest",
+  "pytest-cov",
   "ruff",
+]
+docs = [
+  "mkdocs>=1.6,<2",
+  "mkdocs-material>=9.5,<10",
 ]
 
 [tool.setuptools]
@@ -130,6 +136,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "hps.ui" = ["assets/*.js"]
+
+[tool.setuptools.dynamic]
+version = {attr = "hps.__version__"}
 
 [tool.ruff]
 line-length = 100
@@ -142,3 +151,16 @@ extend-exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+testpaths = ["tests"]
+filterwarnings = [
+  "error::DeprecationWarning:hps.*",
+  "ignore:.*has been moved to the pymatgen.core.*:DeprecationWarning",
+  "ignore:with_local_env_strategy is deprecated.*:FutureWarning",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["hps"]

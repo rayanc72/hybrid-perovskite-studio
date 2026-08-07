@@ -4,6 +4,9 @@ import io
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -23,6 +26,43 @@ else:
 
 @unittest.skipIf(structure_manager is None, f"Optional test dependency unavailable: {_IMPORT_ERROR}")
 class StructureManagerLabelTests(unittest.TestCase):
+    def test_twofold_rotation_axis_detection(self) -> None:
+        rotation = np.diag([-1.0, -1.0, 1.0])
+
+        self.assertTrue(structure_manager._is_twofold_rotation(rotation))
+        self.assertEqual(structure_manager._rotation_axis(rotation), (0.0, 0.0, 1.0))
+        self.assertFalse(structure_manager._is_twofold_rotation(np.eye(3)))
+        self.assertFalse(structure_manager._is_twofold_rotation(np.diag([-1.0, 1.0, 1.0])))
+
+    def test_individual_rotation_dispatches_each_molecule_with_one_based_index(self) -> None:
+        atoms = Atoms(symbols=["H", "H"], positions=[[0, 0, 0], [1, 0, 0]])
+        molecules = [[0], [1]]
+        parameters = [
+            ([1, 0, 0], 10.0, 1, None),
+            ([0, 1, 0], 20.0, 2, [0.0, 0.0, 0.0]),
+        ]
+
+        with patch.object(
+            structure_manager,
+            "rotate_molecules_v3",
+            side_effect=["first-result", "second-result"],
+        ) as rotate:
+            result = structure_manager.rotate_molecules_individually(
+                atoms,
+                molecules,
+                parameters,
+            )
+
+        self.assertEqual(result, "second-result")
+        first_args = rotate.call_args_list[0].args
+        second_args = rotate.call_args_list[1].args
+        self.assertTrue(np.array_equal(first_args[0].positions, atoms.positions))
+        self.assertEqual(first_args[1:], (molecules, [1], [1, 0, 0], 10.0, 1, None))
+        self.assertEqual(
+            second_args,
+            ("first-result", molecules, [2], [0, 1, 0], 20.0, 2, [0.0, 0.0, 0.0]),
+        )
+
     def test_build_molecule_label_overrides_applies_symbol_prefix(self) -> None:
         atoms = Atoms(symbols=["Pb", "I", "I", "I"], positions=[[0, 0, 0]] * 4)
 

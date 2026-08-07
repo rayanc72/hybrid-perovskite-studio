@@ -64,4 +64,6 @@ it should move toward:
 
 ## Tracking The Remaining Work
 
-The active development checklist lives in [TODO.md](../../TODO.md).
+The active development checklist lives in [TODO.md](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/TODO.md).
+
+Shared UI-side request signatures, polling, cached result state, and uploaded-file serialization now live in `hps.ui.backend_workflows`. Workspace renderers should use that module rather than adding new polling loops to `app_main.py`.

@@ -56,6 +56,10 @@ scripts/release_public.sh \
 
 ## What the script checks
 
+- the modern package layers pass Ruff correctness checks
+- the full test suite passes with a headless plotting backend
+- the documentation builds in strict mode
+- source and wheel distributions build successfully
 - the working tree is clean
 - you are running from `main`
 - `public` exists

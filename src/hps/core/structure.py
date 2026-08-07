@@ -10,7 +10,6 @@ from io import BytesIO
 import numpy as np
 import pandas as pd
 import spglib
-from ase.data import covalent_radii
 from ase.geometry import get_distances
 from ase.io import read
 from ase.neighborlist import natural_cutoffs

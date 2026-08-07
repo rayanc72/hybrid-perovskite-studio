@@ -11,6 +11,24 @@ The current UI is built around a landing page plus four workspaces:
 
 Users start on a minimal landing page, then open a workspace from the top card row.
 
+## Workspace Gallery
+
+### Landing page
+
+![Hybrid Perovskite Studio landing page](../images/screenshots/landing-page.png)
+
+### Structure workspace
+
+![Structure workspace](../images/screenshots/structure-workspace.png)
+
+### Band Structure Studio
+
+![Band Structure Studio](../images/screenshots/band-structure-studio.png)
+
+### Dynamics workspace
+
+![Dynamics workspace](../images/screenshots/dynamics-workspace.png)
+
 ## Landing Page
 
 The landing page shows:
@@ -38,7 +56,7 @@ The `Browse feature map` expander shows a tree of the app’s current capabiliti
 
 This tree is generated from:
 
-- [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py)
+- [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 
 That file is the current single source of truth for:
 
@@ -77,4 +95,4 @@ The current `Structure -> Analysis` groups include:
 When the app navigation changes, the documentation should be updated in two places:
 
 - the relevant workspace guide in `docs/features/`
-- [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py) if the visible feature tree changed
+- [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py) if the visible feature tree changed

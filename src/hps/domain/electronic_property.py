@@ -538,6 +538,7 @@ def process_geometry_file(uploaded_file):
 def process_control_file(uploaded_file, rlatvec):
     k_label = []
     kpoint = []
+    n_samples = []
 
     for line in uploaded_file:
         line = line.decode('utf-8')  # Decoding for binary files
@@ -545,6 +546,7 @@ def process_control_file(uploaded_file, rlatvec):
             words = line.strip().split()
             kpoint.append([float(i) for i in words[2:8]])
             n_sample = int(words[-3])
+            n_samples.append(n_sample)
             k_label.append(words[-2:])
 
     # Processing k labels
@@ -564,11 +566,14 @@ def process_control_file(uploaded_file, rlatvec):
     # Calculating x values
     xvals = []
     band_len = []
-    for i in kpoint:
+    for i, n_sample in zip(kpoint, n_samples):
         kvec = [i[j + 3] - i[j] for j in range(3)]
         temp = math.sqrt(sum([k * k for k in list(np.dot(kvec, rlatvec))]))
-        step = temp / (n_sample - 1)
-        xval = [i * step for i in range(n_sample)]
+        if n_sample <= 1:
+            xval = [0.0]
+        else:
+            step = temp / (n_sample - 1)
+            xval = [i * step for i in range(n_sample)]
         xvals.append(xval)
         band_len.append(temp)
 
@@ -788,6 +793,7 @@ def parse_band_out_files(uploaded_files, energyshift=None):
                 band.append(energys[j][i])
             bands.append(band)
         bands_all_files.append(bands)
+        uploaded_file.seek(0)
 
     return bands_all_files
 
@@ -824,7 +830,7 @@ def filter_state_data(uploaded_file, target_state):
 
 
 def _read_spin_texture_dataframe(uploaded_file):
-    df = pd.read_csv(uploaded_file, delim_whitespace=True, comment='#', header=None)
+    df = pd.read_csv(uploaded_file, sep=r'\s+', comment='#', header=None)
     if hasattr(uploaded_file, "seek"):
         uploaded_file.seek(0)
     column_names_new = ['k_point', 'kx', 'ky', 'kz', 'State', 'Eigenvalue', 'sigma_x', 'sigma_y', 'sigma_z',

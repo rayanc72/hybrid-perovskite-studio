@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 
+from hps import __version__
 from hps.api.schemas import (
     ElectronicPdosRequest,
     HealthResponse,
@@ -19,7 +20,7 @@ from hps.api.schemas import (
 )
 from hps.services.backend_jobs import UnknownWorkflowError, get_job_manager
 
-app = FastAPI(title="Hybrid Perovskite Studio Backend", version="0.1.4")
+app = FastAPI(title="Hybrid Perovskite Studio Backend", version=__version__)
 
 WORKFLOW_SCHEMAS = {
     "structure_summary": StructureSummaryRequest,

@@ -1,1 +1,1 @@
--e .[full,dev]
+-e .[full,dev,docs]

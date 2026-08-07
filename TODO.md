@@ -2,6 +2,26 @@
 
 This file is the working checklist for the backend modernization and performance-improvement effort.
 
+## Public Release Readiness
+
+- [x] Add a reproducible local release-check command
+- [x] Add continuous integration for tests, modern-layer lint, docs, and package builds
+- [x] Replace unrestricted dataset-expression evaluation
+- [x] Harden uploaded trajectory ZIP extraction
+- [x] Add backend upload and numerical input bounds
+- [x] Add contribution, conduct, security, and citation files
+- [x] Remove dynamic namespace injection from packaged application modules
+- [x] Extract shared backend workflow state and polling helpers from `src/hps/ui/app_main.py`
+- [x] Extract Structure upload, summary, and current-structure overview rendering
+- [x] Extract Structure navigation plus symmetry and PXRD rendering
+- [x] Extract Structure PDF rendering and charge-analysis parsers
+- [x] Extract Structure distance, distortion, lattice-deviation, and ADP rendering
+- [x] Extract all Structure transformation rendering
+- [ ] Split workspace rendering out of `src/hps/ui/app_main.py`
+- [ ] Add redistributable scientific regression fixtures and expected numerical results
+- [ ] Add artifact retention and stale-job recovery policies
+- [ ] Add guided example projects and provenance-aware project bundles
+
 ## In Progress
 
 - [ ] Finish migrating the Structure workspace’s remaining expensive analysis paths
@@ -44,7 +64,7 @@ This file is the working checklist for the backend modernization and performance
 
 ## UI Cleanup
 
-- [ ] Extract shared backend job submission/polling UI helpers from `src/hps/ui/app_main.py`
+- [x] Extract shared backend job submission/polling UI helpers from `src/hps/ui/app_main.py`
 - [ ] Extract shared result rendering blocks for backend-returned tables and plot data
 - [ ] Reduce the number of workflow-specific session-state keys in `src/hps/ui/app_main.py`
 - [ ] Stop adding new heavy scientific logic directly to the UI module

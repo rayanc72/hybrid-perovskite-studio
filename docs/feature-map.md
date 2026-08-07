@@ -78,4 +78,4 @@
 
 ## Source Of Truth
 
-The live navigation tree is defined in [src/hps/ui/navigation.py](../src/hps/ui/navigation.py). 
+The live navigation tree is defined in [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py).

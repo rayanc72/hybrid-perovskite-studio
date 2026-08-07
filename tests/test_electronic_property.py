@@ -5,6 +5,7 @@ import sys
 import unittest
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +23,10 @@ from hps.domain.electronic_property import (
     get_pdos_combination_labels,
     get_pdos_trace_options,
     parse_pdos_uploads,
+    parse_band_out_files,
+    plot_bands,
     plot_pdos_streamlit,
+    process_control_file,
     prepare_plot_data,
     resolve_spin_texture_plane,
     smooth_pdos_values,
@@ -36,6 +40,62 @@ def named_upload(name: str, text: str) -> io.StringIO:
 
 
 class ElectronicPropertyTests(unittest.TestCase):
+    def test_bandstructure_handles_mixed_kpoint_counts_per_segment(self) -> None:
+        reciprocal = np.eye(3)
+        control = io.BytesIO(
+            "\n".join(
+                [
+                    "output band 0.0 0.0 0.0 1.0 0.0 0.0 3 G X",
+                    "output band 1.0 0.0 0.0 1.0 1.0 0.0 5 X M",
+                ]
+            ).encode("utf-8")
+        )
+        control.name = "control.in"
+
+        _, _, band_len, _, xvals, band_len_tot = process_control_file(control, reciprocal)
+
+        self.assertEqual([len(segment) for segment in xvals], [3, 5])
+        self.assertTrue(np.allclose(xvals[0], np.array([0.0, 0.5, 1.0])))
+        self.assertTrue(np.allclose(xvals[1], np.array([1.0, 1.25, 1.5, 1.75, 2.0])))
+        self.assertTrue(np.allclose(band_len, np.array([1.0, 1.0])))
+        self.assertTrue(np.allclose(band_len_tot, np.array([0.0, 1.0, 2.0])))
+
+    def test_plot_bands_accepts_segments_with_different_point_counts(self) -> None:
+        uploads = []
+        for index, rows in enumerate(
+            [
+                ["0 0 0 0 1 0.1 1 0.2", "0 0 0 0 1 0.3 1 0.4", "0 0 0 0 1 0.5 1 0.6"],
+                [
+                    "0 0 0 0 1 1.1 1 1.2",
+                    "0 0 0 0 1 1.3 1 1.4",
+                    "0 0 0 0 1 1.5 1 1.6",
+                    "0 0 0 0 1 1.7 1 1.8",
+                    "0 0 0 0 1 1.9 1 2.0",
+                ],
+            ],
+            start=1,
+        ):
+            upload = io.BytesIO("\n".join(rows).encode("utf-8"))
+            upload.name = f"band{index:04d}.out"
+            uploads.append(upload)
+
+        bands_all_files = parse_band_out_files(uploads, energyshift=0.0)
+        fig, ax = plt.subplots()
+        try:
+            plot_bands(
+                ax,
+                bands_all_files,
+                xvals=[
+                    np.array([0.0, 0.5, 1.0]),
+                    np.array([1.0, 1.25, 1.5, 1.75, 2.0]),
+                ],
+                plot_color="black",
+            )
+        finally:
+            plt.close(fig)
+
+        self.assertEqual(len(ax.lines), 5)
+
     def test_detect_pdos_file_roles_matches_fhi_aims_files_case_insensitively(self) -> None:
         roles = detect_pdos_file_roles(
             [

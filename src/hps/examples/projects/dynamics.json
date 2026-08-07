@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "dynamics",
+  "title": "Fifty-femtosecond trajectory walkthrough",
+  "description": "Validate and inspect a centered 101-frame molecular-dynamics trajectory slice with backend-managed exports.",
+  "license": "Apache-2.0",
+  "citations": [
+    {
+      "short": "Chakraborty et al., Nature Nanotechnology (2026)",
+      "doi": "10.1038/s41565-026-02238-6"
+    }
+  ],
+  "file_sets": [
+    {"role": "trajectory_frames", "path": "data/md/frames", "pattern": "*.in", "count": 101, "sha256": "5ef83233c4380b120ab77c400d9feb6d3134616a87e19f83fefb1c9884cee129"}
+  ],
+  "guide": [
+    {"workspace": "Dynamics", "view": "Trajectory analysis", "action": "Zip the data/md/frames directory if using the unpacked source tree, or upload the frames from this bundle as a ZIP."},
+    {"workspace": "Dynamics", "view": "Trajectory analysis", "action": "Set the timestep to 0.5 fs and confirm 101 frames over 0.05 ps."},
+    {"workspace": "Dynamics", "view": "Trajectory analysis", "action": "Download the generated metrics CSV plus first and last structure exports."}
+  ]
+}

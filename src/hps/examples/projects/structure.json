@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "structure",
+  "title": "Layered perovskite structure inspection",
+  "description": "Upload a published layered hybrid perovskite structure, confirm its identity, and explore symmetry-aware structure tools.",
+  "license": "Apache-2.0",
+  "citations": [
+    {
+      "short": "Chakraborty et al., J. Am. Chem. Soc. 146 (2024), 34811–34821",
+      "doi": "10.1021/jacs.4c13597"
+    }
+  ],
+  "file_sets": [
+    {
+      "role": "structure",
+      "path": "data/structure",
+      "pattern": "*.in",
+      "count": 1,
+      "sha256": "7a4cec664d3a9d9f0cc71ca05d35bc5c69923a8fee5756f58ed4a7715e77c5ee"
+    }
+  ],
+  "guide": [
+    {"workspace": "Structure", "view": "Overview", "action": "Upload MC3I_PbI_100K.in."},
+    {"workspace": "Structure", "view": "Overview", "action": "Confirm formula C32H88I24N8Pb4 and 156 atoms."},
+    {"workspace": "Structure", "view": "Analysis / Symmetry", "action": "Confirm Aea2 (No. 41) before exploring the symmetry controls."}
+  ]
+}

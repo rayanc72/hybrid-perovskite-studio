@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import json
 import zipfile
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -15,9 +14,9 @@ from hps.core.electronic import (
 )
 from hps.core.md import inspect_trajectory_archive
 from hps.core.structure import summarize_structure_upload
+from hps.examples import EXAMPLES_ROOT
 
-
-FIXTURES = Path(__file__).parent / "fixtures" / "scientific"
+FIXTURES = EXAMPLES_ROOT / "data"
 EXPECTED = json.loads((FIXTURES / "expected_results.json").read_text())
 
 

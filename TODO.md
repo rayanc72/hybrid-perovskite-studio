@@ -20,7 +20,7 @@ This file is the working checklist for the backend modernization and performance
 - [x] Split workspace rendering out of `src/hps/ui/app_main.py`
 - [x] Add redistributable scientific regression fixtures and expected numerical results
 - [x] Add artifact retention and stale-job recovery policies
-- [ ] Add guided example projects and provenance-aware project bundles
+- [x] Add guided example projects and provenance-aware project bundles
 
 ## In Progress
 

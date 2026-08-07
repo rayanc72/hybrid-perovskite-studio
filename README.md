@@ -65,12 +65,27 @@ source .venv/bin/activate
 python -m pytest tests/test_backend_store.py tests/test_backend_api.py tests/test_backend_phase3_workflows.py tests/test_core_workflows.py -q
 ```
 
+## Guided Examples
+
+Published, provenance-aware example projects are included in the package:
+
+```bash
+hps-examples list
+hps-examples build structure
+hps-examples build electronic
+hps-examples build dynamics
+```
+
+Each generated ZIP includes a guided workflow, source citation, expected numerical
+results, provenance notes, and checksum-validated inputs.
+
 ## Docs
 
 - [Getting Started](docs/user-guide/getting-started.md)
 - [Feature Map](docs/feature-map.md)
 - [Workspace Guides](docs/index.md)
 - [Backend Modernization](docs/reference/backend-modernization.md)
+- [Guided Examples](docs/user-guide/guided-examples.md)
 - [Development TODO](TODO.md)
 
 To preview the documentation locally:

@@ -19,6 +19,7 @@ nav:
   - User Guide:
       - Getting Started: user-guide/getting-started.md
       - Navigation and Workspaces: user-guide/navigation-and-workspaces.md
+      - Guided Examples: user-guide/guided-examples.md
   - Features:
       - Feature Map: feature-map.md
       - Structure Workspace: features/structure-workspace.md

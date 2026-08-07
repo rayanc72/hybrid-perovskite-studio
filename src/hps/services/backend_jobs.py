@@ -6,7 +6,8 @@ import base64
 import hashlib
 import json
 import os
-from concurrent.futures import Future, ProcessPoolExecutor
+import time
+from concurrent.futures import Executor, Future, ProcessPoolExecutor
 from threading import Lock
 
 from hps.core.electronic import (
@@ -15,13 +16,13 @@ from hps.core.electronic import (
     parse_spin_texture_payload,
 )
 from hps.core.md import inspect_trajectory_archive, parse_md_outputs
-from hps.core.structure import summarize_structure_upload
 from hps.core.structure import (
     calculate_space_group_sweep,
     compare_pdf_profiles,
     simulate_pdf_from_upload,
     simulate_pxrd_from_upload,
     simulate_rdf_from_upload,
+    summarize_structure_upload,
 )
 from hps.services.backend_store import BackendStore
 
@@ -173,10 +174,27 @@ def execute_workflow(workflow: str, payload: dict[str, object]) -> dict[str, obj
     return handler(payload)
 
 
+def execute_workflow_profiled(
+    workflow: str, payload: dict[str, object]
+) -> tuple[dict[str, object], float]:
+    """Execute a workflow and return its result with process-local elapsed time."""
+
+    started_at = time.perf_counter()
+    result = execute_workflow(workflow, payload)
+    duration_ms = max(0.0, (time.perf_counter() - started_at) * 1000.0)
+    return result, duration_ms
+
+
 class BackendJobManager:
     """Queue local jobs, persist state, and reuse cached completed results."""
 
-    def __init__(self, store: BackendStore | None = None, *, max_workers: int | None = None) -> None:
+    def __init__(
+        self,
+        store: BackendStore | None = None,
+        *,
+        max_workers: int | None = None,
+        executor: Executor | None = None,
+    ) -> None:
         self.store = store or BackendStore()
         self.store.recover_stale_jobs(
             stale_after_seconds=int(os.getenv("HPS_STALE_JOB_SECONDS", "3600"))
@@ -186,7 +204,9 @@ class BackendJobManager:
             max_total_bytes=int(os.getenv("HPS_ARTIFACT_MAX_BYTES", "2000000000")),
             keep_at_least=int(os.getenv("HPS_ARTIFACT_KEEP_AT_LEAST", "20")),
         )
-        self._executor = ProcessPoolExecutor(max_workers=max_workers or max(1, min(2, os.cpu_count() or 1)))
+        self._executor = executor or ProcessPoolExecutor(
+            max_workers=max_workers or max(1, min(2, os.cpu_count() or 1))
+        )
         self._futures: dict[str, Future] = {}
         self._lock = Lock()
 
@@ -212,7 +232,7 @@ class BackendJobManager:
             append_message="Job accepted by the local backend.",
         )
 
-        future = self._executor.submit(execute_workflow, workflow, payload)
+        future = self._executor.submit(execute_workflow_profiled, workflow, payload)
         with self._lock:
             self._futures[job_id] = future
         future.add_done_callback(lambda done_future, current_job_id=job_id, current_workflow=workflow: self._finalize_job(current_job_id, current_workflow, done_future))
@@ -244,7 +264,7 @@ class BackendJobManager:
 
     def _finalize_job(self, job_id: str, workflow: str, future: Future) -> None:
         try:
-            result = future.result()
+            result, execution_duration_ms = future.result()
             artifact_type = ARTIFACT_TYPES[workflow]
             artifact_id = self.store.create_artifact(
                 kind=workflow,
@@ -257,6 +277,7 @@ class BackendJobManager:
                 state="completed",
                 progress=1.0,
                 result_ref=artifact_id,
+                execution_duration_ms=execution_duration_ms,
                 append_message="Job finished successfully.",
             )
         except Exception as exc:

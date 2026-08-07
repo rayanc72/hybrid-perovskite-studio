@@ -65,6 +65,8 @@ class BackendStore:
                 conn.execute(
                     "ALTER TABLE jobs ADD COLUMN cache_hit_count INTEGER NOT NULL DEFAULT 0"
                 )
+            if "execution_duration_ms" not in job_columns:
+                conn.execute("ALTER TABLE jobs ADD COLUMN execution_duration_ms REAL")
             artifact_columns = {
                 row["name"] for row in conn.execute("PRAGMA table_info(artifacts)").fetchall()
             }
@@ -116,6 +118,7 @@ class BackendStore:
         job = self._row_to_job(row)
         if job is not None:
             job["cache_hit"] = True
+            job["cache_hit_count"] = int(job["cache_hit_count"]) + 1
         return job
 
     def update_job(
@@ -126,6 +129,7 @@ class BackendStore:
         progress: float | None = None,
         result_ref: str | None = None,
         error: str | None = None,
+        execution_duration_ms: float | None = None,
         append_message: str | None = None,
     ) -> None:
         with self._lock:
@@ -144,6 +148,7 @@ class BackendStore:
                         progress = COALESCE(?, progress),
                         result_ref = COALESCE(?, result_ref),
                         error = COALESCE(?, error),
+                        execution_duration_ms = COALESCE(?, execution_duration_ms),
                         messages_json = ?,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE job_id = ?
@@ -153,6 +158,7 @@ class BackendStore:
                         progress,
                         result_ref,
                         error,
+                        execution_duration_ms,
                         json.dumps(messages),
                         job_id,
                     ),
@@ -278,6 +284,11 @@ class BackendStore:
             "updated_at": row["updated_at"],
             "cache_hit": False,
             "cache_hit_count": int(row["cache_hit_count"]),
+            "execution_duration_ms": (
+                float(row["execution_duration_ms"])
+                if row["execution_duration_ms"] is not None
+                else None
+            ),
         }
 
 

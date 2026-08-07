@@ -34,7 +34,7 @@ This file is the working checklist for the backend modernization and performance
 - [x] Add reusable job submission, polling, and artifact retrieval helpers
 - [x] Add a Python 3.11 development environment that can run the backend tests
 - [x] Add explicit backend artifact types and retention/cleanup rules
-- [ ] Add profiling hooks for migrated workflows
+- [x] Add profiling hooks for migrated workflows
 
 ## Structure Workspace
 
@@ -75,8 +75,8 @@ This file is the working checklist for the backend modernization and performance
 - [x] Add backend API contract tests for migrated workflows
 - [x] Add Streamlit-free core workflow tests for migrated helpers
 - [x] Add regression fixtures for realistic Structure, PDOS, and MD inputs
-- [ ] Add startup validation that confirms Streamlit can reach the local backend
-- [ ] Add performance checks for first-run vs cached-run latency
+- [x] Add startup validation that confirms Streamlit can reach the local backend
+- [x] Add performance checks for first-run vs cached-run latency
 
 ## Documentation
 

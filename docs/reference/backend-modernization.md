@@ -54,6 +54,18 @@ Backend startup recovers abandoned queued/running jobs and prunes derived artifa
 
 Completed-job cache hits are recorded, missing artifacts are never returned as cache hits, and jobs whose artifacts are pruned transition to `expired`.
 
+Each completed job also records `execution_duration_ms`, measured inside the worker
+process around the scientific workflow itself. The job API returns this value together
+with `cache_hit` and `cache_hit_count`, allowing cold execution and cached retrieval to
+be compared without mixing UI rendering time into the measurement.
+
+## Startup Readiness
+
+Before loading the full Streamlit workspace, the packaged entrypoint starts or contacts
+the local backend and validates its `/health` service identity and application version.
+If readiness fails, the UI remains usable but displays a warning that backend-powered
+workflows are offline, including the backend log location in the diagnostic details.
+
 ## What Still Needs To Move
 
 Reusable export generation and the individual trajectory-analysis calculations remain candidates for later backend expansion. Archive validation and trajectory inventory now run behind the backend contract.

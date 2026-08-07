@@ -17,10 +17,10 @@ from hps.api.schemas import (
     JobStatusResponse,
     MdParseRequest,
     MdTrajectoryRequest,
-    StructurePdfRequest,
     StructurePdfCompareRequest,
-    StructureRdfRequest,
+    StructurePdfRequest,
     StructurePxrdRequest,
+    StructureRdfRequest,
     StructureSummaryRequest,
     StructureSymmetryRequest,
 )
@@ -56,12 +56,14 @@ def _serialize_job(job: dict[str, object] | None) -> JobStatusResponse:
         result_ref=job["result_ref"],
         error=job["error"],
         cache_hit=bool(job.get("cache_hit", False)),
+        cache_hit_count=int(job.get("cache_hit_count", 0)),
+        execution_duration_ms=job.get("execution_duration_ms"),
     )
 
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    return HealthResponse(status="ok", service="hps-backend")
+    return HealthResponse(status="ok", service="hps-backend", version=__version__)
 
 
 @app.post("/jobs/{workflow}", response_model=JobStatusResponse)

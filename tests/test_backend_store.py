@@ -37,12 +37,19 @@ class BackendStoreTests(unittest.TestCase):
                 content_type="application/json",
                 suffix=".json",
             )
-            store.update_job(job_id, state="completed", progress=1.0, result_ref=artifact_id)
+            store.update_job(
+                job_id,
+                state="completed",
+                progress=1.0,
+                result_ref=artifact_id,
+                execution_duration_ms=12.5,
+            )
 
             job = store.get_job(job_id)
             self.assertIsNotNone(job)
             self.assertEqual(job["state"], "completed")
             self.assertEqual(job["result_ref"], artifact_id)
+            self.assertEqual(job["execution_duration_ms"], 12.5)
             self.assertIn("Half way there.", job["messages"])
 
             artifact = store.get_artifact(artifact_id)
@@ -69,6 +76,7 @@ class BackendStoreTests(unittest.TestCase):
             self.assertIsNotNone(cached_job)
             self.assertEqual(cached_job["job_id"], job_id)
             self.assertTrue(cached_job["cache_hit"])
+            self.assertEqual(cached_job["cache_hit_count"], 1)
 
     def test_stale_jobs_are_recovered(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-08-07
+
+### Interface
+
+- Redesigned the landing page and workspace shell for a clearer, more cohesive research workflow.
+- Added layered-perovskite and spin-valley artwork to the landing-page hero.
+- Refined homepage copy and navigation cues.
+
 ### Documentation
 
 - Refreshed the screenshot gallery for the redesigned landing page and workspaces.

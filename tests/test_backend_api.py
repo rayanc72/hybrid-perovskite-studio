@@ -98,6 +98,13 @@ class BackendApiTests(unittest.TestCase):
         self.assertIn("profile", payload)
         self.assertIn("reflections", payload)
 
+    def test_health_reports_backend_version(self) -> None:
+        response = self.client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["service"], "hps-backend")
+        self.assertTrue(payload["version"])
+
     def test_electronic_pdos_job_and_cache_hit(self) -> None:
         total = base64.b64encode(b"-2 1\n0 2\n2 1\n").decode("utf-8")
         pb = base64.b64encode(b"-2 0 1 2\n0 0 2 3\n2 0 1 1\n").decode("utf-8")
@@ -115,6 +122,7 @@ class BackendApiTests(unittest.TestCase):
         self.assertEqual(response_one.status_code, 200)
         job_one = self._await_job(response_one.json()["job_id"])
         self.assertEqual(job_one["state"], "completed")
+        self.assertGreaterEqual(job_one["execution_duration_ms"], 0.0)
 
         response_two = self.client.post("/jobs/electronic_pdos", json=payload)
         self.assertEqual(response_two.status_code, 200)
@@ -122,6 +130,8 @@ class BackendApiTests(unittest.TestCase):
         self.assertEqual(job_two["state"], "completed")
         self.assertEqual(job_one["job_id"], job_two["job_id"])
         self.assertTrue(job_two["cache_hit"])
+        self.assertEqual(job_two["cache_hit_count"], 1)
+        self.assertEqual(job_two["execution_duration_ms"], job_one["execution_duration_ms"])
 
     def test_electronic_band_and_spin_contracts(self) -> None:
         band = base64.b64encode(
@@ -173,7 +183,9 @@ class _ImmediateJobManager:
         job_id = self.store.create_job(workflow=workflow, request_hash=request_hash, payload=payload)
         self.store.update_job(job_id, state="running", progress=0.1, append_message="Job accepted by the local backend.")
         try:
+            started_at = time.perf_counter()
             result = backend_jobs_module.execute_workflow(workflow, payload)
+            execution_duration_ms = (time.perf_counter() - started_at) * 1000.0
             artifact_id = self.store.create_artifact(
                 kind=workflow,
                 data=backend_jobs_module.json.dumps(result, indent=2, sort_keys=True).encode("utf-8"),
@@ -185,6 +197,7 @@ class _ImmediateJobManager:
                 state="completed",
                 progress=1.0,
                 result_ref=artifact_id,
+                execution_duration_ms=execution_duration_ms,
                 append_message="Job finished successfully.",
             )
         except Exception as exc:  # pragma: no cover - defensive

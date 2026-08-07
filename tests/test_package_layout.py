@@ -74,7 +74,7 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn('module_name = "hps.ui.app_main"', entrypoint)
         self.assertIn("importlib.reload(sys.modules[module_name])", entrypoint)
         self.assertIn("importlib.import_module(module_name)", entrypoint)
-        self.assertIn("ensure_local_backend_running()", entrypoint)
+        self.assertIn("validate_backend_connection()", entrypoint)
 
     def test_app_uses_explicit_dependencies(self) -> None:
         app_main = (ROOT / "src" / "hps" / "ui" / "app_main.py").read_text()

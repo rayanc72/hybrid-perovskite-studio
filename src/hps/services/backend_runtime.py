@@ -18,20 +18,32 @@ DEFAULT_BACKEND_PORT = 8765
 
 
 def backend_base_url() -> str:
-    return os.environ.get("HPS_BACKEND_URL", f"http://{DEFAULT_BACKEND_HOST}:{DEFAULT_BACKEND_PORT}")
+    if configured_url := os.environ.get("HPS_BACKEND_URL"):
+        return configured_url
+    host = os.environ.get("HPS_BACKEND_HOST", DEFAULT_BACKEND_HOST)
+    port = os.environ.get("HPS_BACKEND_PORT", str(DEFAULT_BACKEND_PORT))
+    return f"http://{host}:{port}"
 
 
 def _health_url() -> str:
     return f"{backend_base_url().rstrip('/')}/health"
 
 
-def backend_is_healthy(timeout: float = 0.5) -> bool:
+def backend_health(timeout: float = 0.5) -> dict[str, object] | None:
+    """Return a validated backend health payload, or ``None`` when unreachable."""
+
     try:
         with urlopen(_health_url(), timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
-            return payload.get("status") == "ok"
+            if payload.get("status") == "ok" and payload.get("service") == "hps-backend":
+                return payload
     except (OSError, URLError, TimeoutError, ValueError):
-        return False
+        pass
+    return None
+
+
+def backend_is_healthy(timeout: float = 0.5) -> bool:
+    return backend_health(timeout=timeout) is not None
 
 
 def _port_is_open(host: str, port: int) -> bool:
@@ -63,4 +75,19 @@ def ensure_local_backend_running(startup_timeout: float = 5.0) -> str:
             return backend_base_url()
         time.sleep(0.2)
 
-    raise RuntimeError("Local backend failed to become ready.")
+    raise RuntimeError(
+        f"Local backend at {backend_base_url()} failed to become ready within "
+        f"{startup_timeout:.1f} seconds. See {APP_BACKEND_LOG} for details."
+    )
+
+
+def validate_backend_connection(startup_timeout: float = 5.0) -> dict[str, object]:
+    """Start the backend when needed and verify the service identity and version."""
+
+    base_url = ensure_local_backend_running(startup_timeout=startup_timeout)
+    payload = backend_health(timeout=1.0)
+    if payload is None:
+        raise RuntimeError(f"Backend readiness validation failed for {base_url}.")
+    if not payload.get("version"):
+        raise RuntimeError(f"Backend at {base_url} did not report an application version.")
+    return {"base_url": base_url, **payload}

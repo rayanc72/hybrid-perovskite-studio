@@ -1,19 +1,24 @@
+import os
+
 import matplotlib as mpl
 import streamlit as st
 
 from hps.io.paths import APP_TMP_DIR
 from hps.ui.backend_workflows import ensure_workflow_registry
+from hps.ui.navigation import (
+    build_feature_tree,
+    render_tree_lines,
+    tool_options,
+    view_names,
+    workspace_descriptions,
+    workspace_names,
+)
 from hps.ui.workspaces.dynamics import render_dynamics_workspace
 from hps.ui.workspaces.electronic import (
     load_pdos_color_preferences,
     render_electronic_workspace,
     render_spin_texture_3d,
 )
-from hps.ui.workspaces.structure.overview import (
-    render_current_structure_card,
-    render_structure_upload_panel,
-)
-from hps.ui.workspaces.structure.navigation import render_structure_navigation
 from hps.ui.workspaces.structure.analysis.metrics import (
     render_adp_table,
     render_atomic_distances,
@@ -24,6 +29,17 @@ from hps.ui.workspaces.structure.analysis.molecules import render_molecule_analy
 from hps.ui.workspaces.structure.analysis.pdf import render_pdf_analysis
 from hps.ui.workspaces.structure.analysis.pxrd import render_pxrd_analysis
 from hps.ui.workspaces.structure.analysis.symmetry import render_symmetry_analysis
+from hps.ui.workspaces.structure.navigation import render_structure_navigation
+from hps.ui.workspaces.structure.overview import (
+    render_current_structure_card,
+    render_structure_upload_panel,
+)
+from hps.ui.workspaces.structure.state import (
+    initialize_state as initialize_structure_workspace_state,
+)
+from hps.ui.workspaces.structure.state import (
+    load_active_structure,
+)
 from hps.ui.workspaces.structure.transformations.operations import (
     render_deletion,
     render_interpolation,
@@ -32,19 +48,8 @@ from hps.ui.workspaces.structure.transformations.operations import (
     render_translation,
 )
 from hps.ui.workspaces.structure.transformations.rotation import render_rotation
-from hps.ui.workspaces.structure.state import (
-    initialize_state as initialize_structure_workspace_state,
-    load_active_structure,
-)
 from hps.ui.workspaces.utilities import render_utilities_workspace
-from hps.ui.navigation import (
-    build_feature_tree,
-    render_tree_lines,
-    tool_options,
-    view_names,
-    workspace_descriptions,
-    workspace_names,
-)
+
 
 def _debug_log(message):
     APP_TMP_DIR.mkdir(exist_ok=True)
@@ -91,6 +96,12 @@ def render_section_header(title, kicker=None, subtitle=None):
 
 st.set_page_config(page_title="Hybrid Perovskite Studio", layout="wide")
 _debug_log("startup: page config set")
+
+if backend_startup_error := os.environ.get("HPS_BACKEND_STARTUP_ERROR"):
+    st.warning(
+        "The local analysis backend is unavailable. Backend-powered workflows will "
+        f"remain offline until the service is restored. Details: {backend_startup_error}"
+    )
 
 st.markdown(
     """

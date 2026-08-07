@@ -182,8 +182,11 @@ class JobStatusResponse(BaseModel):
     result_ref: str | None = None
     error: str | None = None
     cache_hit: bool = False
+    cache_hit_count: int = 0
+    execution_duration_ms: float | None = None
 
 
 class HealthResponse(BaseModel):
     status: str
     service: str
+    version: str

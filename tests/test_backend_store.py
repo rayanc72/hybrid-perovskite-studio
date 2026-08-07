@@ -13,10 +13,40 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from hps.services.backend_jobs import persist_workflow_result
 from hps.services.backend_store import BackendStore
 
 
 class BackendStoreTests(unittest.TestCase):
+    def test_workflow_exports_are_persisted_separately_from_json_result(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            store = BackendStore(root / "jobs.sqlite3", root / "artifacts")
+            result_ref = persist_workflow_result(
+                store,
+                "md_parse",
+                {
+                    "row_count": 1,
+                    "_hps_artifacts": [
+                        {
+                            "name": "data_csv",
+                            "file_name": "md_output.csv",
+                            "content_type": "text/csv",
+                            "suffix": ".csv",
+                            "data": b"Time [ps]\n0.0\n",
+                        }
+                    ],
+                },
+            )
+
+            result_path = Path(store.get_artifact(result_ref)["path"])
+            persisted = json.loads(result_path.read_text())
+            export = persisted["exports"]["data_csv"]
+            self.assertNotIn("_hps_artifacts", persisted)
+            self.assertEqual(export["file_name"], "md_output.csv")
+            export_path = Path(store.get_artifact(export["artifact_id"])["path"])
+            self.assertEqual(export_path.read_bytes(), b"Time [ps]\n0.0\n")
+
     def test_job_lifecycle_and_artifact_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -56,6 +86,22 @@ class BackendStoreTests(unittest.TestCase):
             self.assertIsNotNone(artifact)
             self.assertEqual(artifact["content_type"], "application/json")
             self.assertTrue(Path(artifact["path"]).exists())
+
+    def test_uploaded_content_is_not_duplicated_in_job_database(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            store = BackendStore(root / "jobs.sqlite3", root / "artifacts")
+            job_id = store.create_job(
+                workflow="md_trajectory_prepare",
+                request_hash="archive-hash",
+                payload={"file_name": "trajectory.zip", "file_bytes_b64": "YWJj"},
+            )
+
+            payload = store.get_job(job_id)["payload"]
+            stored_upload = payload["file_bytes_b64"]
+            self.assertTrue(stored_upload["redacted"])
+            self.assertEqual(stored_upload["encoded_size"], 4)
+            self.assertNotIn("YWJj", json.dumps(payload))
 
     def test_completed_job_cache_lookup(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

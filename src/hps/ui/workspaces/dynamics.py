@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import base64
+import os
 import tempfile
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
@@ -40,6 +41,7 @@ from hps.domain.structure_manager import (
 )
 from hps.io.archives import UnsafeArchiveError, safe_extract_zip
 from hps.io.paths import APP_TMP_DIR
+from hps.services.backend_client import BackendClientError, get_artifact_content
 from hps.ui.backend_workflows import get_workflow_state, named_file_payload, run_workflow
 
 
@@ -199,14 +201,27 @@ def build_universe_and_analyze(timestep):
     return u
 
 
-@st.cache_data(show_spinner="Building MDA universe")
-def create_universe(file_buffer_md, timestep):
-    file_buffer_md.seek(0)
+@st.cache_resource(show_spinner="Building MDA universe", ttl=600, max_entries=1)
+def create_universe(file_bytes, timestep):
     APP_TMP_DIR.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="hps-trajectory-", dir=APP_TMP_DIR) as tmpdir:
-        safe_extract_zip(file_buffer_md, Path(tmpdir))
+        safe_extract_zip(BytesIO(file_bytes), Path(tmpdir))
         timestep = timestep / 1000
         return build_universe_from_dir(tmpdir, timestep=timestep)
+
+
+def _render_backend_download(export, *, label):
+    try:
+        content, content_type = get_artifact_content(str(export["artifact_id"]))
+    except BackendClientError as exc:
+        st.error(f"Could not retrieve backend export: {exc}")
+        return
+    st.download_button(
+        label=label,
+        data=content,
+        file_name=str(export["file_name"]),
+        mime=str(export.get("content_type") or content_type),
+    )
 
 
 
@@ -240,14 +255,16 @@ def render_dynamics_workspace(
             plot_data(df)
 
 
-            # Convert the DataFrame to a CSV string
-            csv = df.to_csv(index=False)
-            st.download_button(
-                label="Download data as CSV",
-                data=csv,
-                file_name="md_output.csv",
-                mime="text/csv"
-            )
+            data_export = md_parse_result.get("exports", {}).get("data_csv")
+            if data_export:
+                _render_backend_download(data_export, label="Download data as CSV")
+            else:
+                st.download_button(
+                    label="Download data as CSV",
+                    data=df.to_csv(index=False),
+                    file_name="md_output.csv",
+                    mime="text/csv",
+                )
 
             # Button to generate files
             if st.button("Generate files"):
@@ -303,9 +320,24 @@ def render_dynamics_workspace(
                 f"Validated {trajectory_result['frame_count']} frames "
                 f"({trajectory_result['estimated_duration_ps']:.3f} ps estimated duration)."
             )
+            trajectory_exports = trajectory_result.get("exports", {})
+            if trajectory_exports:
+                with st.expander("Trajectory exports"):
+                    _render_backend_download(
+                        trajectory_exports["metrics_csv"],
+                        label="Download frame metrics (CSV)",
+                    )
+                    _render_backend_download(
+                        trajectory_exports["first_frame"],
+                        label="Download first structure",
+                    )
+                    _render_backend_download(
+                        trajectory_exports["last_frame"],
+                        label="Download last structure",
+                    )
 
             try:
-                u = create_universe(file_buffer_md, timestep)
+                u = create_universe(file_buffer_md.getvalue(), timestep)
             except UnsafeArchiveError as exc:
                 st.error(f"Could not open trajectory archive: {exc}")
                 st.stop()
@@ -370,7 +402,7 @@ def render_dynamics_workspace(
                     cif_file = average_structure_to_cif(u, start_time)
 
                     with open(cif_file, "rb") as f:
-                        btn = st.download_button(
+                        st.download_button(
                             label="Download Average Structure",
                             data=f,
                             file_name="Average_structure.in"

@@ -52,7 +52,9 @@ Backend startup recovers abandoned queued/running jobs and prunes derived artifa
 - `HPS_ARTIFACT_MAX_BYTES` (default `2000000000`)
 - `HPS_ARTIFACT_KEEP_AT_LEAST` (default `20`)
 
-Completed-job cache hits are recorded, missing artifacts are never returned as cache hits, and jobs whose artifacts are pruned transition to `expired`.
+Completed-job cache hits are recorded, missing artifacts are never returned as cache hits, and jobs whose artifacts are pruned transition to `expired`. Uploaded base64 content is
+hashed for the request cache but redacted from persisted job metadata, preventing large
+trajectory uploads from being duplicated in SQLite.
 
 Each completed job also records `execution_duration_ms`, measured inside the worker
 process around the scientific workflow itself. The job API returns this value together
@@ -68,7 +70,11 @@ workflows are offline, including the backend log location in the diagnostic deta
 
 ## What Still Needs To Move
 
-Reusable export generation and the individual trajectory-analysis calculations remain candidates for later backend expansion. Archive validation and trajectory inventory now run behind the backend contract.
+Trajectory preparation now stores frame metrics CSV and first/last structure exports as
+separate backend artifacts. The Streamlit session receives only the compact inventory
+and artifact references, and its temporary MDAnalysis universe cache is limited to one
+entry with a ten-minute lifetime. Individual trajectory-analysis calculations remain
+candidates for later backend expansion.
 
 ## Current Architectural Rule Of Thumb
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import threading
@@ -10,6 +11,22 @@ from contextlib import closing
 from pathlib import Path
 
 from hps.io.paths import APP_BACKEND_ARTIFACTS_DIR, APP_BACKEND_DB, ensure_runtime_dirs
+
+
+def _payload_for_storage(value: object, key: str | None = None) -> object:
+    """Retain request metadata without duplicating large base64 uploads in SQLite."""
+
+    if key in {"content_b64", "file_bytes_b64"} and isinstance(value, str):
+        return {
+            "redacted": True,
+            "encoded_size": len(value),
+            "sha256": hashlib.sha256(value.encode("ascii")).hexdigest(),
+        }
+    if isinstance(value, dict):
+        return {str(item_key): _payload_for_storage(item, str(item_key)) for item_key, item in value.items()}
+    if isinstance(value, list):
+        return [_payload_for_storage(item) for item in value]
+    return value
 
 
 class BackendStore:
@@ -83,7 +100,12 @@ class BackendStore:
                 INSERT INTO jobs (job_id, workflow, request_hash, state, progress, payload_json)
                 VALUES (?, ?, ?, 'queued', 0.0, ?)
                 """,
-                (job_id, workflow, request_hash, json.dumps(payload, sort_keys=True)),
+                (
+                    job_id,
+                    workflow,
+                    request_hash,
+                    json.dumps(_payload_for_storage(payload), sort_keys=True),
+                ),
             )
         return job_id
 

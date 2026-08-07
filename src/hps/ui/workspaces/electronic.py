@@ -530,10 +530,10 @@ def render_electronic_workspace(
     if plot_bs_option:
         st.markdown(
             """
-            <div class="workspace-card">
+            <div class="section-head">
                 <div class="section-kicker">Electronic Workspace</div>
-                <div class="workspace-card-title">Band Structure Studio</div>
-                <div class="workspace-card-copy">
+                <div class="section-head-title">Band Structure Studio</div>
+                <div class="section-head-copy">
                     Band plots require <code>band*.out</code>. Brillouin-zone plots require <code>geometry.in</code>, and path labels additionally require <code>control.in</code>.
                 </div>
             </div>

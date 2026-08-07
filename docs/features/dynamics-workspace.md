@@ -6,7 +6,7 @@ The Dynamics workspace supports both direct AIMS MD output analysis and deeper t
 
 ## Where It Appears In The UI
 
-- Start page workspace card: `Dynamics`
+- Landing-page workspace: `Dynamics`
 - Workspace views:
   - `Analyze AIMS MD output`
   - `Trajectory analysis`
@@ -20,7 +20,6 @@ Capabilities:
 - parse uploaded MD output files
 - plot extracted MD data
 - export parsed results as CSV
-- generate geometry/archive outputs through the Perl helper
 
 ## Trajectory Analysis
 
@@ -70,8 +69,8 @@ This view expects a zipped trajectory directory and a timestep value. Once loade
 
 ## Code Touchpoints
 
-- UI:
-  [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py)
+- Workspace UI:
+  [src/hps/ui/workspaces/dynamics.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/dynamics.py)
 - Navigation registry:
   [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 - MD logic:

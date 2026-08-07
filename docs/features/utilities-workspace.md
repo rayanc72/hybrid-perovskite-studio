@@ -6,7 +6,7 @@ The Utilities workspace contains general-purpose tools that do not fit naturally
 
 ## Where It Appears In The UI
 
-- Start page workspace card: `Utilities`
+- Landing-page workspace: `Utilities`
 - Workspace views:
   - `Run your own script`
   - `Plot Data`
@@ -54,15 +54,15 @@ Capabilities in the current implementation include:
 ## Notes And Limitations
 
 - Utility workflows are broader and less constrained than the domain-specific workspaces.
-- Some helpers still live directly in [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py).
+- Utility workflows are implemented in a focused workspace module and coordinated by the main app.
 
 ## Code Touchpoints
 
-- UI:
-  [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py)
+- Workspace UI:
+  [src/hps/ui/workspaces/utilities.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/utilities.py)
 - Navigation registry:
   [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 
 ## Last Verified
 
-- Date: 2026-03-19
+- Date: 2026-08-07

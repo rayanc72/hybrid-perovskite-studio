@@ -81,7 +81,7 @@ results, provenance notes, and checksum-validated inputs.
 ## Docs
 
 - [Getting Started](docs/user-guide/getting-started.md)
-- [Feature Map](docs/feature-map.md)
+- [Feature Map](docs/user-guide/navigation-and-workspaces.md#feature-map)
 - [Workspace Guides](docs/index.md)
 - [Backend Modernization](docs/reference/backend-modernization.md)
 - [Guided Examples](docs/user-guide/guided-examples.md)
@@ -111,6 +111,8 @@ mkdocs build
 ![Band Structure Studio](docs/images/screenshots/band-structure-studio.png)
 
 ![Dynamics Workspace](docs/images/screenshots/dynamics-workspace.png)
+
+![Feature Map](docs/images/screenshots/feature-map.png)
 
 ## Notes
 

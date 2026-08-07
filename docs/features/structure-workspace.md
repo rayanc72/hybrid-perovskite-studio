@@ -6,7 +6,7 @@ The Structure workspace is the entry point for uploaded crystal structures. It c
 
 ## Where It Appears In The UI
 
-- Start page workspace card: `Structure`
+- Landing-page workspace: `Structure`
 - Workspace views:
   - `Overview`
   - `Analysis`
@@ -16,9 +16,9 @@ The Structure workspace is the entry point for uploaded crystal structures. It c
 
 1. Open the `Structure` workspace from the landing page.
 2. In `Overview`, upload a structure file in `.in`, `.cif`, or `.next_step` format.
-3. Review the `Current Structure` summary card.
+3. Review the `Current Structure` summary.
 4. Move to `Analysis` or `Transformations` depending on your task.
-5. Export geometry or labelled structure files from the summary card or downstream tools, including custom-labelled `geometry.in` exports for selected molecules.
+5. Export geometry or labelled structure files from the summary or downstream tools, including custom-labelled `geometry.in` exports for selected molecules.
 
 ## Overview View
 
@@ -36,9 +36,9 @@ Current behavior:
 - The uploaded structure is stored in Streamlit session state as raw bytes and reparsed on reruns.
 - The app no longer writes a labelled structure file into the repo root during upload.
 
-## Current Structure Card
+## Current Structure Summary
 
-When a structure is loaded, the workspace shows a persistent summary card with:
+When a structure is loaded, the workspace shows a persistent summary with:
 
 - file name
 - detected format
@@ -160,7 +160,7 @@ Each PDF task opens as its own workflow instead of appearing as an optional sect
 
 ## Notes And Limitations
 
-- Structure upload, active-state lifecycle, typed navigation, summary status, metadata, downloads, the initial viewer, major analysis workflows, and every transformation renderer are implemented under `src/hps/ui/workspaces/structure/`. The remaining molecule-analysis renderers stay in [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py) while the migration continues.
+- Structure upload, active-state lifecycle, typed navigation, summary status, metadata, downloads, the initial viewer, analysis workflows, and transformation renderers are implemented under `src/hps/ui/workspaces/structure/`. [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py) coordinates those focused renderers.
 - PXRD broadening is currently specified in degrees of `2theta`, even when the displayed x-axis is `q`.
 - PDF analysis uses a short-lived temporary directory when converting the active structure for DiffPy and cleans it automatically after calculation.
 - The 3D viewer is opt-in and can be heavier than the basic export paths.
@@ -184,6 +184,8 @@ Each PDF task opens as its own workflow instead of appearing as an optional sect
   [src/hps/ui/workspaces/structure/analysis/pdf.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/pdf.py)
 - Charge-analysis parsers:
   [src/hps/ui/workspaces/structure/analysis/charge.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/charge.py)
+- Molecule-analysis renderer:
+  [src/hps/ui/workspaces/structure/analysis/molecules.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/molecules.py)
 - Structure metric renderers and lattice-deviation helpers:
   [src/hps/ui/workspaces/structure/analysis/metrics.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/metrics.py)
 - Rotation workflows:
@@ -203,4 +205,4 @@ Each PDF task opens as its own workflow instead of appearing as an optional sect
 
 ## Last Verified
 
-- Date: 2026-08-06
+- Date: 2026-08-07

@@ -82,12 +82,12 @@ mpl.rcParams["font.family"] = "Arial"
 
 def render_section_header(title, kicker=None, subtitle=None):
     kicker_html = f'<div class="section-kicker">{kicker}</div>' if kicker else ""
-    subtitle_html = f'<div class="workspace-card-copy">{subtitle}</div>' if subtitle else ""
+    subtitle_html = f'<div class="section-head-copy">{subtitle}</div>' if subtitle else ""
     st.markdown(
         f"""
-        <div class="workspace-card">
+        <div class="section-head">
             {kicker_html}
-            <div class="workspace-card-title">{title}</div>
+            <div class="section-head-title">{title}</div>
             {subtitle_html}
         </div>
         """,
@@ -103,19 +103,6 @@ if backend_startup_error := os.environ.get("HPS_BACKEND_STARTUP_ERROR"):
         "The local analysis backend is unavailable. Backend-powered workflows will "
         f"remain offline until the service is restored. Details: {backend_startup_error}"
     )
-
-st.markdown(
-    """
-    <div class="app-brand-wrap">
-        <div class="app-brand-title">Hybrid <span>Perovskite Studio</span></div>
-        <div class="app-brand-subtitle">
-            Analyze, transform, and visualize hybrid perovskite structures and simulation outputs in one workspace.
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-_debug_log("startup: title rendered")
 
 # st.divider()
 # st.latex(r'''\rm Download\; a\;  structure\;  file\;  from\;  HybriD^3:''')
@@ -280,16 +267,18 @@ st.markdown(
     """
     <style>
     :root {
-        --hp-bg-soft: #f5f8f9;
+        --hp-bg-soft: #f4f7f7;
         --hp-surface: rgba(255, 255, 255, 0.96);
         --hp-surface-strong: rgba(255, 255, 255, 0.99);
-        --hp-text: #16202a;
+        --hp-text: #10232a;
         --hp-text-muted: #556371;
         --hp-text-subtle: #677787;
         --hp-border: rgba(49, 51, 63, 0.12);
-        --hp-border-strong: rgba(0, 83, 155, 0.38);
-        --hp-accent: #00539B;
-        --hp-accent-soft: rgba(0, 83, 155, 0.1);
+        --hp-border-strong: rgba(0, 122, 138, 0.42);
+        --hp-accent: #007a8a;
+        --hp-accent-bright: #65e6d4;
+        --hp-accent-soft: rgba(0, 122, 138, 0.1);
+        --hp-ink: #061b22;
         --hp-shadow-sm: 0 8px 20px rgba(15, 23, 42, 0.05);
         --hp-shadow-md: 0 14px 30px rgba(15, 23, 42, 0.07);
         --hp-shadow-lg: 0 18px 38px rgba(15, 23, 42, 0.08);
@@ -298,46 +287,51 @@ st.markdown(
         --hp-radius-lg: 24px;
     }
     .block-container {
-        padding-top: 3.5rem;
-        padding-bottom: 2.5rem;
+        padding-top: 4.5rem;
+        padding-bottom: 4rem;
+    }
+    .stApp {
+        background: var(--hp-bg-soft);
+    }
+    header[data-testid="stHeader"] {
+        background: rgba(244, 247, 247, 0.9);
+        border-bottom: 1px solid rgba(16, 35, 42, 0.06);
+        backdrop-filter: blur(12px);
     }
     .app-brand-wrap {
+        display: flex;
+        align-items: baseline;
+        gap: 0.8rem;
         width: 100%;
-        max-width: 56rem;
-        text-align: center;
-        padding: 0.85rem 1rem 1.35rem 1rem;
-        margin: 0 auto;
+        padding: 0.4rem 0 1.35rem;
         box-sizing: border-box;
-        overflow: hidden;
+        border-bottom: 1px solid var(--hp-border);
     }
     .app-brand-title {
-        display: block;
-        width: 100%;
-        font-size: clamp(1.65rem, 3.4vw, 2.45rem);
+        font-size: 1.08rem;
         font-weight: 700;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.03em;
         color: var(--hp-text);
-        line-height: 1.18;
-        max-width: 100%;
-        margin: 0 auto;
-        white-space: normal;
-        overflow-wrap: break-word;
-        word-break: normal;
-        box-sizing: border-box;
+        line-height: 1;
     }
     .app-brand-title span {
         color: var(--hp-accent);
     }
     .app-brand-subtitle {
-        margin: 0.65rem auto 0 auto;
-        max-width: 48rem;
-        font-size: 1rem;
-        line-height: 1.55;
-        color: var(--hp-text-muted);
+        font-size: 0.73rem;
+        line-height: 1;
+        color: var(--hp-text-subtle);
+        text-transform: uppercase;
+        letter-spacing: 0.11em;
     }
-    h2, h3 {
-        letter-spacing: -0.02em;
+    h1, h2, h3 {
+        letter-spacing: -0.035em;
         color: var(--hp-text);
+    }
+    h1 { font-weight: 720; }
+    h2, h3 { font-weight: 680; }
+    hr {
+        border-color: var(--hp-border) !important;
     }
     div[data-testid="stMarkdownContainer"] p {
         color: var(--hp-text-muted);
@@ -346,9 +340,10 @@ st.markdown(
         color: var(--hp-text-subtle);
     }
     div[data-testid="stAlert"] {
-        border-radius: var(--hp-radius-sm);
-        border: 1px solid var(--hp-border);
-        box-shadow: var(--hp-shadow-sm);
+        border-radius: 8px;
+        border: 0;
+        border-left: 3px solid var(--hp-accent);
+        box-shadow: none;
     }
     div[data-testid="stRadio"] > label[data-testid="stWidgetLabel"] p {
         font-size: 0.95rem;
@@ -363,19 +358,19 @@ st.markdown(
     div[data-testid="stRadio"] div[role="radiogroup"] > label {
         border: 1px solid var(--hp-border);
         border-radius: 999px;
-        padding: 0.55rem 1rem;
-        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(245, 247, 250, 0.95));
-        box-shadow: var(--hp-shadow-sm);
+        padding: 0.48rem 0.9rem;
+        background: rgba(255, 255, 255, 0.62);
+        box-shadow: none;
         transition: all 0.2s ease;
     }
     div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
         border-color: var(--hp-border-strong);
-        box-shadow: 0 10px 22px rgba(0, 83, 155, 0.12);
+        background: rgba(255, 255, 255, 0.9);
     }
     div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
-        background: linear-gradient(135deg, rgba(233, 243, 252, 1), rgba(219, 234, 248, 1));
-        border-color: rgba(0, 83, 155, 0.62);
-        box-shadow: 0 12px 26px rgba(0, 83, 155, 0.16);
+        background: var(--hp-accent-soft);
+        border-color: rgba(0, 122, 138, 0.62);
+        box-shadow: inset 0 0 0 1px rgba(0, 122, 138, 0.08);
     }
     div[data-testid="stSelectbox"] > label p,
     div[data-testid="stFileUploader"] > label p,
@@ -391,16 +386,29 @@ st.markdown(
     div[data-testid="stTextInput"] input,
     div[data-testid="stNumberInput"] input,
     div[data-testid="stTextArea"] textarea {
-        border-radius: var(--hp-radius-sm);
+        border-radius: 8px;
+    }
+    div[data-testid="stFileUploader"] section {
+        min-height: 4.5rem;
+        background: rgba(255, 255, 255, 0.52);
+        border: 1px dashed rgba(16, 35, 42, 0.22);
+    }
+    div[data-baseweb="select"] > div,
+    div[data-testid="stTextInput"] input,
+    div[data-testid="stNumberInput"] input,
+    div[data-testid="stTextArea"] textarea {
+        background: rgba(255, 255, 255, 0.72);
+        border-color: var(--hp-border);
+        box-shadow: none;
     }
     div[data-testid="stButton"] > button,
     div[data-testid="stDownloadButton"] > button {
         border-radius: 999px;
         border: 1px solid var(--hp-border);
-        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(244, 247, 249, 0.98));
+        background: rgba(255, 255, 255, 0.76);
         color: var(--hp-text);
         font-weight: 600;
-        box-shadow: var(--hp-shadow-sm);
+        box-shadow: none;
         transition: all 0.18s ease;
     }
     div[data-testid="stButton"] > button:hover,
@@ -408,25 +416,84 @@ st.markdown(
         border-color: var(--hp-border-strong);
         color: var(--hp-accent);
         transform: translateY(-1px);
-        box-shadow: var(--hp-shadow-md);
+        background: #ffffff;
+        box-shadow: 0 8px 18px rgba(16, 35, 42, 0.07);
+    }
+    .workspace-open,
+    .workspace-start {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 2.45rem;
+        border: 1px solid var(--hp-border);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.76);
+        color: var(--hp-text-muted) !important;
+        font-size: 0.86rem;
+        font-weight: 600;
+        text-decoration: none !important;
+        transition: all 0.18s ease;
+    }
+    .workspace-open:hover,
+    .workspace-start:hover {
+        border-color: var(--hp-border-strong);
+        background: #ffffff;
+        color: var(--hp-accent) !important;
+        transform: translateY(-1px);
+        box-shadow: 0 8px 18px rgba(16, 35, 42, 0.07);
+    }
+    .workspace-open.selected {
+        color: var(--hp-text-subtle) !important;
+        background: transparent;
+        cursor: default;
+    }
+    .workspace-start {
+        margin-top: 3.05rem;
     }
     .workspace-card {
-        border-radius: var(--hp-radius-md);
-        padding: 1rem 1rem 0.95rem 1rem;
-        min-height: 8.6rem;
-        border: 1px solid var(--hp-border);
-        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(246, 248, 251, 0.96));
-        box-shadow: var(--hp-shadow-md);
+        position: relative;
+        padding: 1.15rem 0.2rem 0.95rem;
+        min-height: 8rem;
+        border-top: 1px solid rgba(16, 35, 42, 0.2);
+        background: transparent;
+        transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .workspace-card::before {
+        content: "";
+        position: absolute;
+        top: -1px;
+        left: 0;
+        width: 0;
+        height: 2px;
+        background: var(--hp-accent);
+        transition: width 0.24s ease;
+    }
+    .workspace-card:hover::before {
+        width: 100%;
     }
     .workspace-card.active {
-        border-color: rgba(0, 83, 155, 0.52);
-        background: linear-gradient(135deg, rgba(236, 244, 252, 1), rgba(223, 235, 248, 1));
-        box-shadow: 0 16px 30px rgba(0, 83, 155, 0.14);
+        border-color: var(--hp-accent);
+    }
+    .workspace-card.active::before {
+        width: 100%;
+    }
+    .workspace-card.compact {
+        min-height: 4.25rem;
+        padding: 0.9rem 0.2rem 0.3rem;
+    }
+    .workspace-card.compact .workspace-card-title {
+        margin-bottom: 0;
+        font-size: 0.98rem;
+    }
+    .workspace-card.compact .workspace-card-body {
+        display: none;
     }
     .workspace-card-title {
-        font-size: 1rem;
+        font-size: 1.1rem;
         font-weight: 700;
-        margin-bottom: 0.35rem;
+        letter-spacing: -0.025em;
+        margin-bottom: 0.55rem;
         color: var(--hp-text);
     }
     .workspace-card-body {
@@ -445,13 +512,67 @@ st.markdown(
         color: var(--hp-text-subtle);
         margin-bottom: 0.15rem;
     }
+    .workspace-page-head {
+        padding: 2.7rem 0 1.25rem;
+    }
+    .workspace-page-head .workspace-header {
+        margin-bottom: 0.55rem;
+        color: var(--hp-accent);
+        font-size: 0.73rem;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+    }
+    .workspace-page-title {
+        color: var(--hp-text);
+        font-size: clamp(1.9rem, 3vw, 2.75rem);
+        font-weight: 700;
+        letter-spacing: -0.045em;
+        line-height: 1.05;
+    }
+    .workspace-page-copy {
+        max-width: 43rem;
+        margin-top: 0.55rem;
+        color: var(--hp-text-muted);
+        font-size: 0.93rem;
+        line-height: 1.55;
+    }
+    .section-kicker {
+        margin-bottom: 0.45rem;
+        color: var(--hp-accent);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }
+    .section-head {
+        margin: 1.6rem 0 1.2rem;
+        padding: 1.75rem 0 1.15rem;
+        border-top: 1px solid var(--hp-border);
+    }
+    .section-head-title {
+        color: var(--hp-text);
+        font-size: clamp(1.35rem, 2.1vw, 1.9rem);
+        font-weight: 700;
+        letter-spacing: -0.035em;
+        line-height: 1.1;
+    }
+    .section-head-copy {
+        max-width: 48rem;
+        margin-top: 0.45rem;
+        color: var(--hp-text-muted);
+        font-size: 0.9rem;
+        line-height: 1.55;
+    }
+    .workspace-card-copy {
+        max-width: 48rem;
+        color: var(--hp-text-muted);
+        font-size: 0.9rem;
+        line-height: 1.55;
+    }
     .landing-panel {
-        border-radius: var(--hp-radius-lg);
-        padding: 1.35rem 1.45rem;
-        margin: 0.35rem 0 1.1rem 0;
-        border: 1px solid var(--hp-border);
-        background: linear-gradient(135deg, rgba(252, 253, 255, 1), rgba(241, 247, 246, 1));
-        box-shadow: var(--hp-shadow-lg);
+        padding: 2.2rem 0 0.8rem;
+        margin: 0;
+        border-bottom: 1px solid var(--hp-border);
     }
     .landing-eyebrow {
         font-size: 0.78rem;
@@ -461,10 +582,11 @@ st.markdown(
         margin-bottom: 0.35rem;
     }
     .landing-title {
-        font-size: 1.35rem;
+        font-size: clamp(1.8rem, 3vw, 2.7rem);
         font-weight: 700;
+        letter-spacing: -0.045em;
         color: var(--hp-text);
-        margin-bottom: 0.35rem;
+        margin-bottom: 0.45rem;
     }
     .landing-copy {
         font-size: 0.98rem;
@@ -484,77 +606,403 @@ st.markdown(
         border-bottom-color: rgba(0, 83, 155, 0.65);
     }
     .feature-map-panel {
-        border-radius: var(--hp-radius-lg);
-        padding: 1.35rem 1.45rem;
-        margin: 0.35rem 0 1.1rem 0;
-        border: 1px solid var(--hp-border);
-        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(246, 249, 250, 0.98));
-        box-shadow: var(--hp-shadow-lg);
+        padding: 3.2rem 0 2rem;
+        margin: 0 0 1.5rem;
+        border-bottom: 1px solid var(--hp-border);
+        background: transparent;
+    }
+    .hp-hero {
+        position: relative;
+        width: 100vw;
+        min-height: min(47rem, calc(100svh - 2rem));
+        margin: -4.5rem 0 0 calc(50% - 50vw);
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        color: #f4fbfa;
+        background:
+            radial-gradient(circle at 78% 46%, rgba(31, 192, 180, 0.18), transparent 29%),
+            linear-gradient(118deg, #06191f 0%, #092c34 53%, #0a343a 100%);
+        isolation: isolate;
+    }
+    .hp-hero::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background: linear-gradient(90deg, rgba(3, 16, 21, 0.42), transparent 54%);
+        pointer-events: none;
+    }
+    .hp-hero-inner {
+        position: relative;
+        z-index: 2;
+        width: min(86rem, calc(100% - 3rem));
+        margin: 0 auto;
+        padding: 5.5rem 0 4.5rem;
+    }
+    .hp-hero-copy {
+        width: min(35rem, 48vw);
+        animation: hp-rise 0.75s cubic-bezier(.22, .85, .3, 1) both;
+    }
+    .hp-hero-kicker {
+        margin-bottom: 1.15rem;
+        color: var(--hp-accent-bright);
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+    }
+    .hp-hero-brand {
+        margin: 0;
+        color: #f7fffd;
+        font-size: clamp(3.7rem, 7.5vw, 7rem);
+        line-height: 0.88;
+        letter-spacing: -0.075em;
+        font-weight: 760;
+    }
+    .hp-hero-title {
+        margin: 1.25rem 0 0;
+        max-width: 31rem;
+        color: rgba(241, 252, 250, 0.92);
+        font-size: clamp(1.55rem, 2.5vw, 2.45rem);
+        line-height: 1.08;
+        letter-spacing: -0.04em;
+        font-weight: 520;
+    }
+    .hp-hero-copy p {
+        max-width: 30rem;
+        margin: 1.25rem 0 0;
+        color: rgba(224, 240, 238, 0.72) !important;
+        font-size: 1.02rem;
+        line-height: 1.65;
+    }
+    .hp-hero-actions {
+        display: flex;
+        align-items: center;
+        gap: 1.4rem;
+        margin-top: 2rem;
+    }
+    .hp-hero-primary,
+    .hp-hero-secondary {
+        color: #f4fbfa !important;
+        font-size: 0.88rem;
+        font-weight: 700;
+        text-decoration: none !important;
+    }
+    .hp-hero-primary {
+        display: inline-flex;
+        align-items: center;
+        min-height: 2.9rem;
+        padding: 0 1.25rem;
+        border-radius: 999px;
+        color: #062027 !important;
+        background: var(--hp-accent-bright);
+        transition: transform 0.2s ease, background 0.2s ease;
+    }
+    .hp-hero-primary:hover {
+        transform: translateY(-2px);
+        background: #84f3e4;
+    }
+    .hp-hero-secondary {
+        padding: 0.65rem 0;
+        border-bottom: 1px solid rgba(244, 251, 250, 0.36);
+    }
+    .hp-lattice {
+        position: absolute;
+        z-index: 1;
+        top: 50%;
+        right: max(-5rem, calc((100vw - 90rem) / 2));
+        width: min(57vw, 54rem);
+        height: auto;
+        opacity: 0.95;
+        transform: translateY(-50%);
+        filter: drop-shadow(0 22px 45px rgba(0, 0, 0, 0.3));
+        animation: hp-lattice-in 1.1s cubic-bezier(.22, .85, .3, 1) both,
+                   hp-float 9s ease-in-out 1.1s infinite;
+    }
+    .hp-section-label {
+        margin: 2.9rem 0 0.55rem;
+        color: var(--hp-accent);
+        font-size: 0.73rem;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+    }
+    .hp-section-title {
+        max-width: 38rem;
+        margin: 0 0 1.9rem;
+        color: var(--hp-text);
+        font-size: clamp(1.8rem, 3vw, 2.75rem);
+        line-height: 1.06;
+        letter-spacing: -0.045em;
+        font-weight: 700;
+    }
+    .hp-depth {
+        display: grid;
+        grid-template-columns: 1.15fr repeat(3, 1fr);
+        gap: 2rem;
+        margin: 3.7rem 0 1.8rem;
+        padding: 2.8rem 0 2.4rem;
+        border-top: 1px solid var(--hp-border);
+        border-bottom: 1px solid var(--hp-border);
+    }
+    .hp-depth-lead {
+        color: var(--hp-text);
+        font-size: 1.25rem;
+        line-height: 1.25;
+        letter-spacing: -0.025em;
+        font-weight: 700;
+    }
+    .hp-depth-item span {
+        display: block;
+        margin-bottom: 0.75rem;
+        color: var(--hp-accent);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+    }
+    .hp-depth-item strong {
+        display: block;
+        margin-bottom: 0.35rem;
+        color: var(--hp-text);
+        font-size: 0.98rem;
+    }
+    .hp-depth-item p {
+        margin: 0;
+        color: var(--hp-text-muted) !important;
+        font-size: 0.86rem;
+        line-height: 1.5;
+    }
+    @keyframes hp-rise {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes hp-lattice-in {
+        from { opacity: 0; transform: translate(35px, -47%) scale(0.96); }
+        to { opacity: 0.95; transform: translate(0, -50%) scale(1); }
+    }
+    @keyframes hp-float {
+        0%, 100% { transform: translateY(-50%); }
+        50% { transform: translateY(calc(-50% - 10px)); }
+    }
+    @keyframes hp-float-mobile {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+    }
+    @media (max-width: 800px) {
+        .block-container { padding-top: 4.25rem; }
+        .hp-hero {
+            min-height: 44rem;
+            margin-top: -4.25rem;
+            align-items: flex-start;
+        }
+        .hp-hero-inner {
+            width: calc(100% - 2.5rem);
+            padding-top: 5rem;
+        }
+        .hp-hero::after {
+            z-index: 0;
+            background: linear-gradient(180deg, rgba(3, 16, 21, 0.38), rgba(3, 16, 21, 0.08));
+        }
+        .hp-hero-copy { width: 100%; }
+        .hp-hero-copy p { max-width: 26rem; }
+        .hp-lattice {
+            top: auto;
+            right: -8rem;
+            bottom: -9rem;
+            width: 38rem;
+            opacity: 0.32;
+            animation: hp-float-mobile 10s ease-in-out infinite;
+        }
+        .hp-depth { grid-template-columns: 1fr; gap: 1.45rem; }
+        .app-brand-subtitle { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .hp-hero-copy, .hp-lattice { animation: none; }
+        *, *::before, *::after { scroll-behavior: auto !important; }
     }
     .feature-map-title {
-        font-size: 1.35rem;
+        font-size: clamp(2rem, 4vw, 3.4rem);
         font-weight: 700;
+        letter-spacing: -0.055em;
+        line-height: 1;
         color: var(--hp-text);
-        margin-bottom: 0.35rem;
+        margin-bottom: 0.75rem;
     }
     div[data-testid="stExpander"] details {
-        border-radius: var(--hp-radius-sm);
-        border: 1px solid var(--hp-border);
-        background: linear-gradient(180deg, var(--hp-surface), rgba(247, 249, 251, 0.98));
-        box-shadow: var(--hp-shadow-sm);
+        border-radius: 8px;
+        border: 0;
+        border-top: 1px solid var(--hp-border);
+        background: transparent;
+        box-shadow: none;
     }
     div[data-testid="stMetric"] {
-        background: linear-gradient(180deg, var(--hp-surface-strong), rgba(247, 249, 251, 0.98));
+        background: transparent;
+        border: 0;
+        border-top: 1px solid var(--hp-border);
+        border-radius: 0;
+        padding: 0.85rem 0.15rem;
+        box-shadow: none;
+    }
+    div[data-testid="stTabs"] [data-baseweb="tab-list"] {
+        gap: 1.5rem;
+        border-bottom: 1px solid var(--hp-border);
+    }
+    div[data-testid="stTabs"] [data-baseweb="tab"] {
+        padding-left: 0;
+        padding-right: 0;
+    }
+    div[data-testid="stDataFrame"],
+    div[data-testid="stTable"] {
+        overflow: hidden;
         border: 1px solid var(--hp-border);
-        border-radius: var(--hp-radius-sm);
-        padding: 0.85rem 1rem;
-        box-shadow: var(--hp-shadow-sm);
+        border-radius: 8px;
+    }
+    div[data-testid="stCode"] {
+        border-radius: 8px;
+        border: 1px solid var(--hp-border);
+        box-shadow: none;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-if "primary_section" not in st.session_state:
-    st.session_state.primary_section = None
-
 feature_map_view = st.query_params.get("view") == "feature-map"
-primary_section = st.session_state.primary_section
-start_page_clicked = False
+requested_workspace = st.query_params.get("workspace")
+primary_section = requested_workspace if requested_workspace in workspace_names() else None
+st.session_state.primary_section = primary_section
 
 if feature_map_view:
+    st.markdown(
+        """
+        <div class="app-brand-wrap">
+            <div class="app-brand-title">Hybrid <span>Perovskite Studio</span></div>
+            <div class="app-brand-subtitle">Materials analysis workspace</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.markdown(
         """
         <div class="feature-map-panel">
             <div class="landing-eyebrow">Feature Map</div>
             <div class="feature-map-title">Hybrid Perovskite Studio Feature Map</div>
             <div class="landing-copy">
-                This page shows the current workspace and tool tree. <a href="?" target="_self">Return to the main app</a>.
+                This page shows the current workspace and tool tree.
+                <a href="?" target="_self">Return to the main app</a>.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    st.markdown("\n".join(render_tree_lines(workspace_tree)))
+    feature_columns = st.columns(2)
+    for index, (workspace_name, tree) in enumerate(workspace_tree.items()):
+        with feature_columns[index % 2]:
+            st.markdown(f"### {workspace_name}")
+            st.markdown("\n".join(render_tree_lines(tree)))
+            st.divider()
     st.stop()
 
 if primary_section is None:
     st.markdown(
         """
-        <div class="landing-panel">
-            <div class="landing-eyebrow">Start Here</div>
-            <div class="landing-title">Pick the workspace that matches your task.</div>
-            <div class="landing-copy">
-                Start with Structure when you need to upload or prepare a model. Electronic, Dynamics, and Utilities stay available once you want to move into plotting, trajectory analysis, or supporting tools. You can also open the <a href="?view=feature-map" target="_blank">feature map</a> in a new tab for a full tree view.
+        <section class="hp-hero" aria-labelledby="hp-hero-title">
+            <div class="hp-hero-inner">
+                <div class="hp-hero-copy">
+                    <div class="hp-hero-kicker">Hybrid Perovskite Studio</div>
+                    <h1 class="hp-hero-brand">HPS</h1>
+                    <h2 class="hp-hero-title" id="hp-hero-title">
+                        From atomic structure to materials insight.
+                    </h2>
+                    <p>
+                        Prepare structures, interrogate simulation outputs, and move between
+                        geometry, electronic, and dynamics workflows in one research workspace.
+                    </p>
+                    <div class="hp-hero-actions">
+                        <a class="hp-hero-primary" href="#workspaces">Choose a workspace&nbsp; →</a>
+                        <a class="hp-hero-secondary" href="?view=feature-map" target="_self">
+                            Explore every tool
+                        </a>
+                    </div>
+                </div>
             </div>
+            <svg class="hp-lattice" viewBox="0 0 820 720" fill="none"
+                 xmlns="http://www.w3.org/2000/svg" role="img"
+                aria-label="Abstract hybrid perovskite crystal lattice">
+                <defs>
+                    <linearGradient id="hp-cell" x1="140" y1="100" x2="650" y2="590"
+                                    gradientUnits="userSpaceOnUse">
+                        <stop stop-color="#C8FFF7" stop-opacity=".4"/>
+                        <stop offset="1" stop-color="#56D9CB" stop-opacity=".82"/>
+                    </linearGradient>
+                    <radialGradient id="hp-a-site" cx="35%" cy="28%" r="70%">
+                        <stop stop-color="#F2FFFD"/>
+                        <stop offset=".35" stop-color="#77EBDD"/>
+                        <stop offset="1" stop-color="#087D89"/>
+                    </radialGradient>
+                    <radialGradient id="hp-b-site" cx="35%" cy="25%" r="70%">
+                        <stop stop-color="#FFF4C7"/>
+                        <stop offset=".4" stop-color="#F6C866"/>
+                        <stop offset="1" stop-color="#B46620"/>
+                    </radialGradient>
+                    <filter id="hp-glow" x="-90%" y="-90%" width="280%" height="280%">
+                        <feGaussianBlur stdDeviation="5" result="blur"/>
+                        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                    </filter>
+                </defs>
+                <g fill="rgba(79, 215, 200, .025)" stroke="url(#hp-cell)" stroke-width="2.2">
+                    <path d="M160 120H480V440H160V120Z"/>
+                    <path d="M280 220H600V540H280V220Z"/>
+                    <path d="M160 120L280 220M480 120L600 220M480 440L600 540M160 440L280 540"/>
+                </g>
+                <g stroke="#B8FFF4" stroke-width="2">
+                    <path d="M380 170L440 380L540 330L380 170Z" fill="#65E6D4" fill-opacity=".09"/>
+                    <path d="M380 170L320 280L220 330L380 170Z" fill="#65E6D4" fill-opacity=".05"/>
+                    <path d="M380 490L440 380L540 330L380 490Z" fill="#65E6D4" fill-opacity=".13"/>
+                    <path d="M380 490L320 280L220 330L380 490Z" fill="#65E6D4" fill-opacity=".07"/>
+                    <path d="M380 170L440 380L380 490L320 280L380 170Z" fill="none"/>
+                    <path d="M220 330L320 280L540 330L440 380L220 330Z" fill="none"/>
+                </g>
+                <g fill="url(#hp-a-site)" filter="url(#hp-glow)">
+                    <circle cx="160" cy="120" r="13"/><circle cx="480" cy="120" r="13"/>
+                    <circle cx="480" cy="440" r="13"/><circle cx="160" cy="440" r="13"/>
+                    <circle cx="280" cy="220" r="14"/><circle cx="600" cy="220" r="14"/>
+                    <circle cx="600" cy="540" r="14"/><circle cx="280" cy="540" r="14"/>
+                </g>
+                <g fill="#D5FFF9" filter="url(#hp-glow)">
+                    <circle cx="380" cy="170" r="8"/><circle cx="380" cy="490" r="8"/>
+                    <circle cx="220" cy="330" r="8"/><circle cx="540" cy="330" r="8"/>
+                    <circle cx="320" cy="280" r="8"/><circle cx="440" cy="380" r="8"/>
+                </g>
+                <circle cx="380" cy="330" r="24" fill="#F2B84F" opacity=".12"
+                        filter="url(#hp-glow)"/>
+                <circle cx="380" cy="330" r="16" fill="url(#hp-b-site)"/>
+            </svg>
+        </section>
+        <div id="workspaces" class="hp-section-label">Four focused workspaces</div>
+        <div class="hp-section-title">Begin with the material question in front of you.</div>
+        """,
+        unsafe_allow_html=True,
+    )
+    _debug_log("startup: landing hero rendered")
+else:
+    st.markdown(
+        """
+        <div class="app-brand-wrap">
+            <div class="app-brand-title">Hybrid <span>Perovskite Studio</span></div>
+            <div class="app-brand-subtitle">Materials analysis workspace</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+    _debug_log("startup: compact title rendered")
 
 workspace_columns = st.columns(4)
 for column, workspace_name in zip(workspace_columns, workspace_names()):
     card_class = "workspace-card active" if workspace_name == primary_section else "workspace-card"
+    if primary_section is not None:
+        card_class += " compact"
     with column:
         st.markdown(
             f"""
@@ -562,46 +1010,59 @@ for column, workspace_name in zip(workspace_columns, workspace_names()):
                 <div class="workspace-card-title">{workspace_name}</div>
                 <div class="workspace-card-body">{workspace_descriptions[workspace_name]}</div>
             </div>
+            {
+                f'<span class="workspace-open selected">{workspace_name} Selected</span>'
+                if primary_section == workspace_name
+                else f'<a class="workspace-open" href="?workspace={workspace_name}" '
+                     f'target="_self">Open {workspace_name}</a>'
+            }
             """,
             unsafe_allow_html=True,
         )
-        button_label = (
-            f"Open {workspace_name}"
-            if primary_section != workspace_name
-            else f"{workspace_name} Selected"
+
+if primary_section is None:
+    st.markdown(
+        """
+        <div class="hp-depth">
+            <div class="hp-depth-lead">One continuous path through your materials data.</div>
+            <div class="hp-depth-item">
+                <span>01</span><strong>Prepare</strong>
+                <p>
+                    Inspect structures and make reproducible molecular or lattice transformations.
+                </p>
+            </div>
+            <div class="hp-depth-item">
+                <span>02</span><strong>Interrogate</strong>
+                <p>Connect geometry with bands, density of states, spin, diffraction, and PDF.</p>
+            </div>
+            <div class="hp-depth-item">
+                <span>03</span><strong>Resolve</strong>
+                <p>Analyze trajectories and export publication-ready scientific outputs.</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+else:
+    toolbar_col1, toolbar_col2 = st.columns([6, 1.4])
+    with toolbar_col1:
+        st.markdown(
+            f"""
+            <div class="workspace-page-head">
+                <div class="workspace-header">Current workspace</div>
+                <div class="workspace-page-title">{primary_section}</div>
+                <div class="workspace-page-copy">
+                    {workspace_descriptions[primary_section]}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        if st.button(
-            button_label,
-            key=f"workspace_select_{workspace_name.lower()}",
-            use_container_width=True,
-            disabled=primary_section == workspace_name,
-        ):
-            primary_section = workspace_name
-            st.session_state.primary_section = workspace_name
-            st.rerun()
-
-toolbar_col1, toolbar_col2 = st.columns([6, 1.4])
-with toolbar_col1:
-    st.markdown('<div class="workspace-header">Navigation</div>', unsafe_allow_html=True)
-    if primary_section is None:
-        st.subheader("Choose a Workspace")
-    else:
-        st.subheader(f"{primary_section} Workspace")
-with toolbar_col2:
-    if primary_section is not None:
-        st.write("")
-        start_page_clicked = st.button(
-            "Start Page",
-            use_container_width=True,
-            key="workspace_back_to_start",
+    with toolbar_col2:
+        st.markdown(
+            '<a class="workspace-start" href="?" target="_self">Start Page</a>',
+            unsafe_allow_html=True,
         )
-
-if start_page_clicked:
-    primary_section = None
-    st.session_state.primary_section = None
-
-if primary_section is not None:
-    st.caption("Switch workspaces at any time, or return to the start page for a clean overview.")
 
 if primary_section == "Structure":
     render_structure_upload_panel(st.session_state, debug_log=_debug_log)

@@ -7,7 +7,7 @@ This documentation set is organized around the current workspace-based UI. The g
 - [Getting Started](user-guide/getting-started.md)
 - [Guided Examples](user-guide/guided-examples.md)
 - [Screenshots](user-guide/navigation-and-workspaces.md#workspace-gallery)
-- [Feature Map](feature-map.md)
+- [Feature Map](user-guide/navigation-and-workspaces.md#feature-map)
 - [Navigation and Workspaces](user-guide/navigation-and-workspaces.md)
 - [Architecture](architecture.md)
 - [Backend Modernization](reference/backend-modernization.md)

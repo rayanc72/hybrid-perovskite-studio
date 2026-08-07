@@ -221,8 +221,8 @@
 
 - Bandstructure plotting uses Matplotlib.
 - Brillouin-zone plotting uses Plotly.
-- The module combines UI logic in:
-  - [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py)
+- The workspace UI lives in:
+  - [src/hps/ui/workspaces/electronic.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/electronic.py)
 - Domain and plotting helpers live in:
   - [src/hps/domain/electronic_property.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/electronic_property.py)
 
@@ -246,4 +246,4 @@
 
 ## Last Verified
 
-- Date: 2026-03-20
+- Date: 2026-08-07

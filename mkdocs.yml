@@ -21,7 +21,6 @@ nav:
       - Navigation and Workspaces: user-guide/navigation-and-workspaces.md
       - Guided Examples: user-guide/guided-examples.md
   - Features:
-      - Feature Map: feature-map.md
       - Structure Workspace: features/structure-workspace.md
       - Electronic Workspace: features/electronic-workspace.md
       - Band Structure Studio: features/band-structure-studio.md

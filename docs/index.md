@@ -10,6 +10,7 @@ This documentation set is organized around the current workspace-based UI. The g
 - [Navigation and Workspaces](user-guide/navigation-and-workspaces.md)
 - [Architecture](architecture.md)
 - [Backend Modernization](reference/backend-modernization.md)
+- [Scientific Fixture Validation](reference/scientific-validation.md)
 - [Documentation Workflow](reference/documentation-workflow.md)
 - [Changelog](changelog.md)
 

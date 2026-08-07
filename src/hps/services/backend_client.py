@@ -6,7 +6,11 @@ import json
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from hps.services.backend_runtime import backend_base_url, backend_is_healthy, ensure_local_backend_running
+from hps.services.backend_runtime import (
+    backend_base_url,
+    backend_is_healthy,
+    ensure_local_backend_running,
+)
 
 
 class BackendClientError(RuntimeError):
@@ -63,3 +67,18 @@ def cancel_job(job_id: str) -> dict[str, object]:
 
 def get_artifact(artifact_id: str) -> dict[str, object]:
     return _request_json("GET", f"/artifacts/{artifact_id}")
+
+
+def get_artifact_content(artifact_id: str) -> tuple[bytes, str]:
+    """Download a binary or text artifact without assuming a JSON response."""
+
+    url = f"{ensure_backend_ready().rstrip('/')}/artifacts/{artifact_id}"
+    request = Request(url, headers={"Accept": "*/*"}, method="GET")
+    try:
+        with urlopen(request, timeout=30.0) as response:
+            return response.read(), response.headers.get_content_type()
+    except HTTPError as exc:
+        message = exc.read().decode("utf-8", errors="replace")
+        raise BackendClientError(f"Backend request failed: {exc.code} {message}") from exc
+    except (URLError, TimeoutError) as exc:
+        raise BackendClientError(f"Backend request failed: {exc}") from exc

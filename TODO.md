@@ -59,8 +59,8 @@ This file is the working checklist for the backend modernization and performance
 - [x] Migrate AIMS MD output parsing
 - [x] Migrate zipped trajectory validation and frame preprocessing into backend jobs
 - [x] Migrate reusable trajectory inventory and frame-metric generation
-- [ ] Replace long-lived Streamlit cache/state for trajectory analysis with backend-managed caching
-- [ ] Add backend artifact generation for reusable CSV/structure outputs from trajectory workflows
+- [x] Replace long-lived Streamlit cache/state for trajectory analysis with backend-managed caching
+- [x] Add backend artifact generation for reusable CSV/structure outputs from trajectory workflows
 
 ## UI Cleanup
 

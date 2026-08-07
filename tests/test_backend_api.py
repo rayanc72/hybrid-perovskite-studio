@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
 import sys
 import tempfile
 import time
 import unittest
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -165,6 +167,31 @@ class BackendApiTests(unittest.TestCase):
         response = self.client.post("/jobs/md_parse", json={"files": [{"name": "broken.out"}]})
         self.assertEqual(response.status_code, 422)
 
+    def test_md_trajectory_exports_are_backend_artifacts(self) -> None:
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as handle:
+            handle.writestr("frames/geometry-0001.in", "atom 0 0 0 H\n")
+            handle.writestr("frames/geometry-0002.in", "atom 0.1 0 0 H\n")
+        response = self.client.post(
+            "/jobs/md_trajectory_prepare",
+            json={
+                "file_name": "trajectory.zip",
+                "file_bytes_b64": base64.b64encode(archive.getvalue()).decode("ascii"),
+                "timestep_fs": 0.5,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        job = self._await_job(response.json()["job_id"])
+        result = self.client.get(f"/artifacts/{job['result_ref']}").json()
+        self.assertNotIn("metrics", result)
+        self.assertEqual(
+            set(result["exports"]), {"metrics_csv", "first_frame", "last_frame"}
+        )
+        metrics_ref = result["exports"]["metrics_csv"]["artifact_id"]
+        metrics_response = self.client.get(f"/artifacts/{metrics_ref}")
+        self.assertEqual(metrics_response.status_code, 200)
+        self.assertIn("time_ps", metrics_response.text)
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -186,11 +213,8 @@ class _ImmediateJobManager:
             started_at = time.perf_counter()
             result = backend_jobs_module.execute_workflow(workflow, payload)
             execution_duration_ms = (time.perf_counter() - started_at) * 1000.0
-            artifact_id = self.store.create_artifact(
-                kind=workflow,
-                data=backend_jobs_module.json.dumps(result, indent=2, sort_keys=True).encode("utf-8"),
-                content_type="application/json",
-                suffix=".json",
+            artifact_id = backend_jobs_module.persist_workflow_result(
+                self.store, workflow, result
             )
             self.store.update_job(
                 job_id,

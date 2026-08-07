@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from io import BytesIO
 import re
 import tempfile
+from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
@@ -90,7 +90,9 @@ def parse_md_outputs(files: list[dict[str, bytes]]) -> dict[str, object]:
     }
 
 
-def inspect_trajectory_archive(content: bytes, timestep_fs: float) -> dict[str, object]:
+def inspect_trajectory_archive(
+    content: bytes, timestep_fs: float, *, include_frame_exports: bool = False
+) -> dict[str, object]:
     """Validate and inventory a trajectory archive outside the Streamlit process."""
 
     if timestep_fs <= 0:
@@ -127,7 +129,7 @@ def inspect_trajectory_archive(content: bytes, timestep_fs: float) -> dict[str, 
                     "time_ps": float(frame_index * timestep_fs / 1000.0),
                 }
             )
-        return {
+        result = {
             "file_count": len(files),
             "frame_count": frame_count,
             "total_uncompressed_bytes": int(sum(sizes)),
@@ -137,3 +139,49 @@ def inspect_trajectory_archive(content: bytes, timestep_fs: float) -> dict[str, 
             "metrics": metrics,
             "atom_count": int(expected_atoms or 0),
         }
+        if include_frame_exports:
+            result["_frame_exports"] = [
+                (geometry_files[0].name, geometry_files[0].suffix, geometry_files[0].read_bytes()),
+                (
+                    geometry_files[-1].name,
+                    geometry_files[-1].suffix,
+                    geometry_files[-1].read_bytes(),
+                ),
+            ]
+        return result
+
+
+def prepare_trajectory_exports(
+    content: bytes, timestep_fs: float
+) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Build a compact trajectory summary and reusable downloadable artifacts."""
+
+    inventory = inspect_trajectory_archive(
+        content, timestep_fs, include_frame_exports=True
+    )
+    metrics = list(inventory.pop("metrics"))
+    frame_exports = list(inventory.pop("_frame_exports"))
+    exports: list[dict[str, object]] = [
+        {
+            "name": "metrics_csv",
+            "file_name": "trajectory_metrics.csv",
+            "content_type": "text/csv",
+            "suffix": ".csv",
+            "data": pd.DataFrame(metrics).to_csv(index=False).encode("utf-8"),
+        }
+    ]
+
+    for export_name, (file_name, suffix, data) in zip(
+        ("first_frame", "last_frame"), frame_exports
+    ):
+        exports.append(
+            {
+                "name": export_name,
+                "file_name": file_name,
+                "content_type": "text/plain",
+                "suffix": suffix or ".txt",
+                "data": data,
+            }
+        )
+
+    return inventory, exports

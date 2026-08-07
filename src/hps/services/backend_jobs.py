@@ -10,12 +10,14 @@ import time
 from concurrent.futures import Executor, Future, ProcessPoolExecutor
 from threading import Lock
 
+import pandas as pd
+
 from hps.core.electronic import (
     parse_band_payload,
     parse_pdos_payload,
     parse_spin_texture_payload,
 )
-from hps.core.md import inspect_trajectory_archive, parse_md_outputs
+from hps.core.md import parse_md_outputs, prepare_trajectory_exports
 from hps.core.structure import (
     calculate_space_group_sweep,
     compare_pdf_profiles,
@@ -29,6 +31,10 @@ from hps.services.backend_store import BackendStore
 
 class UnknownWorkflowError(ValueError):
     """Raised when a caller requests an unknown backend workflow."""
+
+
+INTERNAL_ARTIFACTS_KEY = "_hps_artifacts"
+CACHE_SCHEMA_VERSION = "2"
 
 
 def _run_structure_summary(payload: dict[str, object]) -> dict[str, object]:
@@ -137,12 +143,26 @@ def _run_electronic_spin(payload: dict[str, object]) -> dict[str, object]:
 
 def _run_md_parse(payload: dict[str, object]) -> dict[str, object]:
     files = _decode_named_files(list(payload.get("files", [])))
-    return parse_md_outputs(files)
+    result = parse_md_outputs(files)
+    result[INTERNAL_ARTIFACTS_KEY] = [
+        {
+            "name": "data_csv",
+            "file_name": "md_output.csv",
+            "content_type": "text/csv",
+            "suffix": ".csv",
+            "data": pd.DataFrame(result["table"], columns=result["columns"])
+            .to_csv(index=False)
+            .encode("utf-8"),
+        }
+    ]
+    return result
 
 
 def _run_md_trajectory_prepare(payload: dict[str, object]) -> dict[str, object]:
     content = base64.b64decode(str(payload["file_bytes_b64"]).encode("utf-8"))
-    return inspect_trajectory_archive(content, float(payload["timestep_fs"]))
+    result, exports = prepare_trajectory_exports(content, float(payload["timestep_fs"]))
+    result[INTERNAL_ARTIFACTS_KEY] = exports
+    return result
 
 
 WORKFLOW_REGISTRY = {
@@ -185,6 +205,44 @@ def execute_workflow_profiled(
     return result, duration_ms
 
 
+def persist_workflow_result(
+    store: BackendStore, workflow: str, result: dict[str, object]
+) -> str:
+    """Persist a workflow's downloads and compact JSON result as backend artifacts."""
+
+    persisted_result = dict(result)
+    artifact_payloads = list(persisted_result.pop(INTERNAL_ARTIFACTS_KEY, []))
+    exports: dict[str, dict[str, object]] = {}
+    for artifact_payload in artifact_payloads:
+        name = str(artifact_payload["name"])
+        data = artifact_payload["data"]
+        if not isinstance(data, bytes):
+            raise TypeError(f"Workflow export {name!r} must contain bytes.")
+        content_type = str(artifact_payload.get("content_type", "application/octet-stream"))
+        artifact_id = store.create_artifact(
+            kind=f"{workflow}:{name}",
+            data=data,
+            content_type=content_type,
+            suffix=str(artifact_payload.get("suffix", ".bin")),
+        )
+        exports[name] = {
+            "artifact_id": artifact_id,
+            "file_name": str(artifact_payload.get("file_name", name)),
+            "content_type": content_type,
+            "size_bytes": len(data),
+        }
+    if exports:
+        persisted_result["exports"] = exports
+
+    artifact_type = ARTIFACT_TYPES[workflow]
+    return store.create_artifact(
+        kind=workflow,
+        data=json.dumps(persisted_result, indent=2, sort_keys=True).encode("utf-8"),
+        content_type=artifact_type["content_type"],
+        suffix=artifact_type["suffix"],
+    )
+
+
 class BackendJobManager:
     """Queue local jobs, persist state, and reuse cached completed results."""
 
@@ -213,6 +271,8 @@ class BackendJobManager:
     def compute_request_hash(self, workflow: str, payload: dict[str, object]) -> str:
         normalized_payload = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         digest = hashlib.sha256()
+        digest.update(CACHE_SCHEMA_VERSION.encode("utf-8"))
+        digest.update(b":")
         digest.update(workflow.encode("utf-8"))
         digest.update(b":")
         digest.update(normalized_payload.encode("utf-8"))
@@ -265,13 +325,7 @@ class BackendJobManager:
     def _finalize_job(self, job_id: str, workflow: str, future: Future) -> None:
         try:
             result, execution_duration_ms = future.result()
-            artifact_type = ARTIFACT_TYPES[workflow]
-            artifact_id = self.store.create_artifact(
-                kind=workflow,
-                data=json.dumps(result, indent=2, sort_keys=True).encode("utf-8"),
-                content_type=artifact_type["content_type"],
-                suffix=artifact_type["suffix"],
-            )
+            artifact_id = persist_workflow_result(self.store, workflow, result)
             self.store.update_job(
                 job_id,
                 state="completed",

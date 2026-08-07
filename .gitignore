@@ -19,6 +19,7 @@ site/
 
 tmp/
 output/
+TODO.md
 docs/HPS_App_Copy_Map.json
 docs/HPS_App_Copy_Review.docx
 ~$*.docx

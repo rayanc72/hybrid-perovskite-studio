@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import tempfile
 import warnings
-from itertools import combinations_with_replacement
 from io import BytesIO
+from itertools import combinations_with_replacement
 
 import numpy as np
 import pandas as pd
@@ -31,7 +31,9 @@ def get_file_format(file_name: str) -> str:
 
 def read_structure_bytes(file_bytes: bytes, file_format: str):
     buffer = BytesIO(file_bytes)
-    with tempfile.NamedTemporaryFile(mode="w+b", suffix=f".{file_format}", delete=False) as temp_file:
+    with tempfile.NamedTemporaryFile(
+        mode="w+b", suffix=f".{file_format}", delete=False
+    ) as temp_file:
         temp_file.write(buffer.getvalue())
         temp_file.flush()
         if file_format == "cif":
@@ -49,7 +51,9 @@ def read_structure_bytes(file_bytes: bytes, file_format: str):
     return atoms
 
 
-def detect_molecules(atoms, exceptions: list[tuple[str, str]] | None = None, bond_padding: float = 0.0):
+def detect_molecules(
+    atoms, exceptions: list[tuple[str, str]] | None = None, bond_padding: float = 0.0
+):
     exceptions = exceptions if exceptions else []
 
     element_tolerance = [
@@ -173,7 +177,9 @@ def calculate_space_group_sweep(
                     category=DeprecationWarning,
                     module=r"spglib\.spglib",
                 )
-                analyzer = SpacegroupAnalyzer(structure, symprec=float(symprec), angle_tolerance=float(angle_tol))
+                analyzer = SpacegroupAnalyzer(
+                    structure, symprec=float(symprec), angle_tolerance=float(angle_tol)
+                )
                 space_group_symbol = analyzer.get_space_group_symbol()
                 point_group_symbol = analyzer.get_point_group_symbol()
             if space_group_symbol is not None:
@@ -270,7 +276,9 @@ def simulate_pxrd_from_upload(
 
     if peak_positions.size:
         if fwhm == 0:
-            nearest_indices = np.abs(two_theta_grid[:, None] - peak_positions[None, :]).argmin(axis=0)
+            nearest_indices = np.abs(two_theta_grid[:, None] - peak_positions[None, :]).argmin(
+                axis=0
+            )
             np.add.at(profile_intensity, nearest_indices, peak_intensities)
         else:
             sigma = float(fwhm) / (2.0 * np.sqrt(2.0 * np.log(2.0)))

@@ -32,6 +32,16 @@
 
 ## Unreleased
 
+- Added redistributable, checksum-validated scientific regression data for Structure,
+  PDOS, band structure, spin texture, and a centered 50 fs molecular-dynamics slice.
+- Added provenance-aware guided Structure, Electronic, and Dynamics projects that can
+  be listed and bundled with the `hps-examples` command.
+- Added backend version-readiness checks, cache and execution timing metrics, trajectory
+  artifact exports, retention rules, and stale-job recovery.
+- Added automated Streamlit startup/navigation smoke coverage and a browser-driven
+  release acceptance workflow.
+- Strengthened lint checks for the maintained package layers and applied consistent
+  formatting across those layers.
 - Split the remaining Structure, Electronic, Dynamics, and Utilities renderers out of `app_main.py`, leaving it as the workspace coordinator.
 - Added backend PDF simulation, bandstructure parsing, spin-texture parsing, and trajectory archive preprocessing contracts.
 - Added artifact-size retention, stale-job recovery, cache-hit accounting, and missing-artifact cache safeguards.

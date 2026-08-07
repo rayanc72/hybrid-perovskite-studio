@@ -75,8 +75,8 @@ _debug_log("startup: loaded explicit packaged dependencies")
 # from diffpy.srreal.structureadapter import loadStructure
 # from diffpy.srreal.pdfcalculator import DebyePDFCalculator
 # from pymatgen.io.cif import CifWriter
-mpl.rcParams['pdf.fonttype'] = 42
-mpl.rcParams['ps.fonttype'] = 42
+mpl.rcParams["pdf.fonttype"] = 42
+mpl.rcParams["ps.fonttype"] = 42
 mpl.rcParams["font.family"] = "Arial"
 
 
@@ -93,6 +93,7 @@ def render_section_header(title, kicker=None, subtitle=None):
         """,
         unsafe_allow_html=True,
     )
+
 
 st.set_page_config(page_title="Hybrid Perovskite Studio", layout="wide")
 _debug_log("startup: page config set")
@@ -123,108 +124,107 @@ _debug_log("startup: title rendered")
 #     col1, col2, col3 = st.columns([3,0.5,3])
 
 
-    # conn = st.connection("1107_dump", type="sql", autocommit=True) ## Updated database on 08/28/2024
-    # systems = conn.query("select * from materials_system")
-    #
-    # # Taking user input for the search string, system ID, and dataset ID
-    # user_input = st.text_input("Enter search string (e.g., BA2PbI4):")
-    # system_id = st.text_input("Enter system ID:")
-    # dataset_id = st.text_input("Enter dataset ID:")
-    #
-    # structure_file_path = None
-    #
-    # if dataset_id:  # If dataset ID is provided, it takes precedence
-    #     try:
-    #         zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
-    #         response = requests.get(zip_url, stream=True)
-    #         response.raise_for_status()
-    #
-    #         # Writing the zip file to a temporary location and allowing the user to download
-    #         zip_data = response.content
-    #         file_content, file_extension = extract_structure_file(zip_data)
-    #         if file_content:
-    #             # Use st.download_button to allow the user to download the file
-    #             st.download_button(
-    #                 label=f"Download {dataset_id}{file_extension}",
-    #                 data=file_content,
-    #                 file_name=f"{dataset_id}{file_extension}",
-    #                 mime=f"text/{file_extension[1:]}"  # assuming mime type to be text/in or text/cif
-    #             )
-    #
-    #
-    #     except requests.exceptions.RequestException as err:
-    #         st.write(f"Error fetching dataset: {err}")
-    #
-    #
-    # elif system_id:  # Next priority is system ID
-    #
-    #     try:
-    #
-    #         matched_df = systems[systems['id'] == int(system_id)][['id', 'compound_name', 'formula']]
-    #
-    #         if not matched_df.empty:
-    #
-    #             st.write(f"Information for ID '{system_id}':")
-    #
-    #             st.dataframe(matched_df, hide_index=True, use_container_width=True)
-    #
-    #             dataset_results = fetch_materials_datasets(conn, int(system_id))
-    #
-    #             # Safely format the list of integers for the SQL query
-    #
-    #             ref_ids = dataset_results['reference_id'].tolist()
-    #
-    #             ref_ids_string = ','.join(
-    #                 map(str, ref_ids))  # Converts each id to a string and then joins them with commas
-    #
-    #             # Formulate the SQL query with the ref_ids_string
-    #
-    #             reference_query = f"SELECT `id`,`title`, `year`, `doi_isbn` FROM materials_reference WHERE `id` IN ({ref_ids_string})"
-    #
-    #             reference_data = conn.query(reference_query)
-    #
-    #             # Convert the result to a DataFrame
-    #
-    #             reference_df = pd.DataFrame(reference_data, columns=['id', 'title', 'year', 'doi_isbn'])
-    #             reference_df.rename(columns={'id': 'reference_id'}, inplace=True)
-    #
-    #
-    #             # Merge the dataframes on 'reference_id'
-    #
-    #             merged_results = pd.merge(dataset_results, reference_df, on='reference_id',
-    #                                       how='left')
-    #
-    #
-    #             st.write("Associated structure datasets with DOIs:")
-    #
-    #             st.dataframe(merged_results[['id', 'space_group', 'title', 'year', 'doi_isbn']], hide_index=True,
-    #                          use_container_width=True)
-    #
-    #         else:
-    #
-    #             st.write(f"No results found for ID '{system_id}'.")
-    #
-    #     except ValueError:
-    #
-    #         st.write("Please enter a valid ID.")
-    # elif user_input:  # Only check for search string if ID is not provided
-    #     matched_ids = search_database(systems, user_input)
-    #     matched_df = systems[systems['id'].isin(matched_ids)][['id', 'compound_name', 'formula']]
-    #
-    #     # Initiate a column in matched_df "Structure exists" with values "No"
-    #     matched_df['Structure exists'] = 'No'
-    #
-    #     # for each id in matched_df run fetch_materials_datasets to get results. If result is not empty, update the "Structure exists" value to "Yes"
-    #     for index, row in matched_df.iterrows():
-    #         # Fetch materials datasets using the provided ID and check if any data exists
-    #         result = fetch_materials_datasets(conn, row['id'])
-    #         # If the result is not empty, update the "Structure exists" column for this row to "Yes"
-    #         if not result.empty:
-    #             matched_df.at[index, 'Structure exists'] = 'Yes'
-    #
-    #     st.write(f"Information for matched IDs with '{user_input}':")
-    #     st.dataframe(matched_df, hide_index=True, use_container_width=True)
-
+# conn = st.connection("1107_dump", type="sql", autocommit=True) ## Updated database on 08/28/2024
+# systems = conn.query("select * from materials_system")
+#
+# # Taking user input for the search string, system ID, and dataset ID
+# user_input = st.text_input("Enter search string (e.g., BA2PbI4):")
+# system_id = st.text_input("Enter system ID:")
+# dataset_id = st.text_input("Enter dataset ID:")
+#
+# structure_file_path = None
+#
+# if dataset_id:  # If dataset ID is provided, it takes precedence
+#     try:
+#         zip_url = f"https://materials.hybrid3.duke.edu/materials/datasets/{dataset_id}/files"
+#         response = requests.get(zip_url, stream=True)
+#         response.raise_for_status()
+#
+#         # Writing the zip file to a temporary location and allowing the user to download
+#         zip_data = response.content
+#         file_content, file_extension = extract_structure_file(zip_data)
+#         if file_content:
+#             # Use st.download_button to allow the user to download the file
+#             st.download_button(
+#                 label=f"Download {dataset_id}{file_extension}",
+#                 data=file_content,
+#                 file_name=f"{dataset_id}{file_extension}",
+#                 mime=f"text/{file_extension[1:]}"  # assuming mime type to be text/in or text/cif
+#             )
+#
+#
+#     except requests.exceptions.RequestException as err:
+#         st.write(f"Error fetching dataset: {err}")
+#
+#
+# elif system_id:  # Next priority is system ID
+#
+#     try:
+#
+#         matched_df = systems[systems['id'] == int(system_id)][['id', 'compound_name', 'formula']]
+#
+#         if not matched_df.empty:
+#
+#             st.write(f"Information for ID '{system_id}':")
+#
+#             st.dataframe(matched_df, hide_index=True, use_container_width=True)
+#
+#             dataset_results = fetch_materials_datasets(conn, int(system_id))
+#
+#             # Safely format the list of integers for the SQL query
+#
+#             ref_ids = dataset_results['reference_id'].tolist()
+#
+#             ref_ids_string = ','.join(
+#                 map(str, ref_ids))  # Converts each id to a string and then joins them with commas
+#
+#             # Formulate the SQL query with the ref_ids_string
+#
+#             reference_query = f"SELECT `id`,`title`, `year`, `doi_isbn` FROM materials_reference WHERE `id` IN ({ref_ids_string})"
+#
+#             reference_data = conn.query(reference_query)
+#
+#             # Convert the result to a DataFrame
+#
+#             reference_df = pd.DataFrame(reference_data, columns=['id', 'title', 'year', 'doi_isbn'])
+#             reference_df.rename(columns={'id': 'reference_id'}, inplace=True)
+#
+#
+#             # Merge the dataframes on 'reference_id'
+#
+#             merged_results = pd.merge(dataset_results, reference_df, on='reference_id',
+#                                       how='left')
+#
+#
+#             st.write("Associated structure datasets with DOIs:")
+#
+#             st.dataframe(merged_results[['id', 'space_group', 'title', 'year', 'doi_isbn']], hide_index=True,
+#                          use_container_width=True)
+#
+#         else:
+#
+#             st.write(f"No results found for ID '{system_id}'.")
+#
+#     except ValueError:
+#
+#         st.write("Please enter a valid ID.")
+# elif user_input:  # Only check for search string if ID is not provided
+#     matched_ids = search_database(systems, user_input)
+#     matched_df = systems[systems['id'].isin(matched_ids)][['id', 'compound_name', 'formula']]
+#
+#     # Initiate a column in matched_df "Structure exists" with values "No"
+#     matched_df['Structure exists'] = 'No'
+#
+#     # for each id in matched_df run fetch_materials_datasets to get results. If result is not empty, update the "Structure exists" value to "Yes"
+#     for index, row in matched_df.iterrows():
+#         # Fetch materials datasets using the provided ID and check if any data exists
+#         result = fetch_materials_datasets(conn, row['id'])
+#         # If the result is not empty, update the "Structure exists" column for this row to "Yes"
+#         if not result.empty:
+#             matched_df.at[index, 'Structure exists'] = 'Yes'
+#
+#     st.write(f"Information for matched IDs with '{user_input}':")
+#     st.dataframe(matched_df, hide_index=True, use_container_width=True)
 
 
 current_atoms = None
@@ -554,11 +554,7 @@ if primary_section is None:
 
 workspace_columns = st.columns(4)
 for column, workspace_name in zip(workspace_columns, workspace_names()):
-    card_class = (
-        "workspace-card active"
-        if workspace_name == primary_section
-        else "workspace-card"
-    )
+    card_class = "workspace-card active" if workspace_name == primary_section else "workspace-card"
     with column:
         st.markdown(
             f"""
@@ -668,7 +664,11 @@ elif primary_section == "Utilities":
 
 uploaded_structure_name = st.session_state.uploaded_structure_name
 uploaded_structure_bytes = st.session_state.uploaded_structure_bytes
-if uploaded_structure_name and uploaded_structure_bytes is not None and primary_section == "Structure":
+if (
+    uploaded_structure_name
+    and uploaded_structure_bytes is not None
+    and primary_section == "Structure"
+):
     try:
         _debug_log(f"upload: before initialize_structure file={uploaded_structure_name}")
         current_atoms, current_molecules, current_modified_symbols = load_active_structure(
@@ -706,7 +706,9 @@ structure_tool_selected = any(
     ]
 )
 if current_atoms is None and structure_tool_selected:
-    st.warning("Load a structure from Structure -> Overview before using structure-dependent tools.")
+    st.warning(
+        "Load a structure from Structure -> Overview before using structure-dependent tools."
+    )
     symmetry_option = False
     com_option = False
     dm_option = False
@@ -822,7 +824,6 @@ if current_atoms is not None:
             workflow_registry=_get_backend_workflow_registry(),
             render_section_header=render_section_header,
         )
-
 
     if distance_option:
         render_atomic_distances(

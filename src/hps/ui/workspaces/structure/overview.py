@@ -28,7 +28,9 @@ def render_structure_upload_panel(
     debug_log: Callable[[str], None] | None = None,
 ) -> None:
     log = debug_log or (lambda _message: None)
-    st.caption("Upload or replace the active structure from anywhere inside the Structure workspace.")
+    st.caption(
+        "Upload or replace the active structure from anywhere inside the Structure workspace."
+    )
     structure_upload = st.file_uploader(
         "Upload a structure file (aims geometry, CIF, or next_step)",
         type=["in", "cif", "next_step"],

@@ -32,5 +32,6 @@ nav:
       - Backend Modernization: reference/backend-modernization.md
       - Scientific Fixture Validation: reference/scientific-validation.md
       - Release Acceptance: reference/release-acceptance.md
+      - Known Limitations: reference/known-limitations.md
       - Documentation Workflow: reference/documentation-workflow.md
       - Changelog: changelog.md

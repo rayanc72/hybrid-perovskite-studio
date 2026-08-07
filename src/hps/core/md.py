@@ -73,7 +73,9 @@ def parse_md_outputs(files: list[dict[str, bytes]]) -> dict[str, object]:
 
     sorted_files = sorted(
         files,
-        key=lambda item: int(re.findall(r"\d+", item["name"])[0]) if re.findall(r"\d+", item["name"]) else 0,
+        key=lambda item: (
+            int(re.findall(r"\d+", item["name"])[0]) if re.findall(r"\d+", item["name"]) else 0
+        ),
     )
 
     for file in sorted_files:
@@ -102,8 +104,7 @@ def inspect_trajectory_archive(
         paths = safe_extract_zip(BytesIO(content), root)
         files = sorted(path for path in paths if path.is_file())
         geometry_files = [
-            path for path in files
-            if path.suffix.lower() in {".in", ".cif", ".xyz", ".pdb"}
+            path for path in files if path.suffix.lower() in {".in", ".cif", ".xyz", ".pdb"}
         ]
         if not geometry_files:
             raise ValueError("Trajectory archive contains no supported structure frames.")
@@ -156,9 +157,7 @@ def prepare_trajectory_exports(
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
     """Build a compact trajectory summary and reusable downloadable artifacts."""
 
-    inventory = inspect_trajectory_archive(
-        content, timestep_fs, include_frame_exports=True
-    )
+    inventory = inspect_trajectory_archive(content, timestep_fs, include_frame_exports=True)
     metrics = list(inventory.pop("metrics"))
     frame_exports = list(inventory.pop("_frame_exports"))
     exports: list[dict[str, object]] = [
@@ -171,9 +170,7 @@ def prepare_trajectory_exports(
         }
     ]
 
-    for export_name, (file_name, suffix, data) in zip(
-        ("first_frame", "last_frame"), frame_exports
-    ):
+    for export_name, (file_name, suffix, data) in zip(("first_frame", "last_frame"), frame_exports):
         exports.append(
             {
                 "name": export_name,

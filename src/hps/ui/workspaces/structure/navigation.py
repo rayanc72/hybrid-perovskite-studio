@@ -88,7 +88,9 @@ def render_structure_navigation() -> StructureSelection:
     mode = st.radio("View", options=view_names("Structure"), horizontal=True)
 
     if mode == "Overview":
-        st.info("Review the current structure, then move into analysis or transformations as needed.")
+        st.info(
+            "Review the current structure, then move into analysis or transformations as needed."
+        )
         return StructureSelection(mode=mode)
 
     if mode == "Analysis":

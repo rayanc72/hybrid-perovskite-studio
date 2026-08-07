@@ -103,9 +103,7 @@ def parse_experimental_pxrd(
         raise ValueError("No numeric data rows were found.")
 
     if source_axis == "2theta" and target_axis == "q":
-        frame["x"] = (
-            4.0 * np.pi * np.sin(np.radians(frame["x"].to_numpy() / 2.0)) / wavelength
-        )
+        frame["x"] = 4.0 * np.pi * np.sin(np.radians(frame["x"].to_numpy() / 2.0)) / wavelength
     elif source_axis == "q" and target_axis == "2theta":
         argument = wavelength * frame["x"].to_numpy() / (4.0 * np.pi)
         if np.any(np.abs(argument) > 1.0):
@@ -147,13 +145,34 @@ def publication_pxrd_pdf_bytes(
     reflection_intensity=None,
 ):
     figure, axis = plt.subplots(figsize=(8, 6), constrained_layout=True)
-    axis.plot(x_values, simulated_intensity, color="black", linewidth=1.8, label="Simulated", zorder=3)
+    axis.plot(
+        x_values, simulated_intensity, color="black", linewidth=1.8, label="Simulated", zorder=3
+    )
     if experimental_x is not None and experimental_intensity is not None:
-        axis.plot(experimental_x, experimental_intensity, color="#c23b22", linewidth=1.5, label="Experimental", zorder=2)
+        axis.plot(
+            experimental_x,
+            experimental_intensity,
+            color="#c23b22",
+            linewidth=1.5,
+            label="Experimental",
+            zorder=2,
+        )
     if reflection_x is not None and reflection_intensity is not None:
-        axis.vlines(reflection_x, 0.0, reflection_intensity, color="#4169e1", linewidth=0.8, alpha=0.65, label="Bragg reflections", zorder=1)
+        axis.vlines(
+            reflection_x,
+            0.0,
+            reflection_intensity,
+            color="#4169e1",
+            linewidth=0.8,
+            alpha=0.65,
+            label="Bragg reflections",
+            zorder=1,
+        )
 
-    axis.set_xlabel(r"$q\ (\mathrm{\AA}^{-1})$" if x_label == "q (A^-1)" else r"$2\theta\ (^\circ)$", fontsize=16)
+    axis.set_xlabel(
+        r"$q\ (\mathrm{\AA}^{-1})$" if x_label == "q (A^-1)" else r"$2\theta\ (^\circ)$",
+        fontsize=16,
+    )
     axis.set_ylabel(y_label, fontsize=16)
     axis.tick_params(axis="both", which="major", labelsize=13, direction="in", length=8, width=1.8)
     axis.minorticks_off()
@@ -168,7 +187,9 @@ def publication_pxrd_pdf_bytes(
         secondary.set_xticks(tick_values)
         secondary.set_xticklabels(tick_text)
         secondary.set_xlabel(r"$d\ (\mathrm{\AA})$", fontsize=16)
-        secondary.tick_params(axis="x", which="major", labelsize=13, direction="in", length=8, width=1.8)
+        secondary.tick_params(
+            axis="x", which="major", labelsize=13, direction="in", length=8, width=1.8
+        )
         secondary.minorticks_off()
         for spine in secondary.spines.values():
             spine.set_linewidth(1.8)
@@ -193,7 +214,9 @@ def render_pxrd_analysis(
         kicker="Structure Workspace",
         subtitle="Simulate a PXRD pattern for the loaded structure with configurable wavelength, broadening, and axis units.",
     )
-    wavelength = st.number_input("Wavelength (A)", min_value=0.01, value=1.5406, step=0.0001, format="%.4f")
+    wavelength = st.number_input(
+        "Wavelength (A)", min_value=0.01, value=1.5406, step=0.0001, format="%.4f"
+    )
     x_axis = st.radio(
         "Plot x-axis as",
         options=("2theta", "q"),
@@ -214,7 +237,11 @@ def render_pxrd_analysis(
             key="pxrd_range_max_2theta" if x_axis == "2theta" else "pxrd_range_max_q",
         )
     fwhm = st.number_input(
-        "FWHM broadening (deg)", min_value=0.0, value=0.1, step=0.01, format="%.2f",
+        "FWHM broadening (deg)",
+        min_value=0.0,
+        value=0.1,
+        step=0.01,
+        format="%.2f",
         help="Applied in degrees of 2theta before optional q conversion. Set to 0 for unbroadened intensities.",
     )
     show_reflections = st.checkbox("Show Bragg reflections", value=False)
@@ -228,7 +255,9 @@ def render_pxrd_analysis(
     experimental_axis = None
     if experimental_file is not None:
         experimental_axis = st.radio(
-            "Experimental x-axis units", options=("2theta", "q"), horizontal=True,
+            "Experimental x-axis units",
+            options=("2theta", "q"),
+            horizontal=True,
             format_func=lambda value: "2theta (deg)" if value == "2theta" else "q (A^-1)",
         )
 
@@ -237,12 +266,20 @@ def render_pxrd_analysis(
         range_max = float(range_max_text)
         two_theta_range = requested_two_theta_range(x_axis, range_min, range_max, wavelength)
     except ValueError as exc:
-        st.error(str(exc) if "range" in str(exc) else "Enter numeric values for the selected x-axis range.")
+        st.error(
+            str(exc)
+            if "range" in str(exc)
+            else "Enter numeric values for the selected x-axis range."
+        )
         st.stop()
 
     payload = build_pxrd_payload(
-        state["file_name"], uploaded_structure_bytes, wavelength=wavelength,
-        two_theta_range=two_theta_range, fwhm=fwhm, x_axis=x_axis,
+        state["file_name"],
+        uploaded_structure_bytes,
+        wavelength=wavelength,
+        two_theta_range=two_theta_range,
+        fwhm=fwhm,
+        x_axis=x_axis,
     )
     state_key = f"structure_pxrd::{state['file_name']}"
     result = run_workflow(registry, "structure_pxrd", payload, state_key, start=True)
@@ -264,8 +301,11 @@ def render_pxrd_analysis(
     if experimental_file is not None:
         try:
             experimental = parse_experimental_pxrd(
-                experimental_file.getvalue(), source_axis=experimental_axis, target_axis=x_axis,
-                wavelength=wavelength, x_column=x_column,
+                experimental_file.getvalue(),
+                source_axis=experimental_axis,
+                target_axis=x_axis,
+                wavelength=wavelength,
+                x_column=x_column,
                 simulated_range=(float(profile[x_column].min()), float(profile[x_column].max())),
             )
             experimental_intensity = experimental["Intensity"].to_numpy(copy=True)
@@ -274,19 +314,38 @@ def render_pxrd_analysis(
             st.stop()
 
     if experimental_intensity is not None:
-        simulated_intensity, experimental_intensity, reflection_intensity = normalize_comparison_profiles(
-            simulated_intensity, experimental_intensity, reflection_intensity
+        simulated_intensity, experimental_intensity, reflection_intensity = (
+            normalize_comparison_profiles(
+                simulated_intensity, experimental_intensity, reflection_intensity
+            )
         )
 
     figure = _build_interactive_figure(
-        profile, reflections, experimental, x_column, simulated_intensity,
-        experimental_intensity, reflection_intensity, fwhm, show_reflections,
-        show_d_axis, x_axis, wavelength,
+        profile,
+        reflections,
+        experimental,
+        x_column,
+        simulated_intensity,
+        experimental_intensity,
+        reflection_intensity,
+        fwhm,
+        show_reflections,
+        show_d_axis,
+        x_axis,
+        wavelength,
     )
     st.plotly_chart(figure, use_container_width=True)
-    y_label = "Normalized intensity" if experimental is not None else ("Relative intensity" if fwhm > 0 else "Intensity")
+    y_label = (
+        "Normalized intensity"
+        if experimental is not None
+        else ("Relative intensity" if fwhm > 0 else "Intensity")
+    )
     pdf_bytes = publication_pxrd_pdf_bytes(
-        profile[x_column].to_numpy(), simulated_intensity, x_column, y_label, wavelength,
+        profile[x_column].to_numpy(),
+        simulated_intensity,
+        x_column,
+        y_label,
+        wavelength,
         show_d_spacing_axis=show_d_axis,
         experimental_x=None if experimental is None else experimental[x_column].to_numpy(),
         experimental_intensity=experimental_intensity,
@@ -294,7 +353,13 @@ def render_pxrd_analysis(
         reflection_intensity=reflection_intensity if show_reflections else None,
     )
     root = os.path.splitext(state.get("file_name") or "structure")[0]
-    st.download_button("Download Plot", data=pdf_bytes, file_name=f"{root}_pxrd_plot.pdf", mime="application/pdf", key="pxrd_plot_pdf_download")
+    st.download_button(
+        "Download Plot",
+        data=pdf_bytes,
+        file_name=f"{root}_pxrd_plot.pdf",
+        mime="application/pdf",
+        key="pxrd_plot_pdf_download",
+    )
     with st.expander("View simulated PXRD profile"):
         st.dataframe(profile, use_container_width=True, hide_index=True)
     with st.expander("View PXRD reflection table"):
@@ -306,20 +371,63 @@ def render_pxrd_analysis(
 
 
 def _build_interactive_figure(
-    profile, reflections, experimental, x_column, simulated_intensity,
-    experimental_intensity, reflection_intensity, fwhm, show_reflections,
-    show_d_axis, x_axis, wavelength,
+    profile,
+    reflections,
+    experimental,
+    x_column,
+    simulated_intensity,
+    experimental_intensity,
+    reflection_intensity,
+    fwhm,
+    show_reflections,
+    show_d_axis,
+    x_axis,
+    wavelength,
 ):
     figure = go.Figure()
-    figure.add_trace(go.Scatter(x=profile[x_column], y=simulated_intensity, mode="lines", name="Broadened profile" if fwhm > 0 else "Sampled profile", line=dict(width=2.5)))
+    figure.add_trace(
+        go.Scatter(
+            x=profile[x_column],
+            y=simulated_intensity,
+            mode="lines",
+            name="Broadened profile" if fwhm > 0 else "Sampled profile",
+            line=dict(width=2.5),
+        )
+    )
     if experimental is not None:
-        figure.add_trace(go.Scatter(x=experimental[x_column], y=experimental_intensity, mode="lines", name="Experimental data", line=dict(width=2)))
+        figure.add_trace(
+            go.Scatter(
+                x=experimental[x_column],
+                y=experimental_intensity,
+                mode="lines",
+                name="Experimental data",
+                line=dict(width=2),
+            )
+        )
     if show_reflections:
-        figure.add_trace(go.Bar(x=reflections[x_column], y=reflection_intensity, name="Bragg reflections", opacity=0.3))
-    y_label = "Normalized intensity" if experimental is not None else ("Relative intensity" if fwhm > 0 else "Intensity")
-    layout = dict(xaxis_title=x_column, yaxis_title=y_label, template="plotly_white", margin=dict(t=90 if show_d_axis else 40, b=40, l=40, r=40))
+        figure.add_trace(
+            go.Bar(
+                x=reflections[x_column],
+                y=reflection_intensity,
+                name="Bragg reflections",
+                opacity=0.3,
+            )
+        )
+    y_label = (
+        "Normalized intensity"
+        if experimental is not None
+        else ("Relative intensity" if fwhm > 0 else "Intensity")
+    )
+    layout = dict(
+        xaxis_title=x_column,
+        yaxis_title=y_label,
+        template="plotly_white",
+        margin=dict(t=90 if show_d_axis else 40, b=40, l=40, r=40),
+    )
     if show_d_axis:
-        tick_values, tick_text = secondary_d_axis_ticks(profile[x_column].to_numpy(), x_axis, wavelength)
+        tick_values, tick_text = secondary_d_axis_ticks(
+            profile[x_column].to_numpy(), x_axis, wavelength
+        )
         if tick_values.size:
             figure.add_trace(
                 go.Scatter(
@@ -333,6 +441,19 @@ def _build_interactive_figure(
                     yaxis="y",
                 )
             )
-        layout["xaxis2"] = dict(title="d (A)", anchor="y", overlaying="x", matches="x", side="top", tickmode="array", tickvals=tick_values.tolist(), ticktext=tick_text, showgrid=False, showline=True, showticklabels=True, ticks="outside")
+        layout["xaxis2"] = dict(
+            title="d (A)",
+            anchor="y",
+            overlaying="x",
+            matches="x",
+            side="top",
+            tickmode="array",
+            tickvals=tick_values.tolist(),
+            ticktext=tick_text,
+            showgrid=False,
+            showline=True,
+            showticklabels=True,
+            ticks="outside",
+        )
     figure.update_layout(**layout)
     return figure

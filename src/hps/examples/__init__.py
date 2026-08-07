@@ -29,8 +29,12 @@ def list_example_projects() -> list[dict[str, object]]:
 def load_example_project(project_id: str) -> dict[str, object]:
     """Load and validate a packaged example manifest by identifier."""
 
-    if not project_id or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for character in project_id):
-        raise ValueError("Example project identifiers may contain lowercase letters, digits, - and _.")
+    if not project_id or any(
+        character not in "abcdefghijklmnopqrstuvwxyz0123456789-_" for character in project_id
+    ):
+        raise ValueError(
+            "Example project identifiers may contain lowercase letters, digits, - and _."
+        )
     path = PROJECTS_ROOT / f"{project_id}.json"
     if not path.is_file():
         raise KeyError(f"Unknown example project: {project_id}")
@@ -78,7 +82,9 @@ def _expand_file_set(file_set: dict[str, object]) -> list[Path]:
     if path != root and root not in path.parents:
         raise ValueError("Example file path escapes the packaged examples directory.")
     pattern = str(file_set.get("pattern", "*"))
-    paths = sorted(item for item in path.glob(pattern) if item.is_file()) if path.is_dir() else [path]
+    paths = (
+        sorted(item for item in path.glob(pattern) if item.is_file()) if path.is_dir() else [path]
+    )
     if not paths or any(not item.is_file() for item in paths):
         raise ValueError(f"Example file set is missing: {file_set['path']}")
     return paths

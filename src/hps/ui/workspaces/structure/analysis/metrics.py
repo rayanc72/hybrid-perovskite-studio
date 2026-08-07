@@ -32,7 +32,6 @@ from hps.domain.structure_manager import (
     process_uploaded_files,
 )
 
-
 LATTICE_PARAMETER_LABELS = (
     "a (Å)",
     "b (Å)",

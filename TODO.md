@@ -21,8 +21,10 @@ This file is the working checklist for the backend modernization and performance
 - [x] Add redistributable scientific regression fixtures and expected numerical results
 - [x] Add artifact retention and stale-job recovery policies
 - [x] Add guided example projects and provenance-aware project bundles
+- [x] Document accepted release limitations and scientific scope
+- [x] Strengthen lint enforcement for maintained package layers
 
-## In Progress
+## Post-Release Modernization
 
 - [x] Finish migrating the Structure workspace’s PDF/RDF simulation and comparison paths
 - [ ] Keep the Streamlit UX stable while replacing direct rerun-heavy execution with backend jobs

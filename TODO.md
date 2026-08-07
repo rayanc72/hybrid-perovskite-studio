@@ -77,6 +77,8 @@ This file is the working checklist for the backend modernization and performance
 - [x] Add regression fixtures for realistic Structure, PDOS, and MD inputs
 - [x] Add startup validation that confirms Streamlit can reach the local backend
 - [x] Add performance checks for first-run vs cached-run latency
+- [x] Add automated Streamlit startup/navigation smoke coverage
+- [x] Add a public-release acceptance checklist
 
 ## Documentation
 

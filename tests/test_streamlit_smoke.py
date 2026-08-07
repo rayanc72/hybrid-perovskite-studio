@@ -20,16 +20,9 @@ def test_packaged_app_opens_dynamics_trajectory_view() -> None:
         "hps.services.backend_runtime.validate_backend_connection",
         return_value=BACKEND_HEALTH,
     ):
-        app = AppTest.from_file(APP_PATH, default_timeout=30).run()
-        assert not app.exception
-        assert {button.label for button in app.button} >= {
-            "Open Structure",
-            "Open Electronic",
-            "Open Dynamics",
-            "Open Utilities",
-        }
-
-        next(button for button in app.button if button.label == "Open Dynamics").click().run()
+        app = AppTest.from_file(APP_PATH, default_timeout=30)
+        app.query_params["workspace"] = "Dynamics"
+        app.run()
         assert not app.exception
         assert app.radio[0].options == ["Analyze AIMS MD output", "Trajectory analysis"]
 

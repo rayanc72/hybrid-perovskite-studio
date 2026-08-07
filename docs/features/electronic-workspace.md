@@ -6,7 +6,7 @@ The Electronic workspace focuses on plotting and inspecting electronic-structure
 
 ## Where It Appears In The UI
 
-- Start page workspace card: `Electronic`
+- Landing-page workspace: `Electronic`
 - Workspace views:
   - `Bands and Spin`
   - `Advanced`
@@ -73,14 +73,14 @@ The Electronic workspace focuses on plotting and inspecting electronic-structure
 
 ## Notes And Limitations
 
-- Several plotting flows still rely on legacy-style helper functions living in the main UI module and domain wrappers.
+- Several plotting flows still rely on legacy-style helper functions and domain wrappers.
 - The 3D spin-texture workflow currently restores saved plot parameters, but not a manually rotated in-browser camera angle.
 - The current navigation is registry-driven, but the underlying tool implementations are still mostly imperative.
 
 ## Code Touchpoints
 
-- UI:
-  [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py)
+- Workspace UI:
+  [src/hps/ui/workspaces/electronic.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/electronic.py)
 - Navigation registry:
   [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 - Electronic logic:
@@ -91,4 +91,4 @@ The Electronic workspace focuses on plotting and inspecting electronic-structure
 
 ## Last Verified
 
-- Date: 2026-04-03
+- Date: 2026-08-07

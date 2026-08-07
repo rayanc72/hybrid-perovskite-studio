@@ -25,10 +25,10 @@ streamlit run src/hps/app.py
 ## First-Time Workflow
 
 1. Start the app.
-2. On the landing page, choose a workspace from the top card row.
+2. On the landing page, choose a workspace from the four options below the hero.
 3. If you are working with structures, open `Structure`.
 4. In `Structure -> Overview`, upload a structure file in `.in`, `.cif`, or `.next_step` format.
-5. Use the `Current Structure` card to inspect summary information and export geometry files.
+5. Use the `Current Structure` summary to inspect the loaded structure and export geometry files.
 6. Move into `Analysis` or `Transformations` as needed.
 
 ## Workspaces
@@ -41,7 +41,7 @@ streamlit run src/hps/app.py
 ## Navigation Notes
 
 - The app starts on a minimal landing page instead of opening directly into a workflow.
-- The `Browse feature map` expander shows the full tool tree when needed.
+- The `Explore every tool` link opens the full registry-driven feature map.
 - The visible workspace selectors and feature map are generated from a shared registry in [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py).
 
 ## Runtime notes

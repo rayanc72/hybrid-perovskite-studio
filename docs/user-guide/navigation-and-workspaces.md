@@ -9,7 +9,7 @@ The current UI is built around a landing page plus four workspaces:
 - Dynamics
 - Utilities
 
-Users start on a minimal landing page, then open a workspace from the top card row.
+Users start on the landing page, then choose one of the four workspace cards below the hero.
 
 ## Workspace Gallery
 
@@ -29,30 +29,37 @@ Users start on a minimal landing page, then open a workspace from the top card r
 
 ![Dynamics workspace](../images/screenshots/dynamics-workspace.png)
 
+### Utilities workspace
+
+![Utilities workspace](../images/screenshots/utilities-workspace.png)
+
+### Feature map
+
+![Feature map](../images/screenshots/feature-map.png)
+
 ## Landing Page
 
 The landing page shows:
 
-- centered app branding
-- a short introduction
+- a full-width introduction and perovskite-inspired hero graphic
+- direct links to the workspace section and full feature map
 - one card for each workspace
-- an optional `Browse feature map` expander
 
-The feature map is generated from the same navigation registry that powers the visible workspace selectors.
+The dedicated feature-map page is generated from the same navigation registry that powers the visible workspace selectors.
 
 ## Workspace Selection
 
-Each workspace card includes an `Open ...` button. Clicking it:
+Each workspace card includes an `Open ...` link. Selecting it:
 
 - activates that workspace
-- updates the active card state
+- records the workspace in the page URL
 - switches the main page to the corresponding workspace
 
 Users can return to the start page with the `Start Page` button.
 
 ## Feature Map
 
-The `Browse feature map` expander shows a tree of the app’s current capabilities.
+The `Explore every tool` link opens a dedicated page showing the app’s current capability tree. The page includes a link back to the main app.
 
 This tree is generated from:
 

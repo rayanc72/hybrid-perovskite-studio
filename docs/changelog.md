@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-No changes yet.
+### Documentation
+
+- Refreshed the screenshot gallery for the redesigned landing page and workspaces.
+- Added the registry-driven Feature Map screenshot to the README and navigation guide.
+- Removed the stale, manually duplicated feature-map document and updated current guides to match the live interface and workspace modules.
 
 ## 0.2.0 - 2026-08-07
 

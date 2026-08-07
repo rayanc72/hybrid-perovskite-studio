@@ -6,6 +6,8 @@ import tomllib
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 
@@ -18,6 +20,7 @@ from hps.services.runtime import (
     full_install_command,
     pdf_install_command,
 )
+from hps import __version__
 from hps.ui.navigation import tool_options
 from hps.ui.sidebar import SIDEBAR_SECTIONS
 
@@ -56,6 +59,11 @@ class PackageLayoutTests(unittest.TestCase):
         extras = data["project"]["optional-dependencies"]
         for extra in ("core", "md", "pdf", "viz", "auth", "backend", "full", "dev", "docs"):
             self.assertIn(extra, extras)
+
+    def test_release_metadata_versions_match(self) -> None:
+        citation = yaml.safe_load((ROOT / "CITATION.cff").read_text())
+        self.assertEqual(str(citation["version"]), __version__)
+        self.assertRegex(__version__, r"^\d+\.\d+\.\d+$")
 
     def test_requirements_uses_editable_package_install(self) -> None:
         requirements = (ROOT / "requirements.txt").read_text().strip()

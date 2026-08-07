@@ -1,0 +1,51 @@
+{
+  "structure": {
+    "formula": "C32H88I24N8Pb4",
+    "atom_count": 156,
+    "molecule_group_count": 10,
+    "space_group": "Aea2",
+    "space_group_number": 41,
+    "lattice_vectors": [[28.5598, 0.0, 0.0], [0.0, 9.03496, 0.0], [0.0, 0.0, 8.8604]]
+  },
+  "pdos": {
+    "row_count": 101,
+    "energy_min": -15.59664786,
+    "energy_max": 34.40335214,
+    "sampled_total_dos_max": 81.93450548,
+    "sampled_total_dos_peak_energy": -2.60127344,
+    "nearest_fermi_energy": -0.1009609,
+    "total_dos_nearest_fermi": 0.35270572
+  },
+  "bands": {
+    "segment_count": 3,
+    "band_count": 6,
+    "energy_range": [-1.21241, 1.87807],
+    "segments": [
+      {"name": "band1001.out", "kpoint_count": 81, "vbm": -0.72062, "cbm": 0.65732, "gap": 1.37794},
+      {"name": "band1002.out", "kpoint_count": 81, "vbm": -0.76558, "cbm": 0.77021, "gap": 1.53579},
+      {"name": "band1003.out", "kpoint_count": 81, "vbm": -0.76547, "cbm": 0.76518, "gap": 1.53065}
+    ]
+  },
+  "spin": {
+    "row_count": 1722,
+    "states": [1929, 1930],
+    "kpoint_labels": 21,
+    "energy_min": -1.93607,
+    "energy_max": -1.71834,
+    "max_spin_norm": 0.879700051153801
+  },
+  "md": {
+    "file_count": 101,
+    "frame_count": 101,
+    "atom_count": 62,
+    "formula": "C12H32I8N4O4Pb2",
+    "total_uncompressed_bytes": 790426,
+    "timestep_fs": 0.5,
+    "estimated_duration_ps": 0.05,
+    "cell_volume": 846.6118164805978,
+    "first_frame": "frames/geometry-005364.in",
+    "last_frame": "frames/geometry-005464.in",
+    "first_center_of_mass": [3.9800013318013283, 10.170455988568595, 3.203281544978094],
+    "last_center_of_mass": [3.979978907187751, 10.170455965374464, 3.207050107478276]
+  }
+}

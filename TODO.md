@@ -18,7 +18,7 @@ This file is the working checklist for the backend modernization and performance
 - [x] Extract Structure distance, distortion, lattice-deviation, and ADP rendering
 - [x] Extract all Structure transformation rendering
 - [x] Split workspace rendering out of `src/hps/ui/app_main.py`
-- [ ] Add redistributable scientific regression fixtures and expected numerical results
+- [x] Add redistributable scientific regression fixtures and expected numerical results
 - [x] Add artifact retention and stale-job recovery policies
 - [ ] Add guided example projects and provenance-aware project bundles
 
@@ -74,7 +74,7 @@ This file is the working checklist for the backend modernization and performance
 - [x] Add backend store tests
 - [x] Add backend API contract tests for migrated workflows
 - [x] Add Streamlit-free core workflow tests for migrated helpers
-- [ ] Add regression fixtures for realistic Structure, PDOS, and MD inputs
+- [x] Add regression fixtures for realistic Structure, PDOS, and MD inputs
 - [ ] Add startup validation that confirms Streamlit can reach the local backend
 - [ ] Add performance checks for first-run vs cached-run latency
 

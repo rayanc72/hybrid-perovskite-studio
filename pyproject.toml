@@ -136,7 +136,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-"hps.ui" = ["assets/*.js"]
+"hps.ui" = ["assets/*.js", "assets/*.svg"]
 "hps.examples" = [
   "projects/*.json",
   "data/*.json",

@@ -103,6 +103,14 @@ class PackageLayoutTests(unittest.TestCase):
         for path in (ROOT / "src" / "hps").rglob("*.py"):
             self.assertNotIn("_inject_public_names", path.read_text(), f"Dynamic injection in {path}")
 
+    def test_packaged_code_uses_current_pymatgen_graph_constructors(self) -> None:
+        for path in (ROOT / "src" / "hps").rglob("*.py"):
+            self.assertNotIn(
+                ".with_local_env_strategy(",
+                path.read_text(),
+                f"Removed pymatgen graph constructor in {path}",
+            )
+
     def test_backend_entrypoint_is_declared(self) -> None:
         pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
         scripts = pyproject["project"]["scripts"]

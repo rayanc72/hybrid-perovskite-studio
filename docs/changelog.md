@@ -1,6 +1,12 @@
 # Changelog
 
-## 2026-03-20
+## Unreleased
+
+No changes yet.
+
+## 0.2.0 - 2026-08-07
+
+### Electronic workspace and UI improvements
 
 - Refined the `Electronic` workspace so `Bands and Spin` and `Advanced` reflect the current tool grouping.
 - Updated the Electronic tool selector to use radio buttons for a cleaner, faster-switching workflow.
@@ -21,7 +27,7 @@
 - Linked the new bandstructure documentation from [docs/index.md](index.md) and [docs/features/electronic-workspace.md](features/electronic-workspace.md).
 - Cleaned up `molecule_builder.py`, `pdf_analysis.py`, `electronic_property.py`, and `md_analysis.py` to reduce dead code, duplicate imports, and legacy side effects.
 
-## 2026-03-19
+### Workspace redesign
 
 - Reworked the app around a landing page plus workspace cards instead of the older always-on, sidebar-first flow.
 - Moved structure upload into `Structure -> Overview`.
@@ -30,7 +36,7 @@
 - Introduced a shared navigation registry in [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py) so the visible selectors and feature map stay aligned.
 - Stopped writing labelled uploaded structures into the repo root during initialization.
 
-## Unreleased
+### Backend modernization and release readiness
 
 - Added redistributable, checksum-validated scientific regression data for Structure,
   PDOS, band structure, spin texture, and a centered 50 fs molecular-dynamics slice.

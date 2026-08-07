@@ -27,11 +27,32 @@
 - Moved structure upload into `Structure -> Overview`.
 - Added a `Current Structure` summary card scoped to the Structure workspace.
 - Added an optional `Browse feature map` tree for navigating the full tool surface.
-- Introduced a shared navigation registry in [src/hps/ui/navigation.py](../src/hps/ui/navigation.py) so the visible selectors and feature map stay aligned.
+- Introduced a shared navigation registry in [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py) so the visible selectors and feature map stay aligned.
 - Stopped writing labelled uploaded structures into the repo root during initialization.
 
 ## Unreleased
 
+- Replaced unrestricted dataset-expression evaluation with an allowlisted mathematical expression engine.
+- Added safe trajectory ZIP extraction with traversal, symlink, file-count, and expanded-size protections.
+- Added backend upload and numerical range validation.
+- Added CI, reproducible release checks, strict documentation builds, and package build verification.
+- Added public contribution, conduct, security, and citation metadata.
+- Made package imports safe in headless environments by removing eager tool imports and import-time plotting during tests.
+- Replaced dynamic module namespace injection with explicit UI and structure-domain dependencies, allowing static undefined-name checks to cover the main application.
+- Extracted reusable backend workflow state, polling, and file-payload helpers from the Streamlit monolith.
+- Fixed the Structure ADP workflow to read the active uploaded structure instead of an undefined file buffer.
+- Extracted Structure upload state, backend-summary lifecycle, current-structure metadata, downloads, details, and viewer rendering into a dedicated workspace package.
+- Extracted Structure navigation into a typed selection model and moved symmetry and PXRD renderers out of the monolithic app module.
+- Fixed publication PXRD d-spacing ticks for plots using the backend's `q (A^-1)` result label.
+- Moved the Structure PDF workflows and reduced-PDF parsing into a focused analysis module, removed an unreachable duplicate conversion implementation, and made temporary CIF cleanup automatic.
+- Extracted and tested the adjacent Bader charge-analysis parsers, including atom-ID ranges and integrated-property tables.
+- Extracted atomic-distance, distortion, lattice percentage-deviation, and ADP workflows into the Structure analysis package.
+- Added isolated upload-state keys for lattice deviation, preventing collisions with Structure interpolation uploads.
+- Extracted rotation, reflection, translation, deletion, labelling, and interpolation renderers from the application coordinator.
+- Made structure mutation explicit by returning updated structures from transformation renderers.
+- Fixed transformation output filenames that previously depended on unrelated workflow-local state.
+- Prevented one-image rotation interpolation from dividing by zero and guarded unmatched or incomplete structure interpolation inputs.
+- Removed a fully commented-out legacy transformation prototype.
 - Renamed the app-facing product name to `Hybrid Perovskite Studio`.
 - Added feature-oriented documentation under `docs/features/`.
 - Added a `PXRD Analysis` workflow to the `Structure` workspace using `pymatgen` for simulated powder X-ray diffraction.

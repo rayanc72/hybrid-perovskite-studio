@@ -80,14 +80,14 @@ The Electronic workspace focuses on plotting and inspecting electronic-structure
 ## Code Touchpoints
 
 - UI:
-  [src/hps/ui/app_main.py](../../src/hps/ui/app_main.py)
+  [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py)
 - Navigation registry:
-  [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py)
+  [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 - Electronic logic:
-  [src/hps/domain/electronic_property.py](../../src/hps/domain/electronic_property.py)
+  [src/hps/domain/electronic_property.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/electronic_property.py)
 - Tool helpers:
-  [src/hps/tools/plot_band.py](../../src/hps/tools/plot_band.py)
-  [src/hps/tools/scan_cbm.py](../../src/hps/tools/scan_cbm.py)
+  [src/hps/tools/plot_band.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/tools/plot_band.py)
+  [src/hps/tools/scan_cbm.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/tools/scan_cbm.py)
 
 ## Last Verified
 

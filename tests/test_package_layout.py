@@ -31,6 +31,7 @@ class PackageLayoutTests(unittest.TestCase):
             ROOT / "src" / "hps" / "api",
             ROOT / "src" / "hps" / "core",
             ROOT / "src" / "hps" / "ui",
+            ROOT / "src" / "hps" / "ui" / "workspaces" / "structure",
             ROOT / "docs",
             ROOT / "tests",
         ]
@@ -53,12 +54,12 @@ class PackageLayoutTests(unittest.TestCase):
     def test_pyproject_has_expected_extras(self) -> None:
         data = tomllib.loads((ROOT / "pyproject.toml").read_text())
         extras = data["project"]["optional-dependencies"]
-        for extra in ("core", "md", "pdf", "viz", "auth", "backend", "full", "dev"):
+        for extra in ("core", "md", "pdf", "viz", "auth", "backend", "full", "dev", "docs"):
             self.assertIn(extra, extras)
 
     def test_requirements_uses_editable_package_install(self) -> None:
         requirements = (ROOT / "requirements.txt").read_text().strip()
-        self.assertEqual(requirements, "-e .[full,dev]")
+        self.assertEqual(requirements, "-e .[full,dev,docs]")
 
     def test_no_star_imports_in_packaged_code(self) -> None:
         for path in (ROOT / "src" / "hps").rglob("*.py"):
@@ -75,6 +76,30 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn("importlib.import_module(module_name)", entrypoint)
         self.assertIn("ensure_local_backend_running()", entrypoint)
 
+    def test_app_uses_explicit_dependencies(self) -> None:
+        app_main = (ROOT / "src" / "hps" / "ui" / "app_main.py").read_text()
+        self.assertIn("from hps.domain.structure_manager import (", app_main)
+        self.assertIn("from hps.ui.backend_workflows import (", app_main)
+        self.assertIn("render_structure_upload_panel(st.session_state", app_main)
+        self.assertIn("render_current_structure_card(", app_main)
+        self.assertIn("structure_selection = render_structure_navigation()", app_main)
+        self.assertIn("render_symmetry_analysis(", app_main)
+        self.assertIn("render_pxrd_analysis(", app_main)
+        self.assertIn("render_pdf_analysis(", app_main)
+        self.assertIn("render_atomic_distances(", app_main)
+        self.assertIn("render_distortions(", app_main)
+        self.assertIn("render_percentage_deviation(", app_main)
+        self.assertIn("modified_atoms = render_rotation(", app_main)
+        self.assertIn("modified_atoms = render_reflection(", app_main)
+        self.assertIn("modified_atoms = render_translation(", app_main)
+        self.assertIn("modified_atoms = render_deletion(", app_main)
+        self.assertIn("render_labelling(", app_main)
+        self.assertIn("render_interpolation(", app_main)
+
+    def test_packaged_code_does_not_inject_module_namespaces(self) -> None:
+        for path in (ROOT / "src" / "hps").rglob("*.py"):
+            self.assertNotIn("_inject_public_names", path.read_text(), f"Dynamic injection in {path}")
+
     def test_backend_entrypoint_is_declared(self) -> None:
         pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
         scripts = pyproject["project"]["scripts"]
@@ -82,7 +107,7 @@ class PackageLayoutTests(unittest.TestCase):
 
     def test_packaged_pdf_wrapper_uses_packaged_module(self) -> None:
         wrapper = (ROOT / "src" / "hps" / "domain" / "pdf.py").read_text()
-        self.assertIn("from hps.domain import pdf_analysis as _impl", wrapper)
+        self.assertIn('import_module("hps.domain.pdf_analysis")', wrapper)
 
     def test_pdf_analysis_workflows_are_separate_tools(self) -> None:
         self.assertEqual(
@@ -108,9 +133,18 @@ class PackageLayoutTests(unittest.TestCase):
         self.assertIn("from diffpy.structure import loadStructure", pdf_analysis)
 
     def test_symmetrize_structure_uses_loaded_structure_filename(self) -> None:
-        app_main = (ROOT / "src" / "hps" / "ui" / "app_main.py").read_text()
-        self.assertIn('os.path.splitext(st.session_state.file_name or "structure")[0]', app_main)
-        self.assertNotIn("os.path.splitext(file_name)[0]\n                    output_cif_file", app_main)
+        symmetry = (
+            ROOT
+            / "src"
+            / "hps"
+            / "ui"
+            / "workspaces"
+            / "structure"
+            / "analysis"
+            / "symmetry.py"
+        ).read_text()
+        self.assertIn('os.path.splitext(file_name or "structure")[0]', symmetry)
+        self.assertNotIn("output_cif_file", symmetry)
 
     def test_plot_band_is_import_safe(self) -> None:
         plot_band = (ROOT / "src" / "hps" / "tools" / "plot_band.py").read_text()

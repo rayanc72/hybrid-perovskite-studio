@@ -13,6 +13,11 @@ class BackendClientError(RuntimeError):
     """Raised when the local backend cannot be reached or returns an invalid response."""
 
 
+LEGACY_WORKFLOW_ALIASES = {
+    "structure_context": "structure_summary",
+}
+
+
 def ensure_backend_ready() -> str:
     if backend_is_healthy():
         return backend_base_url()
@@ -39,7 +44,13 @@ def _request_json(method: str, path: str, payload: dict[str, object] | None = No
 
 
 def submit_job(workflow: str, payload: dict[str, object]) -> dict[str, object]:
-    return _request_json("POST", f"/jobs/{workflow}", payload)
+    try:
+        return _request_json("POST", f"/jobs/{workflow}", payload)
+    except BackendClientError as exc:
+        fallback_workflow = LEGACY_WORKFLOW_ALIASES.get(workflow)
+        if fallback_workflow and "404" in str(exc) and "Unknown workflow" in str(exc):
+            return _request_json("POST", f"/jobs/{fallback_workflow}", payload)
+        raise
 
 
 def get_job(job_id: str) -> dict[str, object]:

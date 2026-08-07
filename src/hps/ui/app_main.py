@@ -1,40 +1,116 @@
-import copy
-import importlib
 import io
 import json
-import hashlib
-import base64
-import time
+import tempfile
+from io import BytesIO
 import numpy as np
 import pandas as pd
 
-from hps.domain import electronic_property as electronic_property_module
-from hps.domain import md_analysis as md_analysis_module
-from hps.domain import molecule_builder as molecule_builder_module
-from hps.domain import structure_manager as structure_manager_module
+from ase import Atoms
+from hps.core.expressions import evaluate_math_expression
+from hps.domain.electronic_property import (
+    add_pdos_combination_traces,
+    build_brillouin_zone_figure,
+    calculate_scaling_factors,
+    create_absorption_graphs,
+    create_dataframe_from_absorption_out_files,
+    get_file_uploads,
+    get_pdos_combination_labels,
+    get_state_range,
+    parse_label_offset_map,
+    parse_out_file,
+    parse_segment_selection,
+    plot_all_bands,
+    plot_pdos_streamlit,
+    plot_spin_quivers,
+    plot_spin_quivers_3D,
+    process_files,
+    scale_data,
+    set_custom_labels,
+)
+from hps.domain.md_analysis import (
+    average_structure_to_cif,
+    build_universe_from_dir,
+    calculate_ellipsoid_volumes,
+    create_probability_distribution_plots_plotly,
+    create_variance_dataframe,
+    create_violin_plots_plotly,
+    get_ADP,
+    get_atom_frame_positions_dataframe,
+    handle_distance_analysis,
+    handle_rdf_analysis,
+    hydrogen_bond_analysis,
+    plot_atom_volumes_violinplot,
+    plot_data,
+    plot_hbond_data,
+    replace_indices_with_original,
+    run_perl_script,
+)
+from hps.domain.molecule_builder import get_molecule_object
+from hps.domain.structure_manager import (
+    calculate_angle_variance,
+    calculate_bond_distance_variance,
+    calculate_in_out_planes,
+    calculate_unique_ABA_angles,
+    create_3d_scatter_plot,
+    data_download_links,
+    extract_polarization,
+    extract_totalenergy,
+    filter_atoms_by_symbols_and_extend,
+    find_closest_partners,
+    generate_symmetrized_structure,
+    get_crystal_direction,
+    get_distance_matrix,
+    get_dm_direction,
+    identify_AB_groups,
+    normalize_fractional_direction,
+    plot_dipole_moment_vectors,
+    plot_pol_figure,
+)
+from hps.io.archives import UnsafeArchiveError, safe_extract_zip
 from hps.io.paths import APP_TMP_DIR
-from hps.services.backend_client import (
-    BackendClientError,
-    get_artifact,
-    get_job,
-    submit_job,
+from hps.ui.backend_workflows import (
+    get_workflow_state,
+    named_file_payload,
+    run_workflow,
+)
+from hps.ui.workspaces.structure.overview import (
+    render_current_structure_card,
+    render_structure_upload_panel,
+)
+from hps.ui.workspaces.structure.navigation import render_structure_navigation
+from hps.ui.workspaces.structure.analysis.charge import (
+    parse_bader_integrated_atomic_properties,
+    parse_id_field,
+)
+from hps.ui.workspaces.structure.analysis.metrics import (
+    render_adp_table,
+    render_atomic_distances,
+    render_distortions,
+    render_percentage_deviation,
+)
+from hps.ui.workspaces.structure.analysis.pdf import render_pdf_analysis
+from hps.ui.workspaces.structure.analysis.pxrd import render_pxrd_analysis
+from hps.ui.workspaces.structure.analysis.symmetry import render_symmetry_analysis
+from hps.ui.workspaces.structure.transformations.operations import (
+    render_deletion,
+    render_interpolation,
+    render_labelling,
+    render_reflection,
+    render_translation,
+)
+from hps.ui.workspaces.structure.transformations.rotation import render_rotation
+from hps.ui.workspaces.structure.state import (
+    initialize_state as initialize_structure_workspace_state,
+    load_active_structure,
 )
 from hps.ui.navigation import (
     build_feature_tree,
-    group_names,
     render_tree_lines,
     tool_options,
     view_names,
     workspace_descriptions,
     workspace_names,
 )
-
-
-def _inject_public_names(module):
-    for name in dir(module):
-        if not name.startswith("_"):
-            globals().setdefault(name, getattr(module, name))
-
 
 def _debug_log(message):
     APP_TMP_DIR.mkdir(exist_ok=True)
@@ -85,91 +161,6 @@ def _clear_pdos_color_picker_state():
             del st.session_state[key]
 
 
-def _structure_upload_signature(file_name, file_bytes):
-    digest = hashlib.sha256()
-    digest.update(file_name.encode("utf-8"))
-    digest.update(b":")
-    digest.update(file_bytes)
-    return digest.hexdigest()
-
-
-def _reset_structure_backend_state():
-    st.session_state.structure_summary_signature = None
-    st.session_state.structure_summary_job_id = None
-    st.session_state.structure_summary_data = None
-    st.session_state.structure_summary_status = None
-    st.session_state.structure_summary_error = None
-
-
-def _prime_structure_summary_job(uploaded_name, uploaded_bytes):
-    signature = _structure_upload_signature(uploaded_name, uploaded_bytes)
-    if st.session_state.structure_summary_signature == signature:
-        return
-
-    _reset_structure_backend_state()
-    st.session_state.structure_summary_signature = signature
-    payload = {
-        "file_name": uploaded_name,
-        "file_bytes_b64": base64.b64encode(uploaded_bytes).decode("utf-8"),
-        "exceptions": [["F", "I"]],
-        "bond_padding": 0.0,
-    }
-
-    try:
-        job = submit_job("structure_context", payload)
-    except BackendClientError as exc:
-        st.session_state.structure_summary_error = str(exc)
-        st.session_state.structure_summary_status = "failed"
-        return
-
-    st.session_state.structure_summary_job_id = job["job_id"]
-    st.session_state.structure_summary_status = job["state"]
-
-
-def _refresh_structure_summary_status():
-    job_id = st.session_state.get("structure_summary_job_id")
-    if not job_id:
-        return
-
-    if st.session_state.get("structure_summary_data") is not None:
-        return
-
-    try:
-        job = get_job(job_id)
-    except BackendClientError as exc:
-        st.session_state.structure_summary_error = str(exc)
-        st.session_state.structure_summary_status = "failed"
-        return
-
-    st.session_state.structure_summary_status = job["state"]
-    if job["state"] == "completed" and job.get("result_ref"):
-        try:
-            st.session_state.structure_summary_data = get_artifact(job["result_ref"])
-        except BackendClientError as exc:
-            st.session_state.structure_summary_error = str(exc)
-            st.session_state.structure_summary_status = "failed"
-    elif job["state"] == "failed":
-        st.session_state.structure_summary_error = job.get("error") or "Background structure summary failed."
-
-
-def _normalize_backend_payload(value):
-    if isinstance(value, dict):
-        return {str(key): _normalize_backend_payload(val) for key, val in sorted(value.items())}
-    if isinstance(value, (list, tuple)):
-        return [_normalize_backend_payload(item) for item in value]
-    return value
-
-
-def _backend_workflow_signature(workflow, payload):
-    digest = hashlib.sha256()
-    digest.update(workflow.encode("utf-8"))
-    digest.update(b":")
-    digest.update(
-        json.dumps(_normalize_backend_payload(payload), sort_keys=True, separators=(",", ":")).encode("utf-8")
-    )
-    return digest.hexdigest()
-
-
 def _get_backend_workflow_registry():
     if "backend_workflows" not in st.session_state:
         st.session_state.backend_workflows = {}
@@ -177,100 +168,22 @@ def _get_backend_workflow_registry():
 
 
 def _backend_named_file_payload(uploaded_files):
-    payload_files = []
-    for uploaded_file in uploaded_files or []:
-        payload_files.append(
-            {
-                "name": uploaded_file.name,
-                "content_b64": base64.b64encode(uploaded_file.getvalue()).decode("utf-8"),
-            }
-        )
-    return payload_files
+    return named_file_payload(uploaded_files)
 
 
 def _run_backend_workflow(workflow, payload, state_key, *, start=False, poll_timeout=6.0):
-    registry = _get_backend_workflow_registry()
-    signature = _backend_workflow_signature(workflow, payload)
-    state = registry.get(
+    return run_workflow(
+        _get_backend_workflow_registry(),
+        workflow,
+        payload,
         state_key,
-        {
-            "signature": None,
-            "job_id": None,
-            "status": None,
-            "result": None,
-            "error": None,
-            "messages": [],
-        },
+        start=start,
+        poll_timeout=poll_timeout,
     )
-
-    if state.get("signature") != signature:
-        state = {
-            "signature": signature,
-            "job_id": None,
-            "status": None,
-            "result": None,
-            "error": None,
-            "messages": [],
-        }
-
-    if state.get("result") is not None:
-        registry[state_key] = state
-        return state["result"]
-
-    if state.get("job_id") is None and start:
-        try:
-            submitted_job = submit_job(workflow, payload)
-        except BackendClientError as exc:
-            state["status"] = "failed"
-            state["error"] = str(exc)
-            registry[state_key] = state
-            return None
-        state["job_id"] = submitted_job["job_id"]
-        state["status"] = submitted_job["state"]
-        state["messages"] = submitted_job.get("messages", [])
-        state["error"] = submitted_job.get("error")
-        if submitted_job["state"] == "completed" and submitted_job.get("result_ref"):
-            try:
-                state["result"] = get_artifact(submitted_job["result_ref"])
-            except BackendClientError as exc:
-                state["status"] = "failed"
-                state["error"] = str(exc)
-            registry[state_key] = state
-            return state.get("result")
-
-    if state.get("job_id") is None:
-        registry[state_key] = state
-        return None
-
-    deadline = time.time() + poll_timeout
-    while time.time() < deadline:
-        try:
-            job = get_job(state["job_id"])
-        except BackendClientError as exc:
-            state["status"] = "failed"
-            state["error"] = str(exc)
-            break
-
-        state["status"] = job["state"]
-        state["messages"] = job.get("messages", [])
-        state["error"] = job.get("error")
-        if job["state"] == "completed" and job.get("result_ref"):
-            try:
-                state["result"] = get_artifact(job["result_ref"])
-            except BackendClientError as exc:
-                state["status"] = "failed"
-                state["error"] = str(exc)
-            break
-        if job["state"] in {"failed", "cancelled"}:
-            break
-        time.sleep(0.1)
-
-    registry[state_key] = state
-    return state.get("result")
 
 
 def _get_backend_workflow_state(state_key):
-    return _get_backend_workflow_registry().get(state_key, {})
+    return get_workflow_state(_get_backend_workflow_registry(), state_key)
 
 
 def _detect_spin_texture_bundle_files(uploaded_files):
@@ -308,46 +221,18 @@ def _detect_spin_texture_bundle_files(uploaded_files):
 _debug_log("startup: entered hps.ui.app_main")
 
 
-try:
-    pdf_analysis_module = importlib.import_module("hps.domain.pdf_analysis")
-    PDF_ANALYSIS_AVAILABLE = True
-except Exception:
-    pdf_analysis_module = None
-    PDF_ANALYSIS_AVAILABLE = False
-
-for _module in (
-    structure_manager_module,
-    molecule_builder_module,
-    electronic_property_module,
-    md_analysis_module,
-):
-    _inject_public_names(_module)
-
-if pdf_analysis_module is not None:
-    _inject_public_names(pdf_analysis_module)
-
-_debug_log("startup: injected public names from packaged modules")
+_debug_log("startup: loaded explicit packaged dependencies")
 
 import plotly.express as px
-import plotly.graph_objects as go
 import plotly.io as pio
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.io.cif import CifWriter
-from pymatgen.core.structure import Structure
-from contextlib import redirect_stdout
 import streamlit as st
-import subprocess
 import os
 import shutil
 from pathlib import Path
-import requests
-from PIL import Image
-from streamlit_lottie import st_lottie
 # from streamlit_ketcher import st_ketcher
-from streamlit_extras.mention import mention
 from streamlit_extras.jupyterlite import jupyterlite
 import matplotlib as mpl
-from itertools import combinations_with_replacement
 import matplotlib.pyplot as plt
 # from scipy.optimize import minimize
 # from scipy.stats import pearsonr
@@ -361,112 +246,6 @@ mpl.rcParams['pdf.fonttype'] = 42
 mpl.rcParams['ps.fonttype'] = 42
 mpl.rcParams["font.family"] = "Arial"
 
-
-def _build_secondary_d_axis_ticks(x_values, x_axis_label, wavelength, count=6):
-    tickvals = np.linspace(float(np.min(x_values)), float(np.max(x_values)), count)
-    d_values = _x_values_to_d_spacing(tickvals, x_axis_label, wavelength)
-    finite_mask = np.isfinite(d_values) & (d_values > 0)
-    tickvals = tickvals[finite_mask]
-    ticktext = [f"{value:.3g}" for value in d_values[finite_mask]]
-    return tickvals, ticktext
-
-
-def _publication_pxrd_pdf_bytes(
-    x_values,
-    simulated_intensity,
-    x_label,
-    y_label,
-    wavelength,
-    show_d_spacing_axis=False,
-    experimental_x=None,
-    experimental_intensity=None,
-    reflection_x=None,
-    reflection_intensity=None,
-):
-    fig, ax = plt.subplots(figsize=(8, 6), constrained_layout=True)
-
-    ax.plot(
-        x_values,
-        simulated_intensity,
-        color="black",
-        linewidth=1.8,
-        label="Simulated",
-        zorder=3,
-    )
-
-    if experimental_x is not None and experimental_intensity is not None:
-        ax.plot(
-            experimental_x,
-            experimental_intensity,
-            color="#c23b22",
-            linewidth=1.5,
-            label="Experimental",
-            zorder=2,
-        )
-
-    if reflection_x is not None and reflection_intensity is not None:
-        ax.vlines(
-            reflection_x,
-            0.0,
-            reflection_intensity,
-            color="#4169e1",
-            linewidth=0.8,
-            alpha=0.65,
-            label="Bragg reflections",
-            zorder=1,
-        )
-
-    if x_label == "q (A^-1)":
-        matplotlib_x_label = r"$q\ (\mathrm{\AA}^{-1})$"
-    else:
-        matplotlib_x_label = r"$2\theta\ (^\circ)$"
-
-    ax.set_xlabel(matplotlib_x_label, fontsize=16)
-    ax.set_ylabel(y_label, fontsize=16)
-    ax.tick_params(axis="both", which="major", labelsize=13, direction="in", length=8, width=1.8)
-    ax.minorticks_off()
-    ax.margins(x=0.01)
-
-    for spine in ax.spines.values():
-        spine.set_linewidth(1.8)
-
-    if show_d_spacing_axis:
-        secondary_axis = ax.twiny()
-        secondary_axis.set_xlim(ax.get_xlim())
-        secondary_tickvals, secondary_ticktext = _build_secondary_d_axis_ticks(
-            x_values,
-            x_label,
-            wavelength,
-        )
-        secondary_axis.set_xticks(secondary_tickvals)
-        secondary_axis.set_xticklabels(secondary_ticktext)
-        secondary_axis.set_xlabel(r"$d\ (\mathrm{\AA})$", fontsize=16)
-        secondary_axis.tick_params(axis="x", which="major", labelsize=13, direction="in", length=8, width=1.8)
-        secondary_axis.minorticks_off()
-        for spine in secondary_axis.spines.values():
-            spine.set_linewidth(1.8)
-
-    handles, labels = ax.get_legend_handles_labels()
-    if handles:
-        ax.legend(frameon=False, fontsize=20, loc="best")
-
-    pdf_buffer = io.BytesIO()
-    fig.savefig(pdf_buffer, format="pdf", bbox_inches="tight")
-    plt.close(fig)
-    pdf_buffer.seek(0)
-    return pdf_buffer.getvalue()
-
-
-def _x_values_to_d_spacing(x_values, x_axis_label, wavelength):
-    x_array = np.asarray(x_values, dtype=float)
-    if x_axis_label == "q":
-        with np.errstate(divide="ignore", invalid="ignore"):
-            d_values = 2.0 * np.pi / x_array
-    else:
-        theta_radians = np.radians(x_array / 2.0)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            d_values = wavelength / (2.0 * np.sin(theta_radians))
-    return d_values
 
 def render_section_header(title, kicker=None, subtitle=None):
     kicker_html = f'<div class="section-kicker">{kicker}</div>' if kicker else ""
@@ -613,14 +392,7 @@ current_atoms = None
 current_molecules = None
 current_modified_symbols = None
 
-if "file_name" not in st.session_state:
-    st.session_state.file_name = None
-if "uploaded_structure_name" not in st.session_state:
-    st.session_state.uploaded_structure_name = None
-if "uploaded_structure_bytes" not in st.session_state:
-    st.session_state.uploaded_structure_bytes = None
-if "structure_uploader_key" not in st.session_state:
-    st.session_state.structure_uploader_key = 0
+initialize_structure_workspace_state(st.session_state)
 if "pdos_file_uploader_key" not in st.session_state:
     st.session_state.pdos_file_uploader_key = 0
 if "pdos_table" not in st.session_state:
@@ -633,17 +405,6 @@ if "pdos_file_signature" not in st.session_state:
     st.session_state.pdos_file_signature = None
 if "pdos_saved_trace_colors" not in st.session_state:
     st.session_state.pdos_saved_trace_colors = _load_pdos_color_preferences()
-if "structure_summary_signature" not in st.session_state:
-    st.session_state.structure_summary_signature = None
-if "structure_summary_job_id" not in st.session_state:
-    st.session_state.structure_summary_job_id = None
-if "structure_summary_data" not in st.session_state:
-    st.session_state.structure_summary_data = None
-if "structure_summary_status" not in st.session_state:
-    st.session_state.structure_summary_status = None
-if "structure_summary_error" not in st.session_state:
-    st.session_state.structure_summary_error = None
-
 symmetry_option = False
 com_option = False
 dm_option = False
@@ -653,7 +414,6 @@ distortion_option = False
 deviation_calculation_option = False
 ADP_table_option = False
 PXRD_option = False
-PXRD_workflow = None
 PDF_option = False
 PDF_workflow = None
 charge_analysis_option = False
@@ -919,16 +679,6 @@ st.markdown(
 if "primary_section" not in st.session_state:
     st.session_state.primary_section = None
 
-def clear_loaded_structure():
-    st.session_state.uploaded_structure_name = None
-    st.session_state.uploaded_structure_bytes = None
-    st.session_state.file_name = None
-    st.session_state.structure_uploader_key += 1
-    st.session_state.show_structure_details = False
-    st.session_state.load_initial_structure_viewer = False
-    _reset_structure_backend_state()
-
-
 def clear_pdos_results():
     st.session_state.pdos_table = None
     st.session_state.pdos_figure = None
@@ -1024,118 +774,26 @@ if primary_section is not None:
     st.caption("Switch workspaces at any time, or return to the start page for a clean overview.")
 
 if primary_section == "Structure":
-    st.caption("Upload or replace the active structure from anywhere inside the Structure workspace.")
-    structure_upload = st.file_uploader(
-        "Upload a structure file (aims geometry, CIF, or next_step)",
-        type=["in", "cif", "next_step"],
-        key=f"structure_workspace_uploader_{st.session_state.structure_uploader_key}",
-    )
-    _debug_log("structure workspace: file_uploader rendered")
-    if structure_upload is not None:
-        st.session_state.uploaded_structure_name = structure_upload.name
-        st.session_state.uploaded_structure_bytes = structure_upload.getvalue()
-        st.session_state.file_name = structure_upload.name
-        _prime_structure_summary_job(
-            st.session_state.uploaded_structure_name,
-            st.session_state.uploaded_structure_bytes,
-        )
-        _debug_log(
-            f"structure workspace: stored upload file={structure_upload.name} bytes={len(st.session_state.uploaded_structure_bytes)}"
-        )
-        st.success(f"Loaded `{structure_upload.name}` into the current workspace.")
-    elif st.session_state.uploaded_structure_name is None:
-        st.caption("No structure loaded yet.")
-    else:
-        st.caption(f"Current structure: `{st.session_state.uploaded_structure_name}`")
-        if st.button("Remove current structure", key="remove_structure_workspace"):
-            clear_loaded_structure()
-            st.rerun()
-
-    if st.session_state.uploaded_structure_name and st.session_state.uploaded_structure_bytes is not None:
-        _prime_structure_summary_job(
-            st.session_state.uploaded_structure_name,
-            st.session_state.uploaded_structure_bytes,
-        )
-        _refresh_structure_summary_status()
-
-        summary_status = st.session_state.structure_summary_status
-        summary_error = st.session_state.structure_summary_error
-        if summary_status in {"queued", "running"}:
-            st.caption("Backend cache is preparing a structure summary in the background.")
-        elif summary_status == "completed":
-            st.caption("Backend cache is ready for the current structure.")
-        elif summary_error:
-            st.warning(f"Backend summary unavailable: {summary_error}")
-
-    structure_mode = st.radio(
-        "View",
-        options=view_names("Structure"),
-        horizontal=True,
-    )
-
-    if structure_mode == "Overview":
-        st.info("Review the current structure, then move into analysis or transformations as needed.")
-
-    elif structure_mode == "Analysis":
-        analysis_group = st.radio(
-            "Group",
-            options=group_names("Structure", "Analysis"),
-            horizontal=True,
-        )
-
-        if analysis_group == "Symmetry":
-            analysis_tool = st.selectbox(
-                "Tool",
-                options=tool_options("Structure", "Analysis", analysis_group),
-            )
-        elif analysis_group == "Molecules":
-            analysis_tool = st.selectbox(
-                "Tool",
-                options=tool_options("Structure", "Analysis", analysis_group),
-            )
-        elif analysis_group == "Structure Metrics":
-            analysis_tool = st.selectbox(
-                "Tool",
-                options=tool_options("Structure", "Analysis", analysis_group),
-            )
-        else:
-            analysis_tool = st.selectbox(
-                "Workflow",
-                options=tool_options("Structure", "Analysis", analysis_group),
-            )
-
-        symmetry_option = analysis_tool == "Symmetrize structure"
-        com_option = analysis_tool == "Find center of mass"
-        dm_option = analysis_tool == "Calculate dipole moment"
-        polarization_option = analysis_tool == "Calculate polarization direction"
-        distance_option = analysis_tool == "Calculate atomic distances"
-        distortion_option = analysis_tool == "Calculate octahedral distortions"
-        deviation_calculation_option = analysis_tool == "Calculate percentage deviation"
-        ADP_table_option = analysis_tool == "Anisotropic displacement parameters"
-        PXRD_option = analysis_group == "PXRD Analysis"
-        PXRD_workflow = analysis_tool if PXRD_option else None
-        PDF_option = analysis_group == "PDF Analysis"
-        PDF_workflow = analysis_tool if PDF_option else None
-        charge_analysis_option = analysis_tool == "Charge analysis"
-
-    elif structure_mode == "Transformations":
-        transform_group = st.radio(
-            "Group",
-            options=group_names("Structure", "Transformations"),
-            horizontal=True,
-        )
-        transform_tool = st.selectbox(
-            "Tool",
-            options=tool_options("Structure", "Transformations", transform_group),
-        )
-        rotate_option = transform_tool == "Rotation"
-        reflect_option = transform_tool == "Reflection"
-        translation_option = transform_tool == "Translation"
-        delete_option = transform_tool == "Deletion"
-        labelling_option = transform_tool == "Labelling"
-        if transform_tool == "Interpolation":
-            st.caption("Interpolation uses its own file-upload workflow inside lattice operations.")
-        interpolate_option = transform_tool == "Interpolation"
+    render_structure_upload_panel(st.session_state, debug_log=_debug_log)
+    structure_selection = render_structure_navigation()
+    symmetry_option = structure_selection.symmetry
+    com_option = structure_selection.center_of_mass
+    dm_option = structure_selection.dipole_moment
+    polarization_option = structure_selection.polarization
+    distance_option = structure_selection.atomic_distances
+    distortion_option = structure_selection.distortions
+    deviation_calculation_option = structure_selection.percentage_deviation
+    ADP_table_option = structure_selection.adp_table
+    PXRD_option = structure_selection.pxrd
+    PDF_option = structure_selection.pdf
+    PDF_workflow = structure_selection.tool if PDF_option else None
+    charge_analysis_option = structure_selection.charge_analysis
+    rotate_option = structure_selection.rotation
+    reflect_option = structure_selection.reflection
+    translation_option = structure_selection.translation
+    delete_option = structure_selection.deletion
+    labelling_option = structure_selection.labelling
+    interpolate_option = structure_selection.interpolation
 
 elif primary_section == "Electronic":
     electronic_group = st.radio(
@@ -1176,18 +834,11 @@ elif primary_section == "Utilities":
 
 uploaded_structure_name = st.session_state.uploaded_structure_name
 uploaded_structure_bytes = st.session_state.uploaded_structure_bytes
-structure_summary_data = st.session_state.get("structure_summary_data")
 if uploaded_structure_name and uploaded_structure_bytes is not None and primary_section == "Structure":
-    structure_buffer = io.BytesIO(uploaded_structure_bytes)
-    structure_buffer.name = uploaded_structure_name
     try:
         _debug_log(f"upload: before initialize_structure file={uploaded_structure_name}")
-        current_atoms, current_molecules, current_modified_symbols = initialize_structure(
-            structure_buffer,
-            file_format=get_file_format(uploaded_structure_name),
-            file_name=uploaded_structure_name,
-            exceptions=[("F", "I")],
-            b_p=0,
+        current_atoms, current_molecules, current_modified_symbols = load_active_structure(
+            st.session_state
         )
         _debug_log(
             f"upload: after initialize_structure atoms={len(current_atoms)} molecules={len(current_molecules)}"
@@ -1231,7 +882,6 @@ if current_atoms is None and structure_tool_selected:
     deviation_calculation_option = False
     ADP_table_option = False
     PXRD_option = False
-    PXRD_workflow = None
     PDF_option = False
     PDF_workflow = None
     charge_analysis_option = False
@@ -1244,75 +894,12 @@ if current_atoms is None and structure_tool_selected:
 
 
 if current_atoms is not None and primary_section == "Structure":
-    output_suffix = ""
-    context_box = st.container()
-    with context_box:
-        st.markdown("### Current Structure")
-        meta_col1, meta_col2, meta_col3, meta_col4 = st.columns(4)
-        meta_col1.metric("File", st.session_state.file_name)
-        meta_col2.metric("Format", get_file_format(st.session_state.file_name))
-        meta_col3.metric(
-            "Atoms",
-            structure_summary_data.get("atom_count", len(current_atoms)) if structure_summary_data else len(current_atoms),
-        )
-        meta_col4.metric(
-            "Molecule Groups",
-            structure_summary_data.get("molecule_group_count", len(current_molecules))
-            if structure_summary_data
-            else len(current_molecules),
-        )
-
-        if structure_summary_data:
-            st.caption(
-                "Backend summary: "
-                f"{structure_summary_data.get('formula', 'Unknown formula')} | "
-                f"{structure_summary_data.get('space_group', 'Unknown space group')}"
-            )
-
-        action_col1, action_col2, action_col3 = st.columns(3)
-        with action_col1:
-            create_aims_download_file(current_atoms, st.session_state.file_name, output_suffix)
-        with action_col2:
-            create_labelled_download_file(current_atoms, st.session_state.file_name, output_suffix)
-        with action_col3:
-            if st.button("Remove current structure", key="remove_structure_context", use_container_width=True):
-                clear_loaded_structure()
-                st.rerun()
-
-        show_structure_details = st.checkbox(
-            "Show structure details",
-            value=False,
-            key="show_structure_details",
-        )
-        if show_structure_details:
-            space_group = print_space_group(current_atoms)
-            with st.expander("Symmetry information", expanded=False):
-                st.markdown(f"```\n{space_group}\n```")
-
-            molecule_list = []
-            for i, molecule in enumerate(current_molecules, 1):
-                molecule_labels = [current_modified_symbols[mol_atom] for mol_atom in molecule]
-                molecule_list.append(f"Molecule {i}: {', '.join(molecule_labels)}")
-
-            molecule_list_formatted = "\n".join(molecule_list)
-            with st.expander("Detected molecules", expanded=False):
-                st.markdown(f"```\n{molecule_list_formatted}\n```")
-
-        with st.expander("3D structure viewer", expanded=False):
-            load_structure_viewer = st.checkbox(
-                "Load 3D structure viewer",
-                value=False,
-                key="load_initial_structure_viewer",
-            )
-            if load_structure_viewer:
-                try:
-                    atoms_to_speck(current_atoms, "initialization")
-                except Exception as e:
-                    st.error(f"Error rendering structure viewer: {str(e)}")
-            else:
-                st.caption("Enable the viewer only when needed.")
-
-        st.divider()
+    render_current_structure_card(
+        st.session_state,
+        current_atoms,
+        current_molecules,
+        current_modified_symbols,
+    )
 
     modified_atoms = current_atoms.copy()
     molecules = current_molecules.copy()
@@ -1320,987 +907,60 @@ if current_atoms is not None:
     modified_atoms = current_atoms.copy()
     molecules = current_molecules.copy()
     if rotate_option:
-        render_section_header("Rotation", kicker="Structure Workspace")
-
-        rotate_type = st.selectbox("Select Rotation Type", (
-        "Rotate Individual Molecules", "Rotate Multiple Molecules", "Random Rotation", "Interpolate by Rotation", "Rotate Part of Molecules", "Rotate by Dipole Moment"))
-
-
-
-
-
-
-
-        if rotate_type == "Rotate Individual Molecules":
-
-            # Gather user inputs for rotation using Streamlit widgets
-            molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
-
-            if molecule_indices is not None:
-
-                if "rotation_parameters" not in st.session_state:
-                    st.session_state.rotation_parameters = [None] * len(molecules)
-
-                for i in molecule_indices:
-                    st.subheader(f"Molecule {i}")
-
-                    with st.form(key=f"molecule_{i}_form"):
-
-                        axis_input = st.text_input("Enter crystal direction as h, k, l separated by spaces")
-
-                        angle = st.number_input("Enter rotation angle in degrees", step=1.0)
-
-                        if st.form_submit_button(f"Set Parameters for Molecule {i}"):
-                            hkl = np.array([int(val) for val in axis_input.split()])
-                            lattice_vectors = modified_atoms.get_cell()
-                            axis = np.dot(hkl, lattice_vectors)
-                            axis /= np.linalg.norm(axis)
-
-                            st.session_state.rotation_parameters[i - 1] = (axis, angle)
-
-
-                if st.button("Apply Multiple Rotations"):
-                    chosen_molecules = [molecules[i - 1] for i in molecule_indices]
-                    chosen_rotation_parameters = [st.session_state.rotation_parameters[i - 1] for i in molecule_indices]
-
-                    for molecule, (axis, angle) in zip(chosen_molecules, chosen_rotation_parameters):
-                        modified_atoms = rotate_molecules_v2(modified_atoms, molecule, axis, angle)
-
-                    # Save modified atoms to temporary files
-                    output_suffix = "_rotated"
-                    file_name = os.path.splitext(st.session_state.file_name)[0]
-
-                    create_aims_download_file(modified_atoms, file_name, output_suffix)
-
-                    create_labelled_download_file(modified_atoms, file_name, output_suffix)
-
-        if rotate_type == "Rotate Multiple Molecules":
-            st.header("Rotate Molecules (Same operation for all chosen molecules)")
-            # Gather user inputs for rotation using Streamlit widgets
-            molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
-
-
-            axis_option = st.selectbox("Choose axis option", options=["Cartesian axis", "Crystal direction", "Custom axis"])
-            axis_input = None
-            if axis_option == "Cartesian axis":
-                axis_input = st.selectbox("Select rotation axis", options=["x", "y", "z"])
-            elif axis_option == "Crystal direction":
-                axis_input = st.text_input("Enter crystal direction as h, k, l separated by spaces")
-            elif axis_option == "Custom axis":
-                axis_input = st.text_input("Enter custom axis as x, y, z separated by spaces")
-
-            # Add the centroid option selection
-            centroid_option = st.selectbox("Choose centroid option", options=[("1: Center of mass", 1),
-                                                                              ("2: Custom", 2),
-                                                                              ("3: Center of unit cell", 3)],
-                                           format_func=lambda o: o[0])[1]
-
-            custom_centroid = None
-            if centroid_option == 2:
-                custom_centroid = st.text_input("Enter custom centroid as x, y, z separated by spaces")
-            angle = st.number_input("Enter rotation angle in degrees", step=1.0)
-
-            if st.button("Apply Rotation") and axis_input:
-                if axis_option == "Cartesian axis":
-                    axis_dict = {'x': [1, 0, 0], 'y': [0, 1, 0], 'z': [0, 0, 1]}
-                    axis = axis_dict[axis_input]
-                elif axis_option == "Crystal direction":
-                    hkl = np.array([int(val) for val in axis_input.split()])
-                    lattice_vectors = modified_atoms.get_cell()
-                    axis = np.dot(hkl, lattice_vectors)
-                    axis /= np.linalg.norm(axis)
-                elif axis_option == "Custom axis":
-                    axis = np.array([float(val) for val in axis_input.split()])
-
-                # Pass custom centroid if centroid_option is 2, otherwise pass None
-                custom_centroid = np.array(
-                    [float(val) for val in custom_centroid.split()]) if centroid_option == 2 else None
-
-                modified_atoms = rotate_molecules_v3(modified_atoms, molecules, molecule_indices, axis, angle,
-                                                  centroid_option, custom_centroid)
-
-
-                # Save modified atoms to temporary files
-                output_suffix = "_rotated"
-                file_name = os.path.splitext(st.session_state.file_name)[0]
-
-
-                create_aims_download_file(modified_atoms, file_name, output_suffix)
-
-                create_labelled_download_file(modified_atoms, file_name, output_suffix)
-
-            with st.expander("See structure"):
-                with st.form(key="structure_viz"):
-                    if st.form_submit_button("Update Strcuture"):
-                        atoms_to_speck(modified_atoms, "rotation")
-                    else:
-                        atoms_to_speck(modified_atoms, "rotation")
-
-
-
-
-
-
-
-        if rotate_type == "Random Rotation":
-            st.subheader("Random Rotation")
-
-            mode = st.radio(
-                "Choose mode",
-                options=["Symmetric Random Rotation", "Asymmetric Random Rotation"],
-                horizontal=False,
-                index=0,
-                key="random_rotation_mode",
-            )
-
-
-            # helpers
-            def _random_axis_from_cell(
-                    cell,
-                    max_index=3,
-                    reduce_colinear=True,
-                    fixed_h=None,
-                    fixed_k=None,
-                    fixed_l=None,
-            ):
-                """
-                Pick a random crystal direction with Miller indices in [-max_index, max_index],
-                excluding (0,0,0). Optionally fix one or two Miller indices.
-
-                Returns
-                -------
-                axis : ndarray (3,)
-                    Unit vector of chosen axis in Cartesian space.
-                hkl : (h, k, l) as ints
-                """
-                low, high = -int(max_index), int(max_index)
-
-                while True:
-                    # draw randoms, respecting fixed values
-                    h = fixed_h if fixed_h is not None else np.random.randint(low, high + 1)
-                    k = fixed_k if fixed_k is not None else np.random.randint(low, high + 1)
-                    l = fixed_l if fixed_l is not None else np.random.randint(low, high + 1)
-
-                    # avoid (0,0,0)
-                    if h == 0 and k == 0 and l == 0:
-                        continue
-
-                    hkl = np.array([h, k, l], dtype=int)
-
-                    if reduce_colinear:
-                        g = np.gcd.reduce(np.abs(hkl))
-                        if g > 1:
-                            hkl = (hkl // g).astype(int)
-
-                    axis = np.dot(hkl, cell)
-                    n = np.linalg.norm(axis)
-                    if n > 0:
-                        return axis / n, (int(hkl[0]), int(hkl[1]), int(hkl[2]))
-                    # degenerate (shouldn't happen with valid cells); retry
-
-
-            def _random_angle():
-                return float(np.random.uniform(0.0, 180.0))
-
-
-            def _log_table_to_df(log_rows):
-                import pandas as pd
-                # log_rows: list of dicts
-                cols = ["structure_id", "mode", "molecule_index", "h", "k", "l", "axis_x", "axis_y", "axis_z",
-                        "angle_deg"]
-                df = pd.DataFrame(log_rows)[cols]
-                return df
-
-
-            lattice_vectors = modified_atoms.get_cell()
-
-            # ---- Axis constraints (optional) ----
-            with st.expander("Axis constraints (optional): fix one or two Miller indices"):
-                # how many indices to fix?
-                fix_choice = st.radio(
-                    "Do you want to fix one or two Miller indices?",
-                    options=["No", "Fix one", "Fix two"],
-                    horizontal=True,
-                    index=0,
-                    key="axis_fix_choice"
-                )
-
-                # choose which indices to fix
-                fixed_h = fixed_k = fixed_l = None
-                max_index = st.number_input(
-                    "Max |index| for random draw (controls range [-N, N])",
-                    min_value=1, max_value=6, value=2, step=1,
-                    key="axis_max_index"
-                )
-
-                if fix_choice == "Fix one":
-                    which_one = st.selectbox("Choose index to fix", ["h", "k", "l"], key="fix_one_which")
-                    val = st.number_input("Value", min_value=-max_index, max_value=max_index, value=0, step=1,
-                                          key="fix_one_val")
-                    if which_one == "h":
-                        fixed_h = int(val)
-                    elif which_one == "k":
-                        fixed_k = int(val)
-                    else:
-                        fixed_l = int(val)
-
-                elif fix_choice == "Fix two":
-                    which_two = st.multiselect(
-                        "Choose two indices to fix",
-                        ["h", "k", "l"],
-                        max_selections=2,
-                        key="fix_two_which"
-                    )
-                    if len(which_two) == 2:
-                        v1 = st.number_input(f"Value for {which_two[0]}", min_value=-max_index, max_value=max_index,
-                                             value=0, step=1, key="fix_two_val1")
-                        v2 = st.number_input(f"Value for {which_two[1]}", min_value=-max_index, max_value=max_index,
-                                             value=0, step=1, key="fix_two_val2")
-                        if "h" in which_two:
-                            fixed_h = int(v1 if which_two[0] == "h" else v2)
-                        if "k" in which_two:
-                            fixed_k = int(v1 if which_two[0] == "k" else v2)
-                        if "l" in which_two:
-                            fixed_l = int(v1 if which_two[0] == "l" else v2)
-
-            # ---------- Mode-specific selection UIs ----------
-            if mode == "Symmetric Random Rotation":
-                st.markdown("Define **partner pairs** (two molecule indices per pair). "
-                            "Assuming input symmetric configuration, each pair receives equal rotations to preserve symmetry.")
-
-                if "sym_pairs" not in st.session_state:
-                    st.session_state.sym_pairs = []
-
-                # Pair builder UI
-                with st.form("add_partner_pair_form"):
-                    st.markdown("Add a **single pair** manually or **upload a CSV** with two columns of indices.")
-
-                    c1, c2 = st.columns([1, 1])
-                    with c1:
-                        pair = st.multiselect(
-                            "Select exactly two molecule indices to form a partner pair",
-                            options=range(1, len(molecules) + 1),
-                            max_selections=2,
-                            key="sym_pair_builder",
-                        )
-                    with c2:
-                        uploaded_csv = st.file_uploader(
-                            "Or upload CSV (two columns = indices)",
-                            type=["csv"],
-                            key="sym_pair_uploader",
-                        )
-                        csv_has_header = st.checkbox("CSV has header row", value=True, key="sym_csv_has_header")
-
-                    add_pair = st.form_submit_button("Add Pair(s)")
-
-                    if add_pair:
-                        new_pairs = []
-                        issues = []
-
-                        # 1) From manual selection
-                        if len(pair) > 0:
-                            if len(pair) != 2:
-                                issues.append("Manual selection: please select exactly two indices.")
-                            elif pair[0] == pair[1]:
-                                issues.append(
-                                    f"Manual selection: indices must be different (got {pair[0]}, {pair[1]}).")
-                            elif not (1 <= pair[0] <= len(molecules) and 1 <= pair[1] <= len(molecules)):
-                                issues.append(f"Manual selection: indices out of range 1..{len(molecules)}.")
-                            else:
-                                new_pairs.append(tuple(sorted(pair)))
-
-                        # 2) From CSV (optional)
-                        if uploaded_csv is not None:
-                            try:
-                                df = pd.read_csv(uploaded_csv, header=0 if csv_has_header else None)
-                                if df.shape[1] < 2:
-                                    issues.append("CSV must have at least two columns (first two are used).")
-                                else:
-                                    idx_df = df.iloc[:, :2]
-                                    for i, row in idx_df.iterrows():
-                                        a, b = row.iloc[0], row.iloc[1]
-                                        # Try to coerce to integers
-                                        try:
-                                            a = int(a)
-                                            b = int(b)
-                                        except Exception:
-                                            issues.append(
-                                                f"Row {i + 1}: values must be integers (got {row.iloc[0]!r}, {row.iloc[1]!r}).")
-                                            continue
-                                        # Validate values
-                                        if a == b:
-                                            issues.append(f"Row {i + 1}: indices must be different (got {a}, {b}).")
-                                            continue
-                                        if not (1 <= a <= len(molecules) and 1 <= b <= len(molecules)):
-                                            issues.append(
-                                                f"Row {i + 1}: indices out of range 1..{len(molecules)} (got {a}, {b})."
-                                            )
-                                            continue
-                                        new_pairs.append(tuple(sorted((a, b))))
-                            except Exception as e:
-                                issues.append(f"Failed to read CSV: {e}")
-
-                        # De-duplicate within the submission
-                        new_pairs = list(dict.fromkeys(new_pairs))  # preserves order, removes duplicates
-
-                        # Filter out pairs already present
-                        existing = set(st.session_state.sym_pairs)
-                        to_add = [p for p in new_pairs if p not in existing]
-
-                        # Report overlaps (not added because already present)
-                        already = [p for p in new_pairs if p in existing]
-
-                        # Apply additions
-                        if to_add:
-                            st.session_state.sym_pairs.extend(to_add)
-                            st.success(f"Added {len(to_add)} new pair(s): {', '.join(map(str, to_add))}")
-
-                        if already:
-                            st.info(f"Skipped {len(already)} duplicate pair(s): {', '.join(map(str, already))}")
-
-                        if issues:
-                            st.warning("Some issues were found:\n- " + "\n- ".join(issues))
-
-                # Optional seed
-                seed_col1, seed_col2 = st.columns(2)
-                with seed_col1:
-                    use_seed = st.checkbox("Use random seed (optional)")
-                with seed_col2:
-                    seed_val = st.number_input("Seed", value=0, step=1) if use_seed else None
-                if use_seed:
-                    np.random.seed(int(seed_val))
-
-                # How many structures?
-                num_structs = st.number_input(
-                    "How many structures should be generated?",
-                    min_value=1, max_value=32, value=1, step=1
-                )
-
-                if st.button("Apply Symmetric Random Rotations"):
-                    if not st.session_state.sym_pairs:
-                        st.warning("Add at least one partner pair first.")
-                    else:
-                        import copy, io, zipfile, tempfile
-                        from ase.io import write as ase_write
-
-                        base_atoms = modified_atoms  # keep original reference
-                        all_logs = []
-                        generated_atoms = []
-                        used_signatures = set()
-
-                        # Generate num_structs unique sets
-                        for s_idx in range(1, int(num_structs) + 1):
-                            # Make a working copy of atoms
-                            work_atoms = copy.deepcopy(base_atoms)
-                            struct_logs = []
-
-                            # Build a uniqueness signature for this set
-                            sig_parts = []
-
-                            for a, b in st.session_state.sym_pairs:
-                                mol_a = molecules[a - 1]
-                                mol_b = molecules[b - 1]
-
-                                axis, hkl = _random_axis_from_cell(
-                                    lattice_vectors,
-                                    max_index=max_index,
-                                    reduce_colinear=True,
-                                    fixed_h=fixed_h,
-                                    fixed_k=fixed_k,
-                                    fixed_l=fixed_l,
-                                )
-                                angle = _random_angle()
-
-                                # signature part (rounded angle avoids float jitter)
-                                sig_parts.append((tuple(sorted((a, b))), hkl, round(angle, 3)))
-
-                                # Apply +θ to first, −θ to second
-                                work_atoms = rotate_molecules_v2(work_atoms, mol_a, axis, angle)
-                                work_atoms = rotate_molecules_v2(work_atoms, mol_b, axis, angle)
-
-                                # log both applications
-                                struct_logs.append({
-                                    "structure_id": s_idx, "mode": "symmetric",
-                                    "molecule_index": a, "h": hkl[0], "k": hkl[1], "l": hkl[2],
-                                    "axis_x": float(axis[0]), "axis_y": float(axis[1]), "axis_z": float(axis[2]),
-                                    "angle_deg": float(angle)
-                                })
-                                struct_logs.append({
-                                    "structure_id": s_idx, "mode": "symmetric",
-                                    "molecule_index": b, "h": hkl[0], "k": hkl[1], "l": hkl[2],
-                                    "axis_x": float(axis[0]), "axis_y": float(axis[1]), "axis_z": float(axis[2]),
-                                    "angle_deg": float(angle)
-                                })
-
-                            sig = tuple(sig_parts)
-                            # (Practically always unique; retry would require a loop. Here we accept near-certain uniqueness.)
-                            used_signatures.add(sig)
-
-                            generated_atoms.append(work_atoms)
-                            all_logs.extend(struct_logs)
-
-                        # Show logs in a table
-                        df = _log_table_to_df(all_logs)
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-
-                        file_name = os.path.splitext(st.session_state.file_name)[0]
-
-                        if int(num_structs) == 1:
-                            # Single file output via your helper, preserve prior suffix style
-                            output_suffix = "_rand_sym"
-                            create_aims_download_file(generated_atoms[0], file_name, output_suffix)
-                            st.success("Symmetric random rotation applied and file generated.")
-                        else:
-                            # Batch ZIP
-                            buf = io.BytesIO()
-                            with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                                for s_idx, atoms_obj in enumerate(generated_atoms, start=1):
-                                    fname = f"{file_name}_rand_sym_{s_idx:02d}.in"
-                                    tmp_path = os.path.join(tempfile.gettempdir(), fname)
-                                    ase_write(tmp_path, atoms_obj, format="aims")
-                                    zf.write(tmp_path, arcname=fname)
-                            buf.seek(0)
-                            st.download_button(
-                                "Download ZIP of symmetric random-rotated structures",
-                                data=buf,
-                                file_name=f"{file_name}_rand_sym_batch.zip",
-                                mime="application/zip",
-                            )
-                            st.success(f"Generated {int(num_structs)} symmetric random-rotated structures.")
-
-            elif mode == "Asymmetric Random Rotation":
-                st.markdown("Select any molecules; each gets its **own** random axis and angle.")
-
-                target_indices = st.multiselect(
-                    "Select molecule indices for asymmetric random rotation",
-                    options=range(1, len(molecules) + 1),
-                    key="pure_random_indices",
-                )
-
-                # Optional seed
-                seed_col1, seed_col2 = st.columns(2)
-                with seed_col1:
-                    use_seed = st.checkbox("Use random seed (optional)", key="pure_use_seed")
-                with seed_col2:
-                    seed_val = st.number_input("Seed", value=0, step=1, key="pure_seed_val") if use_seed else None
-                if use_seed:
-                    np.random.seed(int(seed_val))
-
-                # How many structures?
-                num_structs = st.number_input(
-                    "How many structures should be generated?",
-                    min_value=1, max_value=32, value=1, step=1,
-                    key="pure_num_structs"
-                )
-
-                if st.button("Apply Asymmetric Random Rotations"):
-                    if not target_indices:
-                        st.warning("Please select at least one molecule.")
-                    else:
-                        import copy, io, zipfile, tempfile
-                        from ase.io import write as ase_write
-
-                        base_atoms = modified_atoms
-                        all_logs = []
-                        generated_atoms = []
-                        used_signatures = set()
-
-                        for s_idx in range(1, int(num_structs) + 1):
-                            work_atoms = copy.deepcopy(base_atoms)
-                            struct_logs = []
-                            sig_parts = []
-
-                            for idx in target_indices:
-                                molecule = molecules[idx - 1]
-                                axis, hkl = _random_axis_from_cell(
-                                    lattice_vectors,
-                                    max_index=max_index,
-                                    reduce_colinear=True,
-                                    fixed_h=fixed_h,
-                                    fixed_k=fixed_k,
-                                    fixed_l=fixed_l,
-                                )
-                                angle = _random_angle()
-                                work_atoms = rotate_molecules_v2(work_atoms, molecule, axis, angle)
-
-                                struct_logs.append({
-                                    "structure_id": s_idx, "mode": "asym",
-                                    "molecule_index": idx, "h": hkl[0], "k": hkl[1], "l": hkl[2],
-                                    "axis_x": float(axis[0]), "axis_y": float(axis[1]), "axis_z": float(axis[2]),
-                                    "angle_deg": float(angle)
-                                })
-
-                                # uniqueness signature component
-                                sig_parts.append((idx, hkl, round(angle, 3)))
-
-                            sig = tuple(sorted(sig_parts, key=lambda x: x[0]))
-                            used_signatures.add(sig)
-
-                            generated_atoms.append(work_atoms)
-                            all_logs.extend(struct_logs)
-
-                        # Show logs in a table
-                        df = _log_table_to_df(all_logs)
-                        st.dataframe(df, use_container_width=True, hide_index=True)
-
-                        file_name = os.path.splitext(st.session_state.file_name)[0]
-
-                        if int(num_structs) == 1:
-                            output_suffix = "_rand_pure"
-                            create_aims_download_file(generated_atoms[0], file_name, output_suffix)
-                            st.success("Asymmetric random rotations applied and file generated.")
-                        else:
-                            buf = io.BytesIO()
-                            with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                                for s_idx, atoms_obj in enumerate(generated_atoms, start=1):
-                                    fname = f"{file_name}_rand_pure_{s_idx:02d}.in"
-                                    tmp_path = os.path.join(tempfile.gettempdir(), fname)
-                                    ase_write(tmp_path, atoms_obj, format="aims")
-                                    zf.write(tmp_path, arcname=fname)
-                            buf.seek(0)
-                            st.download_button(
-                                "Download ZIP of pure random-rotated structures",
-                                data=buf,
-                                file_name=f"{file_name}_rand_asym_batch.zip",
-                                mime="application/zip",
-                            )
-                            st.success(f"Generated {int(num_structs)} asymmetric random-rotated structures.")
-
-
-        if rotate_type == "Interpolate by Rotation":
-            st.header("Create a Series of Structures")
-
-            # Gather user inputs for rotation using Streamlit widgets
-            molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
-
-            if molecule_indices is not None:
-
-                if "rotation_parameters" not in st.session_state:
-                    st.session_state.rotation_parameters = [None] * len(molecules)
-
-                angle_range = st.slider("Enter rotation angle range (min, max) in degrees", min_value=0, max_value=360,
-                                        value=(0, 180))
-                num_structures = st.number_input("Enter the number of structures to generate", min_value=1, value=1, step=1)
-
-                for i in molecule_indices:
-                    st.subheader(f"Molecule {i}")
-
-                    with st.form(key=f"molecule_{i}_form"):
-
-                        axis_input = st.text_input("Enter crystal direction as h, k, l separated by spaces")
-
-                        if st.form_submit_button(f"Set Parameters for Molecule {i}"):
-                            hkl = np.array([int(val) for val in axis_input.split()])
-                            lattice_vectors = modified_atoms.get_cell()
-                            axis = np.dot(hkl, lattice_vectors)
-                            axis /= np.linalg.norm(axis)
-
-                            st.session_state.rotation_parameters[i - 1] = axis
-
-                if st.button("Apply Multiple Rotations"):
-                    chosen_molecules = [molecules[i - 1] for i in molecule_indices]
-                    chosen_rotation_axes = [st.session_state.rotation_parameters[i - 1] for i in molecule_indices]
-
-                    angle_step = (angle_range[1] - angle_range[0]) / (num_structures - 1)
-                    rotation_angles = [angle_range[0] + angle_step * i for i in range(num_structures)]
-
-                    rotated_structures_list = []
-
-                    for angle in rotation_angles:
-                        temp_atoms = modified_atoms.copy()
-                        for molecule, axis in zip(chosen_molecules, chosen_rotation_axes):
-                            temp_atoms = rotate_molecules_v2(temp_atoms, molecule, axis, angle)
-                        rotated_structures_list.append((temp_atoms, angle))
-
-                    file_name = os.path.splitext(st.session_state.file_name)[0]
-
-                    create_zip_with_rotated_structures(rotated_structures_list, file_name)
-
-        if rotate_type == "Rotate Part of Molecules":
-            st.header("Rotate Atoms in Molecule")
-
-            # Gather user inputs for rotation using Streamlit widgets
-            # molecules is a list of lists where each list contains indices from the atoms object that define a molecule
-            molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
-
-            if "rotation_parameters" not in st.session_state:
-                st.session_state.rotation_parameters = [None] * len(molecules)
-            if molecule_indices is not None:
-                for i in molecule_indices:
-                    st.subheader(f"Molecule {i}")
-
-                    with st.form(key=f"molecule_{i}_form"):
-
-                        atoms_to_rotate = st.multiselect("Enter the atom indices that require rotation",
-                                                         options=[idx + 1 for idx in molecules[i - 1]])
-
-                        axis_input = st.text_input("Enter crystal direction as h, k, l separated by spaces")
-
-                        pivot_point = st.selectbox("Select the pivot point atom", options=[idx + 1 for idx in molecules[i - 1]])
-                        angle = st.number_input("Enter rotation angle in degrees", step=1.0)
-
-                        if st.form_submit_button(f"Set Parameters for Molecule {i}"):
-                            hkl = np.array([int(val) for val in axis_input.split()])
-                            lattice_vectors = modified_atoms.get_cell()
-                            axis = np.dot(hkl, lattice_vectors)
-                            axis /= np.linalg.norm(axis)
-
-                            atoms_to_rotate_indices = [molecules[i - 1].index(atom - 1) for atom in atoms_to_rotate]
-                            pivot_point_index = molecules[i - 1].index(pivot_point - 1)
-
-                            st.session_state.rotation_parameters[i - 1] = (atoms_to_rotate_indices, axis, pivot_point_index, angle)
-
-            if st.button("Apply Rotations"):
-                chosen_molecules = [molecules[i - 1] for i in molecule_indices]
-                chosen_rotation_parameters = [st.session_state.rotation_parameters[i - 1] for i in molecule_indices]
-
-                for molecule, (atoms_to_rotate_indices, axis, pivot_point_index, angle) in zip(chosen_molecules,
-                                                                                 chosen_rotation_parameters):
-                    modified_atoms = rotate_molecules_v5(modified_atoms, molecule, axis, angle, pivot_point_index, atoms_to_rotate_indices)
-
-                # Save modified atoms to temporary files
-                output_suffix = "_rotated_some_atoms"
-                file_name = os.path.splitext(st.session_state.file_name)[0]
-
-                create_aims_download_file(modified_atoms, file_name, output_suffix)
-
-                create_labelled_download_file(modified_atoms, file_name, output_suffix)
-
-        if rotate_type == "Rotate by Dipole Moment":
-            #This option aligns a molecule's dipole moment to a chosen crystal plane by rotating the molecule around its centroid
-            st.header("Rotate Molecules to align with planes")
-
-            # Gather user inputs for rotation using Streamlit widgets
-            molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
-
-            if molecule_indices is not None:
-
-
-
-                if "alignment_planes" not in st.session_state:
-                    st.session_state.alignment_planes = [None] * len(molecules)
-
-                for i in molecule_indices:
-                    st.subheader(f"Molecule {i}")
-
-                    with st.form(key=f"molecule_{i}_alg_form"):
-
-                        plane_input = st.text_input("Enter crystal plane as h, k, l separated by spaces")
-
-                        if st.form_submit_button(f"Set Parameters for Molecule {i}"):
-                            hkl = np.array([int(val) for val in plane_input.split()])
-                            st.session_state.alignment_planes[i - 1] = hkl
-
-                if st.button("Apply Alignments"):
-                    chosen_molecules = [molecules[i - 1] for i in molecule_indices]
-                    chosen_alignment_planes = [st.session_state.alignment_planes[i - 1] for i in molecule_indices]
-                    lattice_vectors = modified_atoms.get_cell()
-
-                    for molecule, miller_indices in zip(chosen_molecules, chosen_alignment_planes):
-                        #calculate the dm
-                        mol_obj = get_molecule_object(modified_atoms, molecule)
-                        dm_vector, com = get_dm_direction(mol_obj)
-                        #get the rotation matrix
-                        rot_mat = align_vector_with_plane(dm_vector, lattice_vectors, miller_indices)
-                        #get the axis
-                        rot_ax, rot_ang = rotation_axis_and_angle_from_matrix_v2(rot_mat)
-                        rot_ax_cr = crystal_direction_v3(rot_ax, lattice_vectors)
-                        st.write(rot_ax_cr)
-                        #supply it to the rotate_molecules
-                        modified_atoms = rotate_molecules_v4(modified_atoms, molecule, mol_obj, rot_mat)
-
-                    # Save modified atoms to temporary files
-                    output_suffix = "_rotated_aligned"
-                    file_name = os.path.splitext(st.session_state.file_name)[0]
-
-                    create_aims_download_file(modified_atoms, file_name, output_suffix)
-
-                    create_labelled_download_file(modified_atoms, file_name, output_suffix)
+        modified_atoms = render_rotation(
+            modified_atoms,
+            molecules,
+            st.session_state.file_name,
+            render_section_header=render_section_header,
+        )
 
     if reflect_option:
-        render_section_header("Reflect molecules on a plane", kicker="Structure Workspace")
-
-        molecule_indices = st.multiselect("Select molecule indices", options=range(1, len(molecules) + 1))
-
-        if "reflection_parameters" not in st.session_state:
-            st.session_state.reflection_parameters = [None] * len(molecules)
-        if molecule_indices is not None:
-            for i in molecule_indices:
-                st.subheader(f"Molecule {i}")
-
-                with st.form(key=f"molecule_{i}_form"):
-
-                    plane_input = st.text_input("Enter crystal plane as h, k, l separated by spaces")
-
-                    # Add a multi-select list for atoms not to reflect
-                    atom_labels = get_atom_labels(modified_atoms, molecules[i - 1])
-                    atoms_not_to_reflect = st.multiselect("Select atom indices not to reflect (Optional)",
-                                                          options=atom_labels, format_func=lambda x: x[1])
-
-                    if st.form_submit_button(f"Set Parameters for Molecule {i}"):
-                        hkl = np.array([int(val) for val in plane_input.split()])
-                        local_indices = find_local_indices(molecules[i - 1],
-                                                           [atom_idx for atom_idx, _ in atoms_not_to_reflect])
-                        st.session_state.reflection_parameters[i - 1] = (hkl, local_indices)
-
-                        # st.write(st.session_state.reflection_parameters[i - 1])
-
-        if st.button("Apply Reflections"):
-            chosen_molecules = [molecules[i - 1] for i in molecule_indices]
-            chosen_reflection_parameters = [st.session_state.reflection_parameters[i - 1] for i in molecule_indices]
-
-            for molecule, (hkl, not_to_reflect) in zip(chosen_molecules, chosen_reflection_parameters):
-                mol_obj = get_molecule_object(modified_atoms, molecule)
-                normal_vector, origin_point = plane_params_from_hkl(modified_atoms, hkl)
-                modified_atoms = reflect_molecules(modified_atoms, molecule, mol_obj, normal_vector, origin_point,
-                                                   not_to_reflect)
-
-            # Save modified atoms to temporary files
-            output_suffix = "_reflected"
-            file_name = os.path.splitext(st.session_state.file_name)[0]
-
-            create_aims_download_file(modified_atoms, file_name, output_suffix)
-
-            create_labelled_download_file(modified_atoms, file_name, output_suffix)
+        modified_atoms = render_reflection(
+            modified_atoms,
+            molecules,
+            st.session_state.file_name,
+            render_section_header=render_section_header,
+        )
 
     if translation_option:
-        render_section_header("Translation", kicker="Structure Workspace")
-
-        translate_type = st.selectbox("Select Translation Type", (
-            "Molecules", "Atoms"))
-
-
-        # scope_choice = st.selectbox("Do you want to translate molecules or atoms?", ("molecules", "atoms"))
-        # st.session_state.scope_choice = scope_choice
-
-        if translate_type == "Molecules":
-            scope_choice = "molecules"
-            selected_indices = st.multiselect("Select molecule indices to translate",
-                                              range(1, len(molecules) + 1))
-
-            with st.form(key="translation_form"):
-
-                axes_choice = st.selectbox("Enter the axes for translation",
-                                           ("x", "y", "z", "xy", "xz", "yz", "xyz", "custom"))
-
-                if axes_choice == "custom":
-                    custom_axis = st.text_input("Enter custom axis as x, y, z separated by spaces")
-                    axis = np.array([float(val) for val in custom_axis.split()])
-                    distance = st.number_input("Enter the translation distance", step=0.1)
-                    translation_distances = {tuple(axis): distance}
-                else:
-                    translation_distances = {}
-                    for axis in axes_choice:
-                        distance = st.number_input(f"Enter the translation distance along {axis}-axis",
-                                                   key=f"{axis}_translation", step=0.1)
-                        translation_distances[axis] = distance
-
-                if st.form_submit_button("Apply Translation"):
-                    modified_atoms = translate_molecule(modified_atoms, molecules, scope_choice, selected_indices,
-                                                        axes_choice,
-                                                        translation_distances)
-
-                    # Save modified atoms to temporary files
-                    output_suffix = "_translated"
-
-                    create_aims_download_file(modified_atoms, file_name, output_suffix)
-
-                    create_labelled_download_file(modified_atoms, file_name, output_suffix)
-
-                with st.expander("See structure"):
-                    atoms_to_speck(modified_atoms, "translation")
-
-        if translate_type == "Atoms":
-            scope_choice = "atoms"
-            selected_indices_string = st.text_input(
-                "Enter atom indices to translate (separated by spaces or commas)")
-            if selected_indices_string:
-                selected_indices = [int(index.strip()) for index in
-                                    selected_indices_string.replace(',', ' ').split() if index.strip()]
-
-                with st.form(key="translation_form"):
-
-                    axes_choice = st.selectbox("Enter the axes for translation",
-                                               ("x", "y", "z", "xy", "xz", "yz", "xyz", "custom"))
-
-                    if axes_choice == "custom":
-                        custom_axis = st.text_input("Enter custom axis as x, y, z separated by spaces")
-                        axis = np.array([float(val) for val in custom_axis.split()])
-                        distance = st.number_input("Enter the translation distance", step=0.1)
-                        translation_distances = {tuple(axis): distance}
-                    else:
-                        translation_distances = {}
-                        for axis in axes_choice:
-                            distance = st.number_input(f"Enter the translation distance along {axis}-axis",
-                                                       key=f"{axis}_translation", step=0.1)
-                            translation_distances[axis] = distance
-
-                    if st.form_submit_button("Apply Translation"):
-                        modified_atoms = translate_molecule(modified_atoms, molecules, scope_choice, selected_indices,
-                                                            axes_choice,
-                                                            translation_distances)
-
-                        # Save modified atoms to temporary files
-                        output_suffix = "_translated"
-
-                        create_aims_download_file(modified_atoms, file_name, output_suffix)
-
-                        create_labelled_download_file(modified_atoms, file_name, output_suffix)
-
-                    with st.expander("See structure"):
-                        atoms_to_speck(modified_atoms, "translation")
+        modified_atoms = render_translation(
+            modified_atoms,
+            molecules,
+            st.session_state.file_name,
+            render_section_header=render_section_header,
+        )
 
     if delete_option:
-        render_section_header("Delete Molecules", kicker="Structure Workspace")
-        with st.form(key="delete_form"):
-
-            selected_indices = st.multiselect("Select molecule indices to delete",
-                                              range(1, len(molecules) + 1))
-
-            if st.form_submit_button("Apply Deletion"):
-                modified_atoms = delete_molecules(modified_atoms, molecules, selected_indices)
-
-
-                # Save modified atoms to temporary files
-                output_suffix = "_deleted"
-
-                create_aims_download_file(modified_atoms, file_name, output_suffix)
-
-                create_labelled_download_file(modified_atoms, file_name, output_suffix)
-
-            with st.expander("See structure"):
-                atoms_to_speck(modified_atoms, "deletion")
+        modified_atoms = render_deletion(
+            modified_atoms,
+            molecules,
+            st.session_state.file_name,
+            render_section_header=render_section_header,
+        )
 
     if labelling_option:
-        render_section_header("Label Molecule Atoms", kicker="Structure Workspace")
-
-        selected_molecule_indices = st.multiselect(
-            "Select molecules",
-            options=range(1, len(molecules) + 1),
-            format_func=lambda index: f"Molecule {index}",
+        render_labelling(
+            modified_atoms,
+            molecules,
+            current_modified_symbols,
+            st.session_state,
+            render_section_header=render_section_header,
         )
-
-        label_overrides = {}
-        labelled_molecule_parts = []
-        has_valid_label = False
-
-        for selected_molecule_index in selected_molecule_indices:
-            selected_molecule = molecules[selected_molecule_index - 1]
-            current_labels = [current_modified_symbols[atom_index] for atom_index in selected_molecule]
-            st.caption(f"Molecule {selected_molecule_index} current labels: {', '.join(current_labels)}")
-
-            custom_label = st.text_input(
-                f"Label suffix for Molecule {selected_molecule_index}",
-                value="",
-                key=f"molecule_label_suffix_{selected_molecule_index}",
-                help="Example: `l1` relabels Pb1, I5, I10, I13 to Pbl1, Il1, Il1, Il1 for the selected molecule.",
-            )
-            cleaned_label = custom_label.strip()
-            if not cleaned_label:
-                continue
-
-            try:
-                molecule_overrides = build_molecule_label_overrides(
-                    modified_atoms,
-                    selected_molecule,
-                    cleaned_label,
-                )
-            except ValueError as exc:
-                st.error(f"Molecule {selected_molecule_index}: {exc}")
-                continue
-
-            label_overrides.update(molecule_overrides)
-            labelled_molecule_parts.append(f"molecule_{selected_molecule_index}_{cleaned_label}")
-            preview_labels = [molecule_overrides[atom_index] for atom_index in selected_molecule]
-            st.caption(f"Molecule {selected_molecule_index} preview: {', '.join(preview_labels)}")
-            has_valid_label = True
-
-        if has_valid_label:
-            original_geometry_content = None
-            uploaded_name = st.session_state.uploaded_structure_name
-            uploaded_bytes = st.session_state.uploaded_structure_bytes
-            if uploaded_name and uploaded_bytes is not None:
-                uploaded_format = get_file_format(uploaded_name)
-                if uploaded_format == "aims":
-                    original_geometry_content = uploaded_bytes.decode("utf-8")
-
-            create_custom_geometry_download_file(
-                modified_atoms,
-                "geometry.in",
-                "_" + "_".join(labelled_molecule_parts),
-                atom_label_overrides=label_overrides,
-                original_content=original_geometry_content,
-                download_label="Download custom-labelled geometry.in",
-            )
 
     if symmetry_option:
-        render_section_header("Symmetrize structure", kicker="Structure Workspace")
-        with st.form(key="symmetry_form"):
-            symprec_lower = st.number_input("Enter the lower bound for tolerance", value=1e-3, step=1e-3, format="%.4f")
-            symprec_upper = st.number_input("Enter the upper bound for tolerance", value=1e-1, step=1e-3, format="%.4f")
-            angle_tol = st.number_input("Enter a tolerance for angles", value=5.0, step=1e-3, format="%.4f")
-
-            if symprec_lower > symprec_upper:
-                st.error("Lower bound should be less than or equal to the upper bound.")
-
-            form_submitted = st.form_submit_button("Get Space Groups")
-
-        symmetry_payload = {
-            "file_name": st.session_state.file_name,
-            "file_bytes_b64": base64.b64encode(uploaded_structure_bytes).decode("utf-8"),
-            "symprec_lower": float(symprec_lower),
-            "symprec_upper": float(symprec_upper),
-            "angle_tol": float(angle_tol),
-        }
-        symmetry_state_key = f"structure_symmetry::{st.session_state.file_name}"
-        symmetry_result = _run_backend_workflow(
-            "structure_symmetry",
-            symmetry_payload,
-            symmetry_state_key,
-            start=form_submitted and symprec_lower <= symprec_upper,
+        render_symmetry_analysis(
+            st.session_state,
+            _get_backend_workflow_registry(),
+            uploaded_structure_bytes,
+            modified_atoms,
+            render_section_header=render_section_header,
         )
-        symmetry_state = _get_backend_workflow_state(symmetry_state_key)
-        if form_submitted and symmetry_result is None and symmetry_state.get("status") not in {"failed", "cancelled"}:
-            st.info("Computing symmetry candidates in the backend. Re-run this action in a moment if they do not appear immediately.")
-        if symmetry_state.get("error"):
-            st.error(f"Symmetry analysis failed: {symmetry_state['error']}")
-
-        if symmetry_result and symmetry_result.get("space_groups"):
-            selected_string = st.selectbox(
-                "Select the desired space group",
-                options=[entry["label"] for entry in symmetry_result["space_groups"]],
-                index=0,
-            )
-
-            if st.button("Generate CIF"):
-                try:
-                    file_name_m = os.path.splitext(st.session_state.file_name or "structure")[0]
-                    output_cif_file = f"{file_name_m}_high_symm.cif"
-                    selected_symprec = extract_symprec_from_string(selected_string)
-                    pymatgen_structure = generate_symmetrized_structure(modified_atoms, selected_symprec, angle_tol)
-
-                    cif_writer = CifWriter(pymatgen_structure, symprec=selected_symprec, angle_tolerance=angle_tol)
-
-                    with tempfile.NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as output_file:
-                        cif_writer.write_file(output_file.name)  # Write the content to the temporary file
-                        output_file.seek(0)
-                        output_content = output_file.read()
-                        st.markdown(get_download_link(f"{output_cif_file}", output_content), unsafe_allow_html=True)
-                except ValueError as e:
-                    st.error(f"An error occurred when processing the selected space group: {e}")
-                except Exception as e:
-                    st.error(f"An unexpected error occurred: {e}")
 
     if ADP_table_option:
-        render_section_header("Extract ADP from CIF", kicker="Structure Workspace")
-
-        try:
-            uij_df = extract_Uij_from_cif(file_buffer)
-            uij_df_v = calculate_ellipsoid_volumes(uij_df, ignore_atoms=None)
-
-            st.dataframe(uij_df_v, hide_index=True, use_container_width=True)
-        except ValueError as e:
-            st.error(f"An error occurred when trying to extract the ADP values: {e}")
+        render_adp_table(
+            uploaded_structure_bytes,
+            render_section_header=render_section_header,
+        )
 
     if polarization_option:
         render_section_header("Calculated Polarization direction", kicker="Structure Workspace")
@@ -2333,1472 +993,19 @@ if current_atoms is not None:
         st.write(miller_direction)
 
     if PXRD_option:
-        pxrd_workflow_titles = {
-            "Simulate PXRD": "Simulate powder X-ray diffraction",
-        }
-        render_section_header(
-            pxrd_workflow_titles.get(PXRD_workflow, "PXRD Analysis"),
-            kicker="Structure Workspace",
-            subtitle="Simulate a PXRD pattern for the loaded structure with configurable wavelength, broadening, and axis units.",
+        render_pxrd_analysis(
+            st.session_state,
+            _get_backend_workflow_registry(),
+            uploaded_structure_bytes,
+            render_section_header=render_section_header,
         )
-
-        wavelength = st.number_input(
-            "Wavelength (A)",
-            min_value=0.01,
-            value=1.5406,
-            step=0.0001,
-            format="%.4f",
-        )
-        x_axis_label = st.radio(
-            "Plot x-axis as",
-            options=("2theta", "q"),
-            horizontal=True,
-            format_func=lambda value: "2theta (deg)" if value == "2theta" else "q (A^-1)",
-        )
-        pxrd_range_columns = st.columns(2)
-        with pxrd_range_columns[0]:
-            range_min_input = st.text_input(
-                "2theta min (deg)" if x_axis_label == "2theta" else "q min (A^-1)",
-                value="0.5",
-                key="pxrd_range_min_2theta" if x_axis_label == "2theta" else "pxrd_range_min_q",
-            )
-        with pxrd_range_columns[1]:
-            range_max_input = st.text_input(
-                "2theta max (deg)" if x_axis_label == "2theta" else "q max (A^-1)",
-                value="50" if x_axis_label == "2theta" else "5.0",
-                key="pxrd_range_max_2theta" if x_axis_label == "2theta" else "pxrd_range_max_q",
-            )
-        fwhm = st.number_input(
-            "FWHM broadening (deg)",
-            min_value=0.0,
-            value=0.1,
-            step=0.01,
-            format="%.2f",
-            help="Applied in degrees of 2theta before any optional conversion of the plotted x-axis to q. Set to 0 to show unbroadened stick intensities on the sampled grid.",
-        )
-        show_bragg_reflections = st.checkbox("Show Bragg reflections", value=False)
-        show_d_spacing_axis = st.checkbox("Show d-spacing axis", value=False)
-        experimental_pxrd_file = st.file_uploader(
-            "Optional experimental PXRD data",
-            type=["csv", "txt", "xy", "dat", "chi"],
-            help="Upload a two-column dataset with x and intensity values for comparison, including .chi files with '#' header lines.",
-            key="pxrd_experimental_uploader",
-        )
-        experimental_x_axis_label = None
-        if experimental_pxrd_file is not None:
-            experimental_x_axis_label = st.radio(
-                "Experimental x-axis units",
-                options=("2theta", "q"),
-                horizontal=True,
-                index=0,
-                format_func=lambda value: "2theta (deg)" if value == "2theta" else "q (A^-1)",
-            )
-
-        try:
-            range_min = float(range_min_input)
-            range_max = float(range_max_input)
-        except ValueError:
-            st.error("Enter numeric values for the selected x-axis range.")
-            st.stop()
-
-        if range_min >= range_max:
-            st.error("The minimum range value must be smaller than the maximum range value.")
-            st.stop()
-
-        if x_axis_label == "q":
-            q_argument = wavelength * np.array([range_min, range_max], dtype=float) / (4.0 * np.pi)
-            if np.any(q_argument <= 0) or np.any(q_argument >= 1.0):
-                st.error("For the selected wavelength, q-range values must be positive and smaller than 4pi/lambda.")
-                st.stop()
-            two_theta_range = tuple(np.degrees(2.0 * np.arcsin(q_argument)))
-        else:
-            two_theta_range = (range_min, range_max)
-
-        pxrd_payload = {
-            "file_name": st.session_state.file_name,
-            "file_bytes_b64": base64.b64encode(uploaded_structure_bytes).decode("utf-8"),
-            "wavelength": float(wavelength),
-            "two_theta_range": [float(two_theta_range[0]), float(two_theta_range[1])],
-            "fwhm": float(fwhm),
-            "x_axis": x_axis_label,
-            "scaled": True,
-            "num_points": 4000,
-        }
-        pxrd_state_key = f"structure_pxrd::{st.session_state.file_name}"
-        pxrd_result = _run_backend_workflow(
-            "structure_pxrd",
-            pxrd_payload,
-            pxrd_state_key,
-            start=True,
-        )
-        pxrd_state = _get_backend_workflow_state(pxrd_state_key)
-        if pxrd_result is None:
-            if pxrd_state.get("error"):
-                st.error(f"PXRD simulation failed: {pxrd_state['error']}")
-            else:
-                st.info("PXRD simulation is still running in the backend. Re-run the action shortly if the plot does not appear immediately.")
-            st.stop()
-
-        df_pxrd = pd.DataFrame(pxrd_result["profile"])
-        df_pxrd_reflections = pd.DataFrame(pxrd_result["reflections"])
-        x_column = pxrd_result["x_label"]
-        df_pxrd_experimental = None
-        plot_simulated_intensity = df_pxrd["Intensity"].to_numpy(copy=True)
-        plot_experimental_intensity = None
-        plot_reflection_intensity = df_pxrd_reflections["Intensity"].to_numpy(copy=True)
-
-        if experimental_pxrd_file is not None:
-            try:
-                experimental_bytes = experimental_pxrd_file.getvalue()
-                experimental_text = experimental_bytes.decode("utf-8", errors="ignore")
-                df_pxrd_experimental = pd.read_csv(
-                    io.StringIO(experimental_text),
-                    sep=None,
-                    engine="python",
-                    comment="#",
-                    header=None,
-                )
-                if df_pxrd_experimental.shape[1] < 2:
-                    raise ValueError("Expected at least two columns.")
-                df_pxrd_experimental = (
-                    df_pxrd_experimental.iloc[:, :2]
-                    .rename(columns={0: "x", 1: "Intensity"})
-                    .apply(pd.to_numeric, errors="coerce")
-                    .dropna()
-                )
-                if df_pxrd_experimental.empty:
-                    raise ValueError("No numeric data rows were found.")
-                if experimental_x_axis_label == "2theta" and x_axis_label == "q":
-                    df_pxrd_experimental["x"] = (
-                        4.0
-                        * np.pi
-                        * np.sin(np.radians(df_pxrd_experimental["x"].to_numpy() / 2.0))
-                        / wavelength
-                    )
-                elif experimental_x_axis_label == "q" and x_axis_label == "2theta":
-                    q_argument = wavelength * df_pxrd_experimental["x"].to_numpy() / (4.0 * np.pi)
-                    if np.any(np.abs(q_argument) > 1.0):
-                        raise ValueError("Experimental q values are out of range for the selected wavelength.")
-                    df_pxrd_experimental["x"] = np.degrees(2.0 * np.arcsin(q_argument))
-                df_pxrd_experimental = df_pxrd_experimental.rename(columns={"x": x_column})
-                simulated_x_min = float(df_pxrd[x_column].min())
-                simulated_x_max = float(df_pxrd[x_column].max())
-                df_pxrd_experimental = df_pxrd_experimental[
-                    df_pxrd_experimental[x_column].between(simulated_x_min, simulated_x_max)
-                ].reset_index(drop=True)
-                if df_pxrd_experimental.empty:
-                    raise ValueError("No experimental data points fall within the simulated x-axis range.")
-                plot_experimental_intensity = df_pxrd_experimental["Intensity"].to_numpy(copy=True)
-            except Exception as exc:
-                st.error(f"Could not parse experimental PXRD data: {exc}")
-                st.stop()
-
-        if plot_experimental_intensity is not None:
-            sim_max = float(np.max(plot_simulated_intensity)) if plot_simulated_intensity.size else 0.0
-            exp_max = float(np.max(plot_experimental_intensity)) if plot_experimental_intensity.size else 0.0
-            if sim_max > 0:
-                plot_simulated_intensity = plot_simulated_intensity / sim_max
-                if plot_reflection_intensity.size:
-                    plot_reflection_intensity = plot_reflection_intensity / sim_max
-            if exp_max > 0:
-                plot_experimental_intensity = plot_experimental_intensity / exp_max
-
-        fig_pxrd = go.Figure()
-        fig_pxrd.add_trace(
-            go.Scatter(
-                x=df_pxrd[x_column],
-                y=plot_simulated_intensity,
-                mode="lines",
-                name="Broadened profile" if fwhm > 0 else "Sampled profile",
-                line=dict(width=2.5),
-            )
-        )
-
-        if df_pxrd_experimental is not None:
-            fig_pxrd.add_trace(
-                go.Scatter(
-                    x=df_pxrd_experimental[x_column],
-                    y=plot_experimental_intensity,
-                    mode="lines",
-                    name="Experimental data",
-                    line=dict(width=2),
-                )
-            )
-
-        if show_bragg_reflections:
-            fig_pxrd.add_trace(
-                go.Bar(
-                    x=df_pxrd_reflections[x_column],
-                    y=plot_reflection_intensity,
-                    name="Bragg reflections",
-                    opacity=0.3,
-                )
-            )
-        plot_y_label = (
-            "Normalized intensity"
-            if df_pxrd_experimental is not None
-            else ("Relative intensity" if fwhm > 0 else "Intensity")
-        )
-        layout_updates = dict(
-            xaxis_title=x_column,
-            yaxis_title=plot_y_label,
-            template="plotly_white",
-            margin=dict(t=90 if show_d_spacing_axis else 40, b=40, l=40, r=40),
-        )
-        if show_d_spacing_axis:
-            secondary_tickvals, secondary_ticktext = _build_secondary_d_axis_ticks(
-                df_pxrd[x_column].to_numpy(),
-                x_axis_label,
-                wavelength,
-            )
-            if secondary_tickvals.size:
-                fig_pxrd.add_trace(
-                    go.Scatter(
-                        x=secondary_tickvals,
-                        y=[None] * len(secondary_tickvals),
-                        mode="markers",
-                        marker=dict(opacity=0),
-                        showlegend=False,
-                        hoverinfo="skip",
-                        xaxis="x2",
-                        yaxis="y",
-                    )
-                )
-            layout_updates["xaxis2"] = dict(
-                title="d (A)",
-                anchor="y",
-                overlaying="x",
-                matches="x",
-                side="top",
-                tickmode="array",
-                tickvals=secondary_tickvals.tolist(),
-                ticktext=secondary_ticktext,
-                showgrid=False,
-                showline=True,
-                showticklabels=True,
-                ticks="outside",
-            )
-        fig_pxrd.update_layout(**layout_updates)
-        st.plotly_chart(fig_pxrd, use_container_width=True)
-
-        pdf_plot_bytes = _publication_pxrd_pdf_bytes(
-            x_values=df_pxrd[x_column].to_numpy(),
-            simulated_intensity=plot_simulated_intensity,
-            x_label=x_column,
-            y_label=plot_y_label,
-            wavelength=wavelength,
-            show_d_spacing_axis=show_d_spacing_axis,
-            experimental_x=None if df_pxrd_experimental is None else df_pxrd_experimental[x_column].to_numpy(),
-            experimental_intensity=plot_experimental_intensity,
-            reflection_x=df_pxrd_reflections[x_column].to_numpy() if show_bragg_reflections else None,
-            reflection_intensity=plot_reflection_intensity if show_bragg_reflections else None,
-        )
-        download_file_root = os.path.splitext(st.session_state.file_name or "structure")[0]
-        st.download_button(
-            "Download Plot",
-            data=pdf_plot_bytes,
-            file_name=f"{download_file_root}_pxrd_plot.pdf",
-            mime="application/pdf",
-            key="pxrd_plot_pdf_download",
-        )
-
-        with st.expander("View simulated PXRD profile"):
-            st.dataframe(df_pxrd, use_container_width=True, hide_index=True)
-
-        with st.expander("View PXRD reflection table"):
-            st.dataframe(df_pxrd_reflections, use_container_width=True, hide_index=True)
-
-        if df_pxrd_experimental is not None:
-            with st.expander("View experimental PXRD data"):
-                st.dataframe(df_pxrd_experimental, use_container_width=True, hide_index=True)
-
-        st.stop()
 
     if PDF_option:
-        pdf_workflow_titles = {
-            "Simulate PDF": "Simulate pair distribution function",
-            "Plot RDF": "Plot radial distribution function",
-            "Compare experimental PDF": "Compare experimental and simulated PDF",
-            "Convert reduced PDF to g(r)": "Convert reduced PDF to g(r)",
-        }
-        render_section_header(
-            pdf_workflow_titles.get(PDF_workflow, "PDF Analysis"),
-            kicker="Structure Workspace",
-            subtitle="Run the selected pair distribution function workflow for the loaded structure.",
+        render_pdf_analysis(
+            PDF_workflow,
+            modified_atoms,
+            render_section_header=render_section_header,
         )
-
-        if not PDF_ANALYSIS_AVAILABLE:
-            st.warning(
-                "PDF Analysis is available in this workspace, but the optional PDF dependencies are not installed in the current environment."
-            )
-            st.code('pip install "hybrid-perovskite-studio[pdf]"', language="bash")
-            st.info("After installing the PDF extra, restart the app and reopen this tool.")
-            st.stop()
-
-        needs_simulated_pdf = PDF_workflow in {
-            "Simulate PDF",
-            "Plot RDF",
-            "Compare experimental PDF",
-        }
-
-        if needs_simulated_pdf:
-            qmin, qmax = st.slider("q (Å⁻¹)", 0, 25, (1, 20))
-        rmin, rmax = st.slider("r (Å)", 0.0, 30.0, (0.1, 20.0))
-
-        if needs_simulated_pdf:
-            pymatgen_structure = generate_symmetrized_structure(modified_atoms, 0.01, 0.1)
-            tmpdir = os.path.join(os.getcwd(), "pdfanalysis_temp")
-            path = Path(tmpdir) / "structure_clean.cif"
-            os.makedirs(tmpdir, exist_ok=True)
-            CifWriter(pymatgen_structure).write_file(str(path))
-
-            diffpy_structure = loadStructure(str(path))
-            r1, g1 = calculate_pdf(
-                diffpy_structure,
-                diffpy_structure_attributes={"Uisoequiv": 0.01},
-                pdf_calculator_kwargs={
-                    "qmin": qmin,
-                    "qmax": qmax,
-                    "rmin": rmin,
-                    "rmax": rmax,
-                    "qdamp": 0.06,
-                    "qbroad": 0.06
-                }
-            )
-
-            df_pdf = pd.DataFrame({"r (Å)": r1, "G_sim(r)": g1})
-
-        if PDF_workflow == "Simulate PDF":
-            with st.expander("View simulated PDF data"):
-                st.dataframe(df_pdf, use_container_width=True, hide_index=True)
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=df_pdf["r (Å)"],
-                y=df_pdf["G_sim(r)"],
-                mode="lines",
-                name="Simulated G(r)"
-            ))
-
-            fig.update_layout(
-                xaxis_title="r (Å)", yaxis_title="G(r)",
-                xaxis=dict(
-                    range=[rmin, rmax],
-                    tickfont=dict(size=20, color="black"),
-                    title_font=dict(size=20, color="black")
-                ),
-                yaxis=dict(
-                    tickfont=dict(size=20, color="black"),
-                    title_font=dict(size=20, color="black")
-                ),
-                font=dict(color="black"),
-                margin=dict(t=40, b=40, l=40, r=40),
-                legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-        if PDF_workflow == "Plot RDF":
-            st.subheader("Radial Distribution Function")
-
-            rdf_atoms = st.text_input("Enter atom labels (comma-sep)", "Pb, I")
-            atom_list = [a.strip() for a in rdf_atoms.split(",") if a.strip()]
-            all_pairs = list(combinations_with_replacement(atom_list, 2))
-            bins = st.slider("Number of bins", 50, 500, 200)
-            rdf_w_weights = st.radio("Scale by atomic weights?", ["True", "False"])
-
-            if rdf_w_weights == "True":
-                weight = True
-            else:
-                weight = False
-
-            lib = st.radio("Choose plotting library", ["Matplotlib", "Plotly"])
-
-            if lib == "Matplotlib":
-                config = load_or_create_plot_config_matplotlib(all_pairs)
-            else:
-                config = load_or_create_plot_config(all_pairs)
-
-            if st.button("Compute RDF"):
-                if lib == "Matplotlib":
-                    fig, df_all = plot_rdf_pdf_matplotlib(
-                        atom_list, modified_atoms, df_pdf, rmin, rmax, bins,
-                        compute_rdf_weighted, config, weight
-                    )
-                    st.pyplot(fig)
-
-                    buf_png = io.BytesIO()
-                    fig.savefig(buf_png, format='png', bbox_inches='tight')
-                    st.download_button(
-                        "Download as PNG", buf_png.getvalue(),
-                        file_name="rdf_plot.png", mime="image/png"
-                    )
-
-                    buf_pdf = io.BytesIO()
-                    fig.savefig(buf_pdf, format='pdf', bbox_inches='tight')
-                    st.download_button(
-                        "Download as PDF", buf_pdf.getvalue(),
-                        file_name="rdf_plot.pdf", mime="application/pdf"
-                    )
-
-                else:
-                    fig_rdf, df_all = plot_rdf_pdf(
-                        atom_list, modified_atoms, df_pdf, rmax, bins,
-                        compute_rdf_weighted, config, weight
-                    )
-                    st.plotly_chart(fig_rdf, use_container_width=True)
-
-                with st.expander("View simulated RDF data"):
-                    st.dataframe(df_all, use_container_width=True, hide_index=True)
-
-        if PDF_workflow in {"Simulate PDF", "Plot RDF"}:
-            st.stop()
-
-        if PDF_workflow == "Convert reduced PDF to g(r)":
-            st.subheader("Convert Reduced PDF to g(r)")
-
-            exp_file2 = st.file_uploader(
-                "Upload experimental .gr file",
-                type=["gr"],
-                key="gr_uploader2",
-            )
-
-            if exp_file2 is not None:
-                content = exp_file2.read().decode("utf-8", errors="ignore").splitlines()
-                idx = next((i for i, L in enumerate(content) if L.strip().startswith("#### start data")), None)
-
-                if idx is None:
-                    st.error("Couldn't find '#### start data' in the .gr file.")
-                else:
-                    data_lines = content[idx + 3:]
-
-                    try:
-                        df_exp2 = pd.read_csv(
-                            io.StringIO("\n".join(data_lines)),
-                            sep=r"\s+",
-                            header=None,
-                            names=["r", "G_exp"],
-                        ).pipe(lambda d: d[(d.r >= rmin) & (d.r <= rmax)].reset_index(drop=True))
-
-                        fig_pdf = px.line(
-                            df_exp2,
-                            x="r",
-                            y="G_exp",
-                            labels={"r": "r (Å)", "G_exp": "G(r)"},
-                            title="Uploaded Reduced PDF",
-                        )
-                        fig_pdf.update_layout(
-                            height=450,
-                            template="plotly_white",
-                            margin=dict(l=20, r=20, t=50, b=20),
-                        )
-                        fig_pdf.update_traces(line=dict(width=2))
-                        st.plotly_chart(fig_pdf, use_container_width=True)
-
-                        st.markdown("### Number density, ρ₀")
-
-                        cif_file = st.file_uploader(
-                            "Optional: Upload CIF file to infer ρ₀ automatically",
-                            type=["cif"],
-                            key="cif_uploader_rho0",
-                        )
-
-                        rho0_auto = None
-                        if cif_file is not None:
-                            try:
-                                rho0_auto, n_atoms, volume = infer_rho0_from_cif(cif_file.read())
-                                st.success(
-                                    f"Inferred from CIF: ρ₀ = {rho0_auto:.6f} atoms/Å³ "
-                                    f"(N = {n_atoms}, V = {volume:.3f} Å³)"
-                                )
-                            except Exception as e:
-                                st.warning(f"Could not infer ρ₀ from CIF: {e}")
-
-                        use_auto_rho0 = st.checkbox(
-                            "Use CIF-inferred ρ₀",
-                            value=rho0_auto is not None,
-                            disabled=rho0_auto is None,
-                            key="use_auto_rho0_checkbox",
-                        )
-
-                        rho0_manual = st.number_input(
-                            "Manual ρ₀ (atoms/Å³)",
-                            min_value=0.0,
-                            value=float(rho0_auto) if rho0_auto is not None else 0.05,
-                            step=0.001,
-                            format="%.6f",
-                            key="rho0_input",
-                        )
-
-                        rho0 = rho0_auto if (use_auto_rho0 and rho0_auto is not None) else rho0_manual
-                        st.info(f"Using ρ₀ = {rho0:.6f} atoms/Å³")
-
-                        if st.button("Convert reduced PDF to g(r)", key="convert_pdf_to_gr"):
-                            st.session_state["df_gr_converted"] = reduced_pdf_to_gr(df_exp2, rho0)
-                            st.session_state["rho0_used_for_gr"] = rho0
-
-                        if "df_gr_converted" in st.session_state:
-                            df_gr = st.session_state["df_gr_converted"]
-                            rho0_used = st.session_state.get("rho0_used_for_gr", rho0)
-
-                            fig_gr = px.line(
-                                df_gr,
-                                x="r",
-                                y="g_r",
-                                labels={"r": "r (Å)", "g_r": "g(r)"},
-                                title="Converted Radial Distribution Function",
-                            )
-                            fig_gr.update_layout(
-                                height=450,
-                                template="plotly_white",
-                                margin=dict(l=20, r=20, t=50, b=20),
-                            )
-                            fig_gr.update_traces(line=dict(width=2))
-                            st.plotly_chart(fig_gr, use_container_width=True)
-
-                            st.markdown("### Integrate g(r) over an r-window")
-
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                r_int_min = st.number_input(
-                                    "Integration r min (Å)",
-                                    min_value=float(df_gr["r"].min()),
-                                    max_value=float(df_gr["r"].max()),
-                                    value=float(df_gr["r"].min()),
-                                    step=0.1,
-                                    key="gr_int_min",
-                                )
-                            with c2:
-                                r_int_max = st.number_input(
-                                    "Integration r max (Å)",
-                                    min_value=float(df_gr["r"].min()),
-                                    max_value=float(df_gr["r"].max()),
-                                    value=min(float(df_gr["r"].min()) + 2.0, float(df_gr["r"].max())),
-                                    step=0.1,
-                                    key="gr_int_max",
-                                )
-
-                            if st.button("Integrate g(r)", key="integrate_gr_button"):
-                                if r_int_max <= r_int_min:
-                                    st.warning("Integration r max must be greater than r min.")
-                                else:
-                                    res = integrate_gr_window(df_gr, r_int_min, r_int_max, rho0=rho0_used)
-                                    if res is None:
-                                        st.warning("Not enough points in the selected r-window for integration.")
-                                    else:
-                                        st.write(
-                                            f"**∫ g(r) dr** from {r_int_min:.3f} to {r_int_max:.3f} Å = "
-                                            f"{res['integral_gdr']:.6f}"
-                                        )
-                                        st.write(
-                                            f"**4πρ₀ ∫ r²g(r) dr** from {r_int_min:.3f} to {r_int_max:.3f} Å = "
-                                            f"{res['coordination_like']:.6f}"
-                                        )
-
-                                        fig_window = px.line(
-                                            df_gr,
-                                            x="r",
-                                            y="g_r",
-                                            labels={"r": "r (Å)", "g_r": "g(r)"},
-                                            title="g(r) with Integration Window",
-                                        )
-                                        fig_window.add_vrect(
-                                            x0=r_int_min,
-                                            x1=r_int_max,
-                                            opacity=0.2,
-                                            line_width=0,
-                                        )
-                                        fig_window.update_layout(
-                                            height=450,
-                                            template="plotly_white",
-                                            margin=dict(l=20, r=20, t=50, b=20),
-                                        )
-                                        fig_window.update_traces(line=dict(width=2))
-                                        st.plotly_chart(fig_window, use_container_width=True)
-
-                            csv_data = df_gr.to_csv(index=False).encode("utf-8")
-                            st.download_button(
-                                "Download g(r) as CSV",
-                                data=csv_data,
-                                file_name="converted_gr.csv",
-                                mime="text/csv",
-                                key="download_gr_csv",
-                            )
-
-                    except Exception as e:
-                        st.error(f"Failed to parse or convert file: {e}")
-
-            st.stop()
-
-        st.subheader("Compare Experimental vs. Simulated PDF")
-
-
-        # -------------------------------------------------------------------------
-        # 5) Optionally load experimental .gr
-        # -------------------------------------------------------------------------=
-        # Choose normalization method
-        norm_method = st.selectbox(
-            "Normalize y-axis before fitting using:",
-            ["Z-score (mean 0, std 1)", "Min-max [0,1]"],
-            index=0,
-            key="pdf_norm_method"
-        )
-
-        exp_file = st.file_uploader("Optionally upload experimental .gr file", type=["gr"], key="gr_uploader")
-        if exp_file is not None:
-            content = exp_file.read().decode("utf-8", errors="ignore").splitlines()
-            idx = next((i for i, L in enumerate(content) if L.strip().startswith("#### start data")), None)
-            if idx is None:
-                st.error("Couldn't find '#### start data' in the .gr file.")
-            else:
-                data_lines = content[idx + 3:]
-                df_exp = pd.read_csv(
-                    io.StringIO("\n".join(data_lines)),
-                    delim_whitespace=True, header=None, names=["r", "G_exp"]
-                ).pipe(lambda d: d[(d.r >= rmin) & (d.r <= rmax)].reset_index(drop=True))
-
-                # interpolate simulation onto experimental r-grid
-                g_sim_interp = np.interp(df_exp.r, r1, g1)
-
-                # -------------------------------
-                # 1) Normalize y-data for fitting
-                # -------------------------------
-                eps = 1e-12
-
-                if norm_method.startswith("Z-score"):
-                    # stats for original (needed for back-transform)
-                    mu_x, sig_x = float(np.mean(g_sim_interp)), float(np.std(g_sim_interp))
-                    mu_y, sig_y = float(np.mean(df_exp.G_exp)), float(np.std(df_exp.G_exp))
-                    sig_x = sig_x if sig_x > eps else eps
-                    sig_y = sig_y if sig_y > eps else eps
-
-                    x_norm = (g_sim_interp - mu_x) / sig_x
-                    y_norm = (df_exp.G_exp - mu_y) / sig_y
-
-
-                    # mapping from normalized fit back to original:
-                    # y_fit = mu_y + sig_y * (a * (x - mu_x)/sig_x + b)
-                    def back_transform(a_hat, b_hat, x_orig):
-                        A_eff = (sig_y * a_hat) / sig_x
-                        B_eff = mu_y + sig_y * b_hat - A_eff * mu_x
-                        return A_eff, B_eff, A_eff * x_orig + B_eff
-
-                else:  # Min-max
-                    x_min, x_max = float(np.min(g_sim_interp)), float(np.max(g_sim_interp))
-                    y_min, y_max = float(np.min(df_exp.G_exp)), float(np.max(df_exp.G_exp))
-                    x_rng = (x_max - x_min) if (x_max - x_min) > eps else eps
-                    y_rng = (y_max - y_min) if (y_max - y_min) > eps else eps
-
-                    x_norm = (g_sim_interp - x_min) / x_rng
-                    y_norm = (df_exp.G_exp - y_min) / y_rng
-
-
-                    # mapping from normalized fit back to original:
-                    # y_fit = y_min + y_rng * (a * (x - x_min)/x_rng + b)
-                    def back_transform(a_hat, b_hat, x_orig):
-                        A_eff = (y_rng * a_hat) / x_rng
-                        B_eff = y_min + y_rng * b_hat - A_eff * x_min
-                        return A_eff, B_eff, A_eff * x_orig + B_eff
-
-                # ---------------------------------------
-                # 2) Fit in normalized space: y' = a x' + b
-                # ---------------------------------------
-                from scipy.optimize import curve_fit
-
-
-                def linear_model(G_sim_norm, a, b):
-                    return a * G_sim_norm + b
-
-
-                popt, pcov = curve_fit(linear_model, x_norm, y_norm, p0=[1.0, 0.0])
-                a_norm, b_norm = map(float, popt)
-
-                # ---------------------------------------
-                # 3) Back-transform fit to original units
-                # ---------------------------------------
-                A_eff, B_eff, g_fit = back_transform(a_norm, b_norm, g_sim_interp)
-                residual = df_exp.G_exp - g_fit
-
-                # Compute correlations (both original and normalized, optional)
-                pcc_value_orig = compute_pcc((df_exp.r, df_exp.G_exp), (df_exp.r, g_sim_interp))
-                pcc_value_norm = compute_pcc((df_exp.r, y_norm), (df_exp.r, x_norm))
-
-                # For reference, the normalized fitted values (if you want to display)
-                g_fit_norm = linear_model(x_norm, a_norm, b_norm)
-
-                df_combined = pd.DataFrame({
-                    "r (Å)": df_exp.r,
-                    "G_sim": g_sim_interp,
-                    "G_exp": df_exp.G_exp,
-                    "G_fit": g_fit,  # fit mapped back to original units
-                    "Residual": residual,
-                    "G_sim (norm)": x_norm,
-                    "G_exp (norm)": y_norm,
-                    "G_fit (norm)": g_fit_norm,
-                })
-
-                with st.expander("View combined PDF data"):
-                    st.dataframe(df_combined, use_container_width=True, hide_index=True)
-
-                # Optional: show fit parameters
-                with st.expander("Fit details (normalized → original)"):
-                    st.markdown(
-                        f"- Normalized fit: y' = **{a_norm:.4f}** · x' + **{b_norm:.4f}**\n"
-                        f"- Effective original-units mapping: y ≈ **{A_eff:.4f}** · x + **{B_eff:.4f}**\n"
-                        f"- PCC (original): **{pcc_value_orig:.4f}**, PCC (normalized): **{pcc_value_norm:.4f}**"
-                    )
-
-        # --- 6) Plotting: customization, trigger button, downloads, and interactive Plotly ---
-        # Load saved customization if provide
-            with st.expander("Plot customization"):
-                config_file = st.file_uploader("Upload plot customization config (.json)", type=["json"],
-                                               key="config_uploader")
-                if config_file:
-                    import json
-
-                    config = json.load(config_file)
-                else:
-                    config = {}
-
-                sim_color = st.color_picker("Simulated line color", config.get("sim_color", "#1f77b4"))
-                sim_width = st.slider("Simulated line width", 0.5, 5.0, config.get("sim_width", 2.0), step=0.1)
-                sim_ls = st.selectbox("Simulated line style", ["-", "--", "-.", ":"],
-                                      index=["-", "--", "-.", ":"].index(config.get("sim_ls", "-")))
-                sim_opacity = st.slider("Simulated line opacity", 0.0, 1.0, config.get("sim_opacity", 1.0), step=0.05)
-                exp_color = st.color_picker("Experimental line color", config.get("exp_color", "#ff7f0e"))
-                exp_width = st.slider("Experimental line width", 0.5, 5.0, config.get("exp_width", 2.0), step=0.1)
-                exp_ls = st.selectbox("Experimental line style", ["-", "--", "-.", ":"],
-                                      index=["-", "--", "-.", ":"].index(config.get("exp_ls", "--")))
-                exp_opacity = st.slider("Experimental line opacity", 0.0, 1.0, config.get("exp_opacity", 1.0), step=0.05)
-                bar_color = st.color_picker("Residual bar color", config.get("bar_color", "#7f7f7f"))
-                spline_width = st.slider("Fitted line width", 0.5, 5.0, config.get("spline_width", 1.5), step=0.1)
-                text_size = st.slider("Text size", 8, 20, config.get("text_size", 12))
-                text_style = st.selectbox("Text style", ["normal", "bold", "italic"],
-                                          index=["normal", "bold", "italic"].index(config.get("text_style", "normal")))
-                axis_lw = st.slider("Axis spine linewidth", 0.5, 5.0, config.get("axis_linewidth", 1.0), step=0.1)
-                tick_lw = st.slider("Tick mark linewidth", 0.5, 5.0, config.get("tick_linewidth", 1.0), step=0.1)
-                hide_legends   = st.checkbox("Hide legends", config.get("hide_legends", False))
-                show_sim = st.checkbox("Show simulated data", config.get("show_sim", True))
-                show_exp = st.checkbox("Show experimental data", config.get("show_exp", True))
-                show_res = st.checkbox("Show residual data", config.get("show_res", True))
-                aspect_opt = st.selectbox("Aspect ratio", ["auto", "equal", "custom"],
-                                          index=["auto", "equal", "custom"].index(config.get("aspect_option", "equal")))
-                aspect_val = config.get("aspect_val", 1.0)
-                if aspect_opt == "custom":
-                    aspect_val = st.number_input("Custom aspect ratio (y/x)", 0.1, 10.0, aspect_val, step=0.1)
-                # axis limits & ticks
-                x_min = st.number_input("X-axis min", value=config.get("x_min", rmin), step=0.1)
-                x_max = st.number_input("X-axis max", value=config.get("x_max", rmax), step=0.1)
-                y_min = st.number_input("Y-axis min", value=config.get("y_min", float(df_combined.G_sim.min()-1.5)), step=0.1)
-                y_max = st.number_input("Y-axis max", value=config.get("y_max", float(df_combined.G_sim.max())), step=0.1)
-                tick_gap_x = st.number_input("X-axis tick interval", value=config.get("tick_gap_x", (x_max - x_min) / 5),
-                                             step=0.1)
-                tick_gap_y = st.number_input("Y-axis tick interval", value=config.get("tick_gap_y", (y_max - y_min) / 5),
-                                             step=0.1)
-                plot_title = st.text_input("Plot title",
-                                           value=config.get("plot_title", "PDF"))
-                show_fit = st.checkbox("Plot fitted data", config.get("show_fit", False))
-
-                # Download current customization as JSON
-                config_out = {
-                    "sim_color": sim_color, "sim_width": sim_width, "sim_ls": sim_ls, "sim_opacity": sim_opacity,
-                    "exp_color": exp_color, "exp_width": exp_width, "exp_ls": exp_ls, "exp_opacity": exp_opacity,
-                    "bar_color": bar_color, "spline_width": spline_width, "text_size": text_size, "text_style": text_style,
-                    "axis_linewidth": axis_lw, "tick_linewidth": tick_lw, "hide_legends": hide_legends,
-                    "show_sim": show_sim, "show_exp": show_exp, "show_res": show_res,
-                    "aspect_option": aspect_opt, "aspect_val": aspect_val,
-                    "x_min": x_min, "x_max": x_max, "y_min": y_min, "y_max": y_max,
-                    "tick_gap_x": tick_gap_x, "tick_gap_y": tick_gap_y,
-                    "plot_title": plot_title, "show_fit": show_fit
-                }
-                st.download_button(
-                    "Download customization as JSON",
-                    data=json.dumps(config_out, indent=2),
-                    file_name="plot_config.json",
-                    mime="application/json"
-                )
-
-            plot_btn = st.button("Generate Plot")
-            if plot_btn:
-                import matplotlib.style
-                matplotlib.style.use('classic')
-                import matplotlib.ticker as ticker
-
-                fig, ax = plt.subplots()
-                # apply spine & tick widths
-                for s in ax.spines.values():
-                    s.set_linewidth(axis_lw)
-                ax.tick_params(width=tick_lw)
-
-                # plot based on toggles
-                if show_sim:
-                    ax.plot(r1, g1, color=sim_color, linewidth=sim_width,
-                            linestyle=sim_ls, alpha=sim_opacity, label="Simulated")
-                if exp_file and show_exp:
-                    ax.plot(df_combined["r (Å)"], df_combined["G_exp (norm)"],
-                            color=exp_color, linewidth=exp_width,
-                            linestyle=exp_ls, alpha=exp_opacity, label="Experimental")
-                if exp_file and show_res:
-                    baseline = min(np.min(g1), df_combined["G_exp"].min()) - 0.5
-                    bar_w = (x_max - x_min) / (len(df_combined) * 1.5)
-                    ax.bar(df_combined["r (Å)"], df_combined["Residual"],
-                           width=bar_w, bottom=baseline, color=bar_color,
-                           alpha=0.6, label="Residual")
-                if exp_file and show_fit:
-                    ax.plot(df_combined["r (Å)"], df_combined["G_fit"],
-                            color="gray", linewidth=spline_width,
-                            linestyle=":", alpha=0.8, label="Fitted")
-
-                # axes limits, ticks, aspect
-                ax.set_xlim(x_min, x_max);
-                ax.set_ylim(y_min, y_max)
-                ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_gap_x))
-                ax.yaxis.set_major_locator(ticker.MultipleLocator(tick_gap_y))
-                ax.set_aspect(aspect_val)
-
-                # labels & title
-                title_kw = {"fontsize": text_size + 2}
-                if text_style == "bold":   title_kw["fontweight"] = "bold"
-                if text_style == "italic": title_kw["fontstyle"] = "italic"
-                ax.set_title(plot_title, **title_kw)
-                label_kw = {"fontsize": text_size}
-                if text_style == "bold":   label_kw["fontweight"] = "bold"
-                if text_style == "italic": label_kw["fontstyle"] = "italic"
-                ax.set_xlabel(r"$r\ (\mathrm{\AA})$", **label_kw)
-                ax.set_ylabel(r"$G(r)\ (\mathrm{\AA}^{-2})$", **label_kw)
-
-                ax.annotate(
-                    f"PCC = {pcc_value_norm:.2f}",
-                    xy=(0.82, 0.1),
-                    xycoords="axes fraction",
-                    ha="center",
-                    va="center",
-                    fontsize=text_size,
-                    fontweight="bold" if text_style == "bold" else "normal",
-                    fontstyle="italic" if text_style == "italic" else "normal",
-                    # bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.6)
-                )
-
-                ax.tick_params(labelsize=text_size)
-                if not hide_legends:
-                    ax.legend(fontsize=text_size)
-                st.pyplot(fig)
-
-                # downloads
-                base_name = os.path.splitext(exp_file.name)[0]
-                buf_pdf = io.BytesIO()
-                fig.savefig(buf_pdf, format="pdf", dpi=300, bbox_inches="tight")
-                buf_pdf.seek(0)
-                st.download_button("Download PDF", buf_pdf, f"{base_name}.pdf", "application/pdf")
-                buf_png = io.BytesIO()
-                fig.savefig(buf_png, format="png", dpi=300, bbox_inches="tight")
-                buf_png.seek(0)
-                st.download_button("Download PNG", buf_png, f"{base_name}.png", "image/png")
-
-        # Interactive Plotly chart
-            if st.checkbox("Show interactive Plotly chart"):
-                fig_int = go.Figure()
-                fig_int.add_trace(go.Scatter(
-                    x=df_combined["r (Å)"], y=df_combined["G_sim"],
-                    mode="lines", name="Simulated G(r)",
-                    line=dict(color=sim_color, width=sim_width, dash='solid'),
-                    opacity=sim_opacity
-                ))
-                fig_int.add_trace(go.Scatter(
-                    x=df_combined["r (Å)"], y=df_combined["G_exp"],
-                    mode="lines", name="Experimental G(r)",
-                    line=dict(color=exp_color, width=exp_width, dash='solid'),
-                    opacity=exp_opacity
-                ))
-                fig_int.add_trace(go.Bar(
-                    x=df_combined["r (Å)"], y=df_combined["Residual"],
-                    base=(min(df_combined["G_sim"].min(), df_combined["G_exp"].min()) - 0.5), name="Residual",
-                    marker_color=bar_color, opacity=0.6
-                ))
-                if show_fit:
-                    fig_int.add_trace(go.Scatter(
-                        x=df_combined["r (Å)"], y=df_combined["G_fit"],
-                        mode="lines", name="Fitted G(r)",
-                        line=dict(color="gray", width=spline_width, dash="dot"),
-                        opacity=0.8
-                    ))
-                fig_int.update_layout(
-                    xaxis_title="r (Å)", yaxis_title="G(r)",
-                    xaxis=dict(
-                        range=[x_min, x_max],
-                        tickfont=dict(size=text_size+12, color="black"),
-                        title_font=dict(size=text_size+12, color="black")
-                    ),
-                    yaxis=dict(
-                        range=[y_min, y_max],
-                        tickfont=dict(size=text_size+12, color="black"),
-                        title_font=dict(size=text_size+12, color="black")
-                    ),
-                    font=dict(color="black"),
-                    margin=dict(t=40, b=40, l=40, r=40),
-                    legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8)
-                )
-                st.plotly_chart(fig_int, use_container_width=True)
-
-        st.stop()
-
-        st.divider()
-        st.subheader("Optional: Convert Reduced PDF to g(r)")
-
-        exp_file2 = st.file_uploader(
-            "Upload experimental .gr file",
-            type=["gr"],
-            key="gr_uploader2",
-        )
-
-        if exp_file2 is not None:
-            content = exp_file2.read().decode("utf-8", errors="ignore").splitlines()
-            idx = next((i for i, L in enumerate(content) if L.strip().startswith("#### start data")), None)
-
-            if idx is None:
-                st.error("Couldn't find '#### start data' in the .gr file.")
-            else:
-                data_lines = content[idx + 3:]
-
-                try:
-                    df_exp2 = pd.read_csv(
-                        io.StringIO("\n".join(data_lines)),
-                        sep=r"\s+",
-                        header=None,
-                        names=["r", "G_exp"],
-                    ).pipe(lambda d: d[(d.r >= rmin) & (d.r <= rmax)].reset_index(drop=True))
-
-                    fig_pdf = px.line(
-                        df_exp2,
-                        x="r",
-                        y="G_exp",
-                        labels={"r": "r (Å)", "G_exp": "G(r)"},
-                        title="Uploaded Reduced PDF",
-                    )
-                    fig_pdf.update_layout(
-                        height=450,
-                        template="plotly_white",
-                        margin=dict(l=20, r=20, t=50, b=20),
-                    )
-                    fig_pdf.update_traces(line=dict(width=2))
-                    st.plotly_chart(fig_pdf, use_container_width=True)
-
-                    st.markdown("### Number density, ρ₀")
-
-                    cif_file = st.file_uploader(
-                        "Optional: Upload CIF file to infer ρ₀ automatically",
-                        type=["cif"],
-                        key="cif_uploader_rho0",
-                    )
-
-                    rho0_auto = None
-                    if cif_file is not None:
-                        try:
-                            rho0_auto, n_atoms, volume = infer_rho0_from_cif(cif_file.read())
-                            st.success(
-                                f"Inferred from CIF: ρ₀ = {rho0_auto:.6f} atoms/Å³ "
-                                f"(N = {n_atoms}, V = {volume:.3f} Å³)"
-                            )
-                        except Exception as e:
-                            st.warning(f"Could not infer ρ₀ from CIF: {e}")
-
-                    use_auto_rho0 = st.checkbox(
-                        "Use CIF-inferred ρ₀",
-                        value=rho0_auto is not None,
-                        disabled=rho0_auto is None,
-                        key="use_auto_rho0_checkbox",
-                    )
-
-                    rho0_manual = st.number_input(
-                        "Manual ρ₀ (atoms/Å³)",
-                        min_value=0.0,
-                        value=float(rho0_auto) if rho0_auto is not None else 0.05,
-                        step=0.001,
-                        format="%.6f",
-                        key="rho0_input",
-                    )
-
-                    rho0 = rho0_auto if (use_auto_rho0 and rho0_auto is not None) else rho0_manual
-                    st.info(f"Using ρ₀ = {rho0:.6f} atoms/Å³")
-
-                    if st.button("Convert reduced PDF to g(r)", key="convert_pdf_to_gr"):
-                        st.session_state["df_gr_converted"] = reduced_pdf_to_gr(df_exp2, rho0)
-                        st.session_state["rho0_used_for_gr"] = rho0
-
-                    if "df_gr_converted" in st.session_state:
-                        df_gr = st.session_state["df_gr_converted"]
-                        rho0_used = st.session_state.get("rho0_used_for_gr", rho0)
-
-                        fig_gr = px.line(
-                            df_gr,
-                            x="r",
-                            y="g_r",
-                            labels={"r": "r (Å)", "g_r": "g(r)"},
-                            title="Converted Radial Distribution Function",
-                        )
-                        fig_gr.update_layout(
-                            height=450,
-                            template="plotly_white",
-                            margin=dict(l=20, r=20, t=50, b=20),
-                        )
-                        fig_gr.update_traces(line=dict(width=2))
-                        st.plotly_chart(fig_gr, use_container_width=True)
-
-                        st.markdown("### Integrate g(r) over an r-window")
-
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            r_int_min = st.number_input(
-                                "Integration r min (Å)",
-                                min_value=float(df_gr["r"].min()),
-                                max_value=float(df_gr["r"].max()),
-                                value=float(df_gr["r"].min()),
-                                step=0.1,
-                                key="gr_int_min",
-                            )
-                        with c2:
-                            r_int_max = st.number_input(
-                                "Integration r max (Å)",
-                                min_value=float(df_gr["r"].min()),
-                                max_value=float(df_gr["r"].max()),
-                                value=min(float(df_gr["r"].min()) + 2.0, float(df_gr["r"].max())),
-                                step=0.1,
-                                key="gr_int_max",
-                            )
-
-                        if st.button("Integrate g(r)", key="integrate_gr_button"):
-                            if r_int_max <= r_int_min:
-                                st.warning("Integration r max must be greater than r min.")
-                            else:
-                                res = integrate_gr_window(df_gr, r_int_min, r_int_max, rho0=rho0_used)
-                                if res is None:
-                                    st.warning("Not enough points in the selected r-window for integration.")
-                                else:
-                                    st.write(
-                                        f"**∫ g(r) dr** from {r_int_min:.3f} to {r_int_max:.3f} Å = "
-                                        f"{res['integral_gdr']:.6f}"
-                                    )
-                                    st.write(
-                                        f"**4πρ₀ ∫ r²g(r) dr** from {r_int_min:.3f} to {r_int_max:.3f} Å = "
-                                        f"{res['coordination_like']:.6f}"
-                                    )
-
-                                    fig_window = px.line(
-                                        df_gr,
-                                        x="r",
-                                        y="g_r",
-                                        labels={"r": "r (Å)", "g_r": "g(r)"},
-                                        title="g(r) with Integration Window",
-                                    )
-                                    fig_window.add_vrect(
-                                        x0=r_int_min,
-                                        x1=r_int_max,
-                                        opacity=0.2,
-                                        line_width=0,
-                                    )
-                                    fig_window.update_layout(
-                                        height=450,
-                                        template="plotly_white",
-                                        margin=dict(l=20, r=20, t=50, b=20),
-                                    )
-                                    fig_window.update_traces(line=dict(width=2))
-                                    st.plotly_chart(fig_window, use_container_width=True)
-
-                        csv_data = df_gr.to_csv(index=False).encode("utf-8")
-                        st.download_button(
-                            "Download g(r) as CSV",
-                            data=csv_data,
-                            file_name="converted_gr.csv",
-                            mime="text/csv",
-                            key="download_gr_csv",
-                        )
-
-                except Exception as e:
-                    st.error(f"Failed to parse or convert file: {e}")
-
-    # if PDF_fit_option:
-    #
-    #     st.header("Fit simulated PDF to experimental data", divider="violet")
-    #
-    #     st.markdown(
-    #         "Upload experimental PDF data (two columns: r(Å), G(r)). "
-    #         "We'll perturb atomic coordinates to maximize Pearson correlation."
-    #     )
-    #
-    #     uploaded_exp_pdf = st.file_uploader(
-    #         "Experimental PDF file (.txt, .dat, .csv)",
-    #         type=["txt", "dat", "csv"],
-    #         accept_multiple_files=False,
-    #     )
-    #
-    #     # Reuse sliders to enforce identical r/q ranges between sim and exp
-    #     qmin_fit, qmax_fit = st.slider("q for fit (Å⁻¹)", 0, 25, (1, 20))
-    #     rmin_fit, rmax_fit = st.slider("r for fit (Å)", 0.0, 30.0, (0.1, 20.0))
-    #
-    #     # Optimization controls
-    #     max_disp = st.number_input(
-    #         "Max |Δr| per Cartesian component (Å) for refinement bounds",
-    #         min_value=0.01,
-    #         max_value=1.0,
-    #         value=0.2,
-    #         step=0.01,
-    #         help="Each x/y/z coord is allowed to move ± this amount from the starting structure.",
-    #     )
-    #
-    #     n_iter_hint = st.number_input(
-    #         "Max optimization iterations",
-    #         min_value=10,
-    #         max_value=500,
-    #         value=80,
-    #         step=10,
-    #     )
-    #
-    #     run_fit = st.button("Run PDF Fit")
-    #
-    #     if uploaded_exp_pdf is not None and run_fit:
-    #         # -------------------------------------------------
-    #         # 1) Read experimental PDF
-    #         # -------------------------------------------------
-    #         # try flexible read: CSV or whitespace
-    #         raw = uploaded_exp_pdf.read()
-    #         try:
-    #             df_exp = pd.read_csv(io.BytesIO(raw), sep=None, engine="python", header=None)
-    #         except Exception:
-    #             df_exp = pd.read_csv(io.BytesIO(raw), delim_whitespace=True, header=None)
-    #
-    #         # Expect first 2 cols: r, G(r)
-    #         df_exp = df_exp.rename(columns={0: "r (Å)", 1: "G_exp(r)"})
-    #         df_exp = df_exp.sort_values(by="r (Å)").reset_index(drop=True)
-    #
-    #         # limit to chosen r-window
-    #         df_exp_window = df_exp[(df_exp["r (Å)"] >= rmin_fit) & (df_exp["r (Å)"] <= rmax_fit)].copy()
-    #         r_exp = df_exp_window["r (Å)"].to_numpy()
-    #         g_exp = df_exp_window["G_exp(r)"].to_numpy()
-    #
-    #         # -------------------------------------------------
-    #         # 2) Set up initial structure and bounds
-    #         # -------------------------------------------------
-    #         base_atoms = modified_atoms.copy()
-    #         init_positions = base_atoms.get_positions()  # (N,3)
-    #         x0 = init_positions.flatten()  # 3N vector
-    #
-    #         # bounds: each coord ± max_disp
-    #         bounds = []
-    #         for val in x0:
-    #             bounds.append((val - max_disp, val + max_disp))
-    #
-    #         fit_settings = {
-    #             "qmin": qmin_fit,
-    #             "qmax": qmax_fit,
-    #             "rmin": rmin_fit,
-    #             "rmax": rmax_fit,
-    #             "qdamp": 0.06,
-    #             "qbroad": 0.06,
-    #             "uiso": 0.01,
-    #         }
-    #
-    #         # -------------------------------------------------
-    #         # 3) Run optimization
-    #         # -------------------------------------------------
-    #         result = minimize(
-    #             pdf_mismatch_cost,
-    #             x0,
-    #             args=(base_atoms, r_exp, g_exp, fit_settings),
-    #             method="L-BFGS-B",
-    #             bounds=bounds,
-    #             options={"maxiter": int(n_iter_hint)},
-    #         )
-    #
-    #         # -------------------------------------------------
-    #         # 4) Build refined structure from result
-    #         # -------------------------------------------------
-    #         refined_atoms = base_atoms.copy()
-    #         refined_atoms.set_positions(result.x.reshape((-1, 3)))
-    #
-    #         # Final simulated PDF from refined structure
-    #         r_fit_sim, g_fit_sim = simulate_pdf_from_atoms(
-    #             refined_atoms,
-    #             qmin=qmin_fit,
-    #             qmax=qmax_fit,
-    #             rmin=rmin_fit,
-    #             rmax=rmax_fit,
-    #             qdamp=0.06,
-    #             qbroad=0.06,
-    #             uiso=0.01,
-    #         )
-    #
-    #         # Interpolate refined sim onto experimental grid
-    #         g_fit_interp = interpolate_to_common_grid(r_exp, r_fit_sim, g_fit_sim)
-    #
-    #         # Pearson r after fit
-    #         valid_mask = np.isfinite(g_fit_interp) & np.isfinite(g_exp)
-    #         if np.count_nonzero(valid_mask) >= 5:
-    #             r_final, _ = pearsonr(g_fit_interp[valid_mask], g_exp[valid_mask])
-    #         else:
-    #             r_final = np.nan
-    #
-    #         st.subheader("Fit Results")
-    #         st.write(f"Pearson r after refinement: **{r_final:.4f}**")
-    #
-    #         # -------------------------------------------------
-    #         # 5) Plot experimental vs refined simulated
-    #         # -------------------------------------------------
-    #         fig_fit = go.Figure()
-    #
-    #         fig_fit.add_trace(go.Scatter(
-    #             x=r_exp,
-    #             y=g_exp,
-    #             mode="lines",
-    #             name="Experimental G(r)",
-    #             line=dict(width=2),
-    #         ))
-    #         fig_fit.add_trace(go.Scatter(
-    #             x=r_exp,
-    #             y=g_fit_interp,
-    #             mode="lines",
-    #             name="Refined Simulated G(r)",
-    #             line=dict(width=2, dash="dash"),
-    #         ))
-    #
-    #         fig_fit.update_layout(
-    #             xaxis_title="r (Å)",
-    #             yaxis_title="G(r)",
-    #             xaxis=dict(
-    #                 range=[rmin_fit, rmax_fit],
-    #                 tickfont=dict(size=20, color="black"),
-    #                 title_font=dict(size=20, color="black"),
-    #             ),
-    #             yaxis=dict(
-    #                 tickfont=dict(size=20, color="black"),
-    #                 title_font=dict(size=20, color="black"),
-    #             ),
-    #             font=dict(color="black"),
-    #             margin=dict(t=40, b=40, l=40, r=40),
-    #             legend=dict(yanchor="top", y=0.99, xanchor="center", x=0.8),
-    #         )
-    #
-    #         st.plotly_chart(fig_fit, use_container_width=True)
-    #
-    #         # -------------------------------------------------
-    #         # 6) Offer refined structure for download
-    #         # -------------------------------------------------
-    #         cif_bytes = atoms_to_cif_bytes(refined_atoms)
-    #         st.download_button(
-    #             label="Download refined structure (CIF)",
-    #             data=cif_bytes,
-    #             file_name="refined_structure.cif",
-    #             mime="chemical/x-cif",
-    #         )
-    #
-    #         # Optional: show final coordinates table
-    #         df_coords = pd.DataFrame(
-    #             {
-    #                 "element": refined_atoms.get_chemical_symbols(),
-    #                 "x (Å)": refined_atoms.get_positions()[:, 0],
-    #                 "y (Å)": refined_atoms.get_positions()[:, 1],
-    #                 "z (Å)": refined_atoms.get_positions()[:, 2],
-    #             }
-    #         )
-    #         with st.expander("View refined atomic coordinates"):
-    #             st.dataframe(df_coords, hide_index=True, use_container_width=True)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # if create_cent_option:
-    #     st.header("Create Idealized Structure")
-    #
-    #     atoms_idl = None
-    #
-    #
-    #     inorganic_indices_acent = st.multiselect("Enter inorganic molecule indices, separated by spaces: ",
-    #                                             options=range(1, len(molecules) + 1), key='initial_cent')
-    #
-    #     if inorganic_indices_acent:
-    #         initial_organic_acent, initial_inorganic_acent = generate_substructure(modified_atoms, molecules,
-    #                                                                              inorganic_indices_acent)
-    #         # create_labelled_download_file(initial_inorganic_acent, "initial_inorganic", "")
-    #
-    #
-    #
-    #         file_name_ac = os.path.splitext(file_name)[0]
-    #
-    #         output_cif_file_acent = f"{file_name_ac}_inorganic.cif"
-    #         # standardized_atoms, selected_symprec = write_cif_with_higher_symmetry(modified_atoms, symprec_lower,
-    #         #                                                                       symprec_upper, selected_index)
-    #
-    #         lattice, scaled_positions, numbers = spglib.standardize_cell(initial_inorganic_acent, to_primitive=False, no_idealize=False,
-    #                                                                      symprec=0.0001)
-    #
-    #         standardized_atoms = Atoms(cell=lattice, scaled_positions=scaled_positions, numbers=numbers)
-    #
-    #         pymatgen_structure = AseAtomsAdaptor.get_structure(standardized_atoms)
-    #
-    #         cif_writer = CifWriter(pymatgen_structure, symprec=0.0001)
-    #
-    #         with tempfile.NamedTemporaryFile(mode="w+", suffix=".cif", delete=False) as output_file:
-    #             cif_writer.write_file(output_file.name)  # Write the content to the temporary file
-    #             output_file.seek(0)
-    #             output_content = output_file.read()
-    #             st.markdown(get_download_link(f"{output_cif_file_acent}", output_content), unsafe_allow_html=True)
-    #
-    #         # create_labelled_download_file(initial_organic_acent, file_name_ac, "_acentric_organic")
-    #         create_aims_download_file(initial_organic_acent, file_name_ac,"_organic")
-    #
-    #         file_buffer_idl = st.file_uploader("Upload the idealized inorganic structure (Do a PseudoSymmetry analysis)",
-    #                                            type=[".in", ".cif", ".next_step"])
-    #         if file_buffer_idl:
-    #             file_name_idl = file_buffer_idl.name
-    #             file_format_idl = get_file_format(file_name_idl)
-    #             atoms_idl, molecules_idl, modified_symbols_idl = initialize_structure_v2(file_buffer_idl,
-    #                                                                                      file_format_idl)
-    #
-    #         if initial_organic_acent is not None and atoms_idl is not None:
-    #             molecules_io_acent = detect_molecules(initial_organic_acent)
-    #             modified_symbols_acent = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(initial_organic_acent)]
-    #
-    #             print_detected_molecules(modified_symbols_acent, molecules_io_acent, "initial organic sublattice")
-    #
-    #             rotate_indices_acent = st.multiselect(
-    #                 "Enter molecular indices you want to rotate, separated by spaces: ",
-    #                 options=range(1, len(molecules_io_acent) + 1), key='rotate_mol')
-    #
-    #             if rotate_indices_acent:
-    #                 if "rotation_axes" not in st.session_state:
-    #                     st.session_state.rotation_axes = [None] * len(molecules_io_acent)
-    #
-    #                 for i in rotate_indices_acent:
-    #                     st.subheader(f"Molecule {i}")
-    #
-    #                     with st.form(key=f"molecule_{i}_form"):
-    #                         hkl_input = st.text_input("Enter crystal direction as h, k, l separated by spaces")
-    #
-    #                         if st.form_submit_button(f"Set Axis for Molecule {i}"):
-    #                             hkl = np.array([int(val) for val in hkl_input.split()])
-    #                             lattice_vectors = initial_organic_acent.get_cell()
-    #                             axis = np.dot(hkl, lattice_vectors)
-    #                             axis /= np.linalg.norm(axis)
-    #
-    #                             st.session_state.rotation_axes[i - 1] = axis
-    #
-    #             generate_structure_button = st.button("Generate Structure")
-    #
-    #             if generate_structure_button:
-    #                 chosen_rotation_axes = [st.session_state.rotation_axes[i - 1] for i in rotate_indices_acent]
-    #                 chosen_molecules = [molecules_io_acent[i - 1] for i in rotate_indices_acent]
-    #                 rotation_angle = 180
-    #
-    #                 rotated_organic_structure = initial_organic_acent.copy()
-    #                 for molecule, axis in zip(chosen_molecules, chosen_rotation_axes):
-    #                     rotated_organic_structure = rotate_molecules_v2(rotated_organic_structure, molecule, axis,
-    #                                                                     rotation_angle)
-    #
-    #                 # Merge O2 and I2
-    #                 cent_str = merge_structures(rotated_organic_structure, atoms_idl)
-    #                 create_aims_download_file(cent_str, file_name, "_centric")
-
-    def _normalize_name(name: str) -> str:
-        # Convert trailing "_" on one-letter symbols (e.g., "I_") to "I"
-        if isinstance(name, str) and name.endswith("_") and len(name.rstrip("_")) == 1:
-            return name.rstrip("_")
-        return name
-
-
-    def _parse_id_field(s: str) -> list[int]:
-        """
-        Parse an ID input string like:
-          "1, 3, 4" or "5:10" or "1, 4:7, 12"
-        into a unique, ordered list of ints. Ranges are inclusive.
-        """
-        if not s or not str(s).strip():
-            return []
-        tokens = re.split(r"[,\s]+", str(s).strip())
-        out: list[int] = []
-        seen = set()
-        for tok in tokens:
-            if not tok:
-                continue
-            m = re.fullmatch(r"(\d+)\s*:\s*(\d+)", tok)
-            if m:
-                a, b = map(int, m.groups())
-                rng = range(a, b + 1) if a <= b else range(a, b - 1, -1)
-                for x in rng:
-                    if x not in seen:
-                        out.append(x);
-                        seen.add(x)
-            else:
-                try:
-                    x = int(tok)
-                    if x not in seen:
-                        out.append(x);
-                        seen.add(x)
-                except ValueError:
-                    # ignore unparseable tokens gracefully
-                    pass
-        return out
-
-
-    def _parse_bader_integrated_atomic_properties(text: str) -> pd.DataFrame:
-        """
-        Find and parse the '* Integrated atomic properties' table.
-        Returns DataFrame with columns: Id, Name, Z, Pop, PartialCharge
-        """
-        lines = text.splitlines()
-        # 1) locate the section start
-        start = None
-        for i, ln in enumerate(lines):
-            if "* Integrated atomic properties" in ln:
-                start = i
-                break
-        if start is None:
-            raise ValueError("Could not find '* Integrated atomic properties' section.")
-        # 2) locate the header (contains 'Id' and 'Pop')
-        header = None
-        for j in range(start, len(lines)):
-            if "Id" in lines[j] and "Pop" in lines[j]:
-                header = j
-                break
-        if header is None:
-            raise ValueError("Could not find the table header with 'Id' and 'Pop'.")
-        # 3) parse rows until a blank/comment/new section
-        rows = []
-        for ln in lines[header + 1:]:
-            s = ln.strip()
-            if not s or s.startswith("#") or s.startswith("*"):
-                if rows:  # stop once we’ve started and hit a non-data line
-                    break
-                else:
-                    continue
-            toks = s.split()
-            # Expected minimal columns:
-            # 0:Id 1:cp 2:ncp 3:Name 4:Z 5:mult 6:Volume 7:Pop 8:Lap
-            if len(toks) < 9:
-                break
-            try:
-                Id = int(toks[0])
-                Name = _normalize_name(toks[3])
-                Z = int(toks[4])
-                Pop = float(toks[7].replace("D", "E"))
-                rows.append({"Id": Id, "Name": Name, "Z": Z, "Pop": Pop})
-            except Exception:
-                # end of clean block or stray line—stop
-                break
-        if not rows:
-            raise ValueError("No data rows parsed from the atomic properties table.")
-        df = pd.DataFrame(rows)
-        df["PartialCharge"] = df["Z"] - df["Pop"]
-        return df
 
 
     if charge_analysis_option:
@@ -3808,7 +1015,7 @@ if current_atoms is not None:
         if uploaded is not None:
             try:
                 text = uploaded.read().decode("utf-8", errors="ignore")
-                df_all = _parse_bader_integrated_atomic_properties(text)
+                df_all = parse_bader_integrated_atomic_properties(text)
             except Exception as e:
                 st.error(f"Failed to parse file: {e}")
                 st.stop()
@@ -3830,8 +1037,8 @@ if current_atoms is not None:
                     key="charge_ids_B"
                 )
 
-            ids_a = _parse_id_field(ids_a_str)
-            ids_b = _parse_id_field(ids_b_str)
+            ids_a = parse_id_field(ids_a_str)
+            ids_b = parse_id_field(ids_b_str)
 
             if ids_a or ids_b:
                 # Subset
@@ -4192,7 +1399,7 @@ if current_atoms is not None:
 
             png_buffer.seek(0)
 
-            base_name = os.path.splitext(file_name)[0]
+            base_name = os.path.splitext(st.session_state.file_name or "structure")[0]
             st.download_button(
                 label="📥 Download as PNG",
                 data=png_buffer,
@@ -4201,240 +1408,20 @@ if current_atoms is not None:
             )
 
     if distance_option:
-        render_section_header("Calculate atomic distances", kicker="Structure Workspace")
-
-        # User input for atomic symbols
-        first_atom = st.text_input('Enter the symbol of the first atom (A):', value="Pb")
-        second_atoms = st.text_input('Enter the symbol of the second atom (B):', value="I")
-
-        min_cutoff, max_cutoff = st.slider(
-            "Set cut-off range for searching the atoms",
-            min_value=0.0,
-            max_value=10.0,
-            value=(0.0, 3.5),  # Default values for min and max
-            step=0.1,
+        render_atomic_distances(
+            modified_atoms,
+            render_section_header=render_section_header,
         )
-
-        if st.button('Calculate'):
-            found_distances = find_third_atom_distances_with_cutoff(modified_atoms, first_atom, second_atoms, min_cutoff, max_cutoff)
-
-            st.dataframe(found_distances, use_container_width=True, hide_index=True)
 
     if distortion_option:
-        render_section_header("Calculate distortion parameters", kicker="Structure Workspace")
-
-        # User input for atomic symbols
-        center_atom = st.text_input('Enter the symbol of the center atom (A):', value="Pb")
-        surrounding_atoms = st.text_input('Enter the symbol of the surrounding atoms (B):', value="I")
-
-        # User input for type of distortion(s)
-        distortion_type = st.selectbox(
-            'Select the type of distortion to calculate:',
-            ('all','Bond distance variance', 'Angle variance', 'Bridging angle(s)', 'In and out deviations'
-             )
+        render_distortions(
+            modified_atoms,
+            render_section_header=render_section_header,
         )
-
-        with st.expander ("Optional parameters"):
-            # Experimental
-            center_atom_2 = st.text_input('Enter the symbol of a second center atom, if available (useful for double perovskites):', value=None)
-            b_parameter = st.number_input("Relax the bond distance limit (useful for chloride-based systems):",
-                                          value=0.00)
-            c_paramter = st.number_input("Relax the octahedron distortion limit (useful for highly distorted systems):",
-                                         value=0.00)
-            supercell_size= st.number_input("Modify the supercell size (useful for checking convergence):",
-                                         value=3)
-
-        # Button for confirmation
-        if st.button('Calculate'):
-            try:
-                super_atoms, periodic_image_dict, A2_indices = filter_atoms_by_symbols_and_extend(modified_atoms, A=center_atom,
-                                                                                      B=surrounding_atoms, A2=center_atom_2, s_size=supercell_size)
-                AB6_octahedra, AB_distances = identify_AB_groups(super_atoms, center_atom, surrounding_atoms, b=b_parameter, c=c_paramter)
-                unq_AB_distances = filter_unique_distances(AB_distances)
-                octahedral_distances = find_matching_distances(modified_atoms, center_atom, surrounding_atoms,
-                                                               unq_AB_distances, A2_indices=A2_indices, A2_symbol=center_atom_2)
-
-                st.markdown(f'**Distance of {center_atom} - {surrounding_atoms} bonds in octahedra**')
-                st.dataframe(octahedral_distances, use_container_width=True, hide_index=True)
-
-                distortion_mapping = {
-                    'Bond distance variance': calculate_bond_distance_variance,
-                    'Bond distance varience simplified (x 1e-05)' : calculate_bond_distance_variance_v2,
-                    'Metal off-centering' : calculate_off_centering,
-                    '2D projected Metal off-Centering' : calculate_off_centering_proj,
-                    '2D Metal off-centering': calculate_mc_2D,
-                    '2D projected 2D off-Centering': calculate_mc_2D_proj,
-                    'Angle variance': calculate_angle_variance,
-                    'Bridging angle(s)': calculate_unique_ABA_angles,
-                    'In and out deviations': calculate_in_out_planes,
-                }
-
-                output_data = []
-                if distortion_type == 'all':
-                    for func_name, func in distortion_mapping.items():
-                        result = func(AB6_octahedra, super_atoms, periodic_image_dict, b=b_parameter, A2_indices=A2_indices, A2_symbol=center_atom_2)
-                        if func_name == 'Bridging angle(s)':
-                            output_data.extend(handle_bridging_angles(result, periodic_image_dict))
-                        elif func_name == 'In and out deviations':
-                            output_data.extend(handle_in_out_deviations(result))
-                        else:
-                            output_data.append((func_name, ', '.join(result)))
-                else:
-                    result = distortion_mapping[distortion_type](AB6_octahedra, super_atoms, periodic_image_dict,A2_indices=A2_indices, A2_symbol=center_atom_2)
-                    if distortion_type == 'Bridging angle(s)':
-                        output_data.extend(handle_bridging_angles(result, periodic_image_dict))
-                    elif distortion_type == 'In and out deviations':
-                        output_data.extend(handle_in_out_deviations(result))
-                    else:
-                        output_data.append((distortion_type, ', '.join(result)))
-
-                df = pd.DataFrame(output_data, columns=['Distortion Parameter', 'Value'])
-                st.dataframe(df, use_container_width=True, hide_index=True)
-            except Exception as e:
-                st.error(e)
-                st.write ('''
-                If you see an error message "['A_index'] not found in axis", try increasing the bond distance limit (e.g., to 0.5) and the octahedron distortion limit (e.g., to 0.3) in the Optional parameters box.  
-                          or  
-                          Is this a double perovskite structure (e.g., (AE2T)2AgBiI8)? If so, input the second A atom label in the Optional parameters box.
-                          ''')
 
 
 if interpolate_option:
-    render_section_header("Interpolate Structures", kicker="Structure Workspace")
-    file_buffer1 = st.file_uploader("Upload an initial structure file (AIMS or CIF)", type=[".in", ".cif"],
-                                    key="file_buffer1")
-    file_buffer2 = st.file_uploader("Upload a final structure file (AIMS or CIF)", type=[".in", ".cif"],
-                                    key="file_buffer2")
-
-    if file_buffer1 is not None and file_buffer2 is not None:
-
-        atoms1, atoms2, file_name1, file_name2 = process_uploaded_files(file_buffer1, file_buffer2)
-
-        if atoms1 is not None and atoms2 is not None:
-            n = st.number_input("Enter the number of interpolated structures to generate:", min_value=1,
-                                step=1)
-
-            # Convert ase atoms to pymatgen structures
-            initial_structure = AseAtomsAdaptor.get_structure(atoms1)
-            final_structure = AseAtomsAdaptor.get_structure(atoms2)
-
-            # Initialize the StructureMatcher with primitive_cell set to False
-            sm = StructureMatcher(primitive_cell=False)
-
-            # Match two structures
-            final_structure_reordered = sm.get_s2_like_s1(initial_structure, final_structure)
-
-            label_atoms = st.checkbox("Do you want labelled atoms for checking?")
-
-            if label_atoms:
-                file_name_o1 = file_name1 + "_labelled"
-                file_name_o2 = file_name2 + "_reordered_labelled"
-                generate_labelled_cif(initial_structure, file_name_o1)
-                generate_labelled_cif(final_structure_reordered, file_name_o2)
-
-    if st.button("Generate Interpolated Structures"):
-        if atoms1 is not None and atoms2 is not None:
-            try:
-                # Interpolate between the two structures
-                interpolated_structures = initial_structure.interpolate(final_structure_reordered,
-                                                                        nimages=n,
-                                                                        autosort_tol=0.5,
-                                                                        interpolate_lattices=True)
-
-                # Convert pymatgen structures back to ase atoms
-                interpolated_atoms = [AseAtomsAdaptor.get_atoms(structure) for structure in
-                                      interpolated_structures]
-
-                # Save interpolated structures to a temporary ZIP file
-                create_interpolated_structures_zip(interpolated_atoms)
-
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-# if trans_rotate_option:
-#     st.header("Translate Inorganic and Rotate Organic Subunits")
-#     file_buffer1 = st.file_uploader("Upload an initial structure file (AIMS or CIF)", type=[".in", ".cif"],
-#                                     key="file_buffer1")
-#     file_buffer2 = st.file_uploader("Upload a final structure file (AIMS or CIF)", type=[".in", ".cif"],
-#                                     key="file_buffer2")
-#
-#     if file_buffer1 is not None and file_buffer2 is not None:
-#
-#         atoms1, molecules1 = process_file_and_print_molecules(file_buffer1, "initial structure")
-#
-#         inorganic_indices1 = st.multiselect("Enter inorganic molecule indices, separated by spaces: ",
-#                                             options=range(1, len(molecules1) + 1), key='initial')
-#
-#         initial_organic, initial_inorganic = generate_substructure(atoms1, molecules1, inorganic_indices1)
-#
-#         atoms2, molecules2 = process_file_and_print_molecules(file_buffer2, "final structure")
-#
-#         inorganic_indices2 = st.multiselect("Enter inorganic molecule indices, separated by spaces: ",
-#                                             options=range(1, len(molecules2) + 1), key='final')
-#
-#         final_organic, final_inorganic = generate_substructure(atoms2, molecules2, inorganic_indices2)
-#
-#         # Let user decide whether to show download links for initial/final organic/inorganic files
-#         show_download_links = st.checkbox("Show download links for initial/final organic/inorganic files")
-#
-#         if show_download_links:
-#             create_labelled_download_file(initial_inorganic, "initial_inorganic", "")
-#             create_labelled_download_file(initial_organic, "initial_organic", "")
-#             create_labelled_download_file(final_inorganic, "final_inorganic", "")
-#             create_labelled_download_file(final_organic, "final_organic", "")
-#
-#         if inorganic_indices1 and inorganic_indices2:
-#
-#             st.subheader("Starting Interpolation")
-#             n = st.number_input("Enter the number of interpolated structures to generate:", min_value=1,
-#                                 step=1)
-#             n = (n + 1)
-#
-#             molecules_io = detect_molecules(initial_organic)
-#             modified_symbols = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(initial_organic)]
-#
-#             print_detected_molecules(modified_symbols, molecules_io, "initial organic sublattice")
-#
-#             rotate_indices = st.multiselect("Enter molecular indices you want to rotate, separated by spaces: ",
-#                                             options=range(1, len(molecules_io) + 1), key='rotate_mol')
-#
-#             use_custom_axis = st.checkbox("Use custom rotation axis")
-#
-#             axis_input = st.text_input(
-#                 "Enter custom axis as x, y, z separated by spaces") if use_custom_axis else None
-#             axis = axis_input.split() if axis_input else st.selectbox("Select rotation axis",
-#                                                                       options=["x", "y", "z"])
-#
-#             if use_custom_axis:
-#                 axis = np.array([float(val) for val in axis_input.split()])
-#             else:
-#                 axis_dict = {'x': [1, 0, 0], 'y': [0, 1, 0], 'z': [0, 0, 1]}
-#                 axis = axis_dict[axis]
-#
-#             if st.button("Generate Interpolated Structures"):
-#                 if atoms1 is not None and atoms2 is not None:
-#                     try:
-#                         # Rotate the organic
-#                         rotated_organic_structures = rotate_organic_molecules(initial_organic,molecules_io, n, rotate_indices, axis)       #180 deg rotated structure is the last one
-#
-#
-#                         # Translate the inorganic
-#                         if rotated_organic_structures is not None:
-#
-#                             inorganic_interpolated_structures = interpolate_inorganic_lattice(initial_inorganic,
-#                                                                                               final_inorganic, n)
-#
-#
-#                             if rotated_organic_structures is not None and inorganic_interpolated_structures is not None:
-#                                 st.subheader("Here are the interpolated structures:")
-#                                 # Save interpolated structures to a temporary ZIP file
-#                                 merge_and_create_zip(rotated_organic_structures, inorganic_interpolated_structures)
-#
-#
-#
-#
-#                     except Exception as e:
-#                         st.error(f"Error: {e}")
+    render_interpolation(render_section_header=render_section_header)
 
 if plot_polarization_option:
     render_section_header(
@@ -5169,40 +2156,7 @@ if plot_absorption_option:
 
 
 if deviation_calculation_option:
-    render_section_header("Calculate deviation", kicker="Structure Workspace")
-
-    file_buffer1 = st.file_uploader("Upload an initial structure file (AIMS or CIF)", type=[".in", ".cif"],
-                                    key="file_buffer1")
-    file_buffer2 = st.file_uploader("Upload a final structure file (AIMS or CIF)", type=[".in", ".cif"],
-                                    key="file_buffer2")
-
-    if file_buffer1 is not None and file_buffer2 is not None:
-
-        atoms1, atoms2, file_name1, file_name2 = process_uploaded_files(file_buffer1, file_buffer2)
-
-        if atoms1 is not None and atoms2 is not None:
-            # Convert ase atoms to pymatgen structures
-            initial_structure = AseAtomsAdaptor.get_structure(atoms1)
-            final_structure = AseAtomsAdaptor.get_structure(atoms2)
-
-            # Extract lattice parameters
-            lattice_parameters = ['a (Å)', 'b (Å)', 'c (Å)', 'alpha (°)', 'beta (°)', 'gamma (°)', 'volume (Å^3)']
-            lattice_parameter_keys = ['a', 'b', 'c', 'alpha', 'beta', 'gamma', 'volume']
-            initial_params = [getattr(initial_structure.lattice, p) for p in lattice_parameter_keys]
-            final_params = [getattr(final_structure.lattice, p) for p in lattice_parameter_keys]
-
-            # Calculate percentage deviations
-            deviations = [(final - initial) / initial * 100 for initial, final in zip(initial_params, final_params)]
-
-            # Prepare data for the table
-            table_data = list(zip(lattice_parameters, initial_params, final_params, deviations))
-
-            # Create dataframe
-            df = pd.DataFrame(table_data,
-                              columns=["Lattice Parameter", "Initial Value", "Final Value", "Deviation (%)"])
-
-            # Display the dataframe
-            st.dataframe(df, use_container_width=True, hide_index=True)
+    render_percentage_deviation(render_section_header=render_section_header)
 
 if MD_option:
     render_section_header("Analyze AIMS Molecular Dynamics (MD) Output files", kicker="Dynamics Workspace")
@@ -5400,10 +2354,12 @@ def build_universe_and_analyze(timestep):
 
 @st.cache_data(show_spinner="Building MDA universe")
 def create_universe(file_buffer_md, timestep):
-    with zipfile.ZipFile(file_buffer_md, 'r') as zip_ref:
-        zip_ref.extractall('frames_dir')
-    timestep = timestep / 1000
-    return build_universe_from_dir('frames_dir', timestep=timestep)
+    file_buffer_md.seek(0)
+    APP_TMP_DIR.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="hps-trajectory-", dir=APP_TMP_DIR) as tmpdir:
+        safe_extract_zip(file_buffer_md, Path(tmpdir))
+        timestep = timestep / 1000
+        return build_universe_from_dir(tmpdir, timestep=timestep)
 
 
 previous_file_buffer = None
@@ -5423,7 +2379,11 @@ if MDanalysis_option:
             previous_file_buffer = file_buffer_md
 
 
-        u = create_universe(file_buffer_md, timestep)
+        try:
+            u = create_universe(file_buffer_md, timestep)
+        except UnsafeArchiveError as exc:
+            st.error(f"Could not open trajectory archive: {exc}")
+            st.stop()
 
         analysis_type = st.selectbox("Select Analysis Type", ("H-Bond Analysis", "Distance Analysis", "Average Structure", "Distortion Analysis", "Pair Distribution Function","Anisotropic Displacement Parameter"))
 
@@ -5527,9 +2487,6 @@ if script_option:
         subtitle="This feature uses JupyterLite and runs entirely in your browser. It does not currently have access to previously uploaded files.",
     )
     jupyterlite(900, 1600)
-
-import mpld3
-import streamlit.components.v1 as components
 
 if plot_spin_v2_option:
     render_section_header(
@@ -5792,10 +2749,11 @@ def modify_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
     # Build alias map and safe namespace
     alias_map = {}
-    local_vars = {
-        'np': np,
+    constants = {
         'pi': np.pi,
         'e': np.e,
+    }
+    functions = {
         'sin': np.sin,
         'cos': np.cos,
         'tan': np.tan,
@@ -5804,6 +2762,7 @@ def modify_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         'abs': np.abs,
         'exp': np.exp
     }
+    local_vars = {}
 
     # Map each column to a Python-safe variable name
     for col in df.columns:
@@ -5834,7 +2793,12 @@ def modify_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
             new_col, formula = [s.strip() for s in line.split("=", 1)]
             try:
-                result = eval(formula, {}, local_vars)
+                result = evaluate_math_expression(
+                    formula,
+                    variables=local_vars,
+                    functions=functions,
+                    constants=constants,
+                )
                 df[new_col] = result
                 # Update local_vars so it can be reused in later expressions
                 safe_new_col = re.sub(r'\W|^(?=\d)', '_', new_col)
@@ -5967,10 +2931,10 @@ if xy_plot_option:
                     ds_cfg = config_data["datasets"][i] if config_data and "datasets" in config_data and i < len(
                         config_data["datasets"]) else {}
 
-                    x_col = st.selectbox(f"X-axis column", columns, key=f"x{i}",
+                    x_col = st.selectbox("X-axis column", columns, key=f"x{i}",
                                          index=columns.index(ds_cfg.get("x", columns[0])) if ds_cfg.get(
                                              "x") in columns else 0)
-                    y_col = st.selectbox(f"Y-axis column", columns, key=f"y{i}",
+                    y_col = st.selectbox("Y-axis column", columns, key=f"y{i}",
                                          index=columns.index(ds_cfg.get("y", columns[0])) if ds_cfg.get(
                                              "y") in columns else 0)
 

@@ -1,5 +1,7 @@
-"""Tool modules moved under the package."""
+"""Command-oriented tools.
 
-from . import plot_band, scan_cbm
+Submodules are intentionally not imported here because some legacy tools still
+configure plotting backends at import time.
+"""
 
-__all__ = ["plot_band", "scan_cbm"]
+__all__: list[str] = []

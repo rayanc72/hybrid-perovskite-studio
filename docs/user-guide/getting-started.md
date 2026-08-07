@@ -42,7 +42,7 @@ streamlit run src/hps/app.py
 
 - The app starts on a minimal landing page instead of opening directly into a workflow.
 - The `Browse feature map` expander shows the full tool tree when needed.
-- The visible workspace selectors and feature map are generated from a shared registry in [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py).
+- The visible workspace selectors and feature map are generated from a shared registry in [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py).
 
 ## Runtime notes
 

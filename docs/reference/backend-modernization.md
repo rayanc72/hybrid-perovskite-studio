@@ -64,3 +64,5 @@ it should move toward:
 
 ## Tracking The Remaining Work
 
+
+Shared UI-side request signatures, polling, cached result state, and uploaded-file serialization now live in `hps.ui.backend_workflows`. Workspace renderers should use that module rather than adding new polling loops to `app_main.py`.

@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use Hybrid Perovskite Studio in published work, please cite the software."
+title: "Hybrid Perovskite Studio"
+type: software
+version: 0.1.4
+authors:
+  - family-names: Chakraborty
+    given-names: Rayan
+repository-code: "https://github.com/rayanc72/hybrid-perovskite-studio"
+license: Apache-2.0

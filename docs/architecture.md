@@ -9,11 +9,18 @@ The repository now runs from a package-centered layout under `src/hps/`.
 - `src/hps/services/runtime.py` owns dependency-group checks and bootstrap behavior
 - `src/hps/services/backend_runtime.py` owns local backend discovery and startup
 - `src/hps/services/backend_jobs.py` and `src/hps/services/backend_store.py` manage background jobs, caching, and artifact persistence
+- `src/hps/ui/backend_workflows.py` owns Streamlit-independent workflow signatures, polling state, and uploaded-file request serialization
+- `src/hps/ui/workspaces/structure/state.py` owns active-upload state and structure-summary job lifecycle
+- `src/hps/ui/workspaces/structure/overview.py` renders structure upload, metadata, downloads, details, and the opt-in 3D viewer
+- `src/hps/ui/workspaces/structure/navigation.py` maps the shared feature registry to a typed Structure selection
+- `src/hps/ui/workspaces/structure/analysis/` contains focused symmetry, PXRD, PDF, structure-metric, and charge-parser modules
+- `src/hps/ui/workspaces/structure/transformations/rotation.py` owns the rotation workflow family
+- `src/hps/ui/workspaces/structure/transformations/operations.py` owns reflection, translation, deletion, labelling, and interpolation rendering
 - `src/hps/io/paths.py` defines shared runtime locations for `output/` and `tmp/`
 - `src/hps/api/` exposes the local FastAPI backend
 - `src/hps/core/` holds Streamlit-free workflow helpers extracted from the monolith
 
-- `src/hps/ui/app_main.py` contains the packaged app implementation copied from the legacy entrypoint
+- `src/hps/ui/app_main.py` remains the legacy workspace coordinator while feature renderers move into `src/hps/ui/workspaces/`; it now delegates Structure overview, navigation, major analysis workflows, and all transformation rendering
 - `src/hps/ui/navigation.py` is the single source of truth for workspace names, workspace descriptions, and the feature-map tree
 - `src/hps/domain/pdf_analysis.py` contains the packaged PDF analysis implementation copied from the legacy module
 
@@ -29,7 +36,8 @@ The local backend/job layer is now used for the highest-value parsing and prepro
 
 These workflows currently flow through:
 
-- `src/hps/ui/app_main.py` for UI submission and result rendering
+- `src/hps/ui/workspaces/structure/analysis/` for Structure symmetry, PXRD, and PDF submission and result rendering
+- `src/hps/ui/app_main.py` for the remaining UI submission and result rendering
 - `src/hps/services/backend_client.py` for local API calls
 - `src/hps/api/app.py` for HTTP endpoints
 - `src/hps/services/backend_jobs.py` for workflow registration and caching
@@ -43,12 +51,14 @@ The remaining expensive workflows, especially PDF analysis and zipped trajectory
 
 Files under `src/hps/ui/` should contain Streamlit rendering logic, labels, and user-facing messaging.
 
+The packaged UI now imports its scientific dependencies explicitly. Dynamic namespace injection is prohibited so missing names are caught by static analysis before a workflow is opened.
+
 The UI should prefer backend job submission for expensive workflows and should avoid parsing or recomputing heavy state during unrelated reruns.
 
 Navigation-specific guidance:
 
-- [src/hps/ui/navigation.py](../src/hps/ui/navigation.py) should be updated when workspace structure changes
-- [src/hps/ui/app_main.py](../src/hps/ui/app_main.py) should consume that registry rather than redefining the same tree by hand
+- [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py) should be updated when workspace structure changes
+- [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py) should consume that registry rather than redefining the same tree by hand
 
 ### Service layer
 

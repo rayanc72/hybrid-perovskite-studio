@@ -163,6 +163,7 @@ if [[ -z "${RELEASE_BRANCH}" ]]; then
 fi
 
 require_clean_worktree
+scripts/check_release.sh
 ensure_remote_exists "${PUBLIC_REMOTE}"
 ensure_branch_exists "${PRIVATE_BRANCH}"
 ensure_branch_exists "${PUBLIC_BRANCH}"

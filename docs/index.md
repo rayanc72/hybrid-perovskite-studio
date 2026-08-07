@@ -5,7 +5,7 @@ This documentation set is organized around the current workspace-based UI. The g
 ## Start Here
 
 - [Getting Started](user-guide/getting-started.md)
-- [Screenshots](user-guide/screenshots.md)
+- [Screenshots](user-guide/navigation-and-workspaces.md#workspace-gallery)
 - [Feature Map](feature-map.md)
 - [Navigation and Workspaces](user-guide/navigation-and-workspaces.md)
 - [Architecture](architecture.md)
@@ -36,6 +36,6 @@ The docs focus on:
 
 The current workspace map and feature tree are defined in:
 
-- [src/hps/ui/navigation.py](../src/hps/ui/navigation.py)
+- [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 
 If the visible navigation changes, that file and the matching workspace doc should be updated together.

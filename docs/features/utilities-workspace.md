@@ -54,14 +54,14 @@ Capabilities in the current implementation include:
 ## Notes And Limitations
 
 - Utility workflows are broader and less constrained than the domain-specific workspaces.
-- Some helpers still live directly in [src/hps/ui/app_main.py](../../src/hps/ui/app_main.py).
+- Some helpers still live directly in [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py).
 
 ## Code Touchpoints
 
 - UI:
-  [src/hps/ui/app_main.py](../../src/hps/ui/app_main.py)
+  [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py)
 - Navigation registry:
-  [src/hps/ui/navigation.py](../../src/hps/ui/navigation.py)
+  [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 
 ## Last Verified
 

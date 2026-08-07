@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 import warnings
+from itertools import combinations_with_replacement
 from io import BytesIO
 
 import numpy as np
@@ -15,6 +16,7 @@ from ase.io import read
 from ase.neighborlist import natural_cutoffs
 from pymatgen.analysis.diffraction.xrd import XRDCalculator
 from pymatgen.io.ase import AseAtomsAdaptor
+from pymatgen.io.cif import CifWriter
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 
@@ -301,3 +303,144 @@ def simulate_pxrd_from_upload(
         "reflections": reflections_df.to_dict(orient="records"),
         "x_label": x_label,
     }
+
+
+def simulate_pdf_from_upload(
+    *,
+    file_name: str,
+    file_bytes: bytes,
+    q_range: tuple[float, float] = (1.0, 20.0),
+    r_range: tuple[float, float] = (0.1, 20.0),
+    qdamp: float = 0.06,
+    qbroad: float = 0.06,
+) -> dict[str, object]:
+    """Simulate a PDF profile through the optional PDF backend dependency."""
+
+    from hps.domain.pdf import calculate_pdf, load_structure
+
+    if q_range[0] < 0 or q_range[0] >= q_range[1]:
+        raise ValueError("q_range must be increasing and non-negative.")
+    if r_range[0] < 0 or r_range[0] >= r_range[1]:
+        raise ValueError("r_range must be increasing and non-negative.")
+    atoms = read_structure_bytes(file_bytes, get_file_format(file_name))
+    structure = AseAtomsAdaptor.get_structure(atoms)
+    with tempfile.TemporaryDirectory(prefix="hps-pdf-backend-") as tmpdir:
+        cif_path = os.path.join(tmpdir, "structure.cif")
+        CifWriter(structure).write_file(cif_path)
+        diffpy_structure = load_structure(cif_path)
+        r_values, g_values = calculate_pdf(
+            diffpy_structure,
+            diffpy_structure_attributes={"Uisoequiv": 0.01},
+            pdf_calculator_kwargs={
+                "qmin": float(q_range[0]),
+                "qmax": float(q_range[1]),
+                "rmin": float(r_range[0]),
+                "rmax": float(r_range[1]),
+                "qdamp": float(qdamp),
+                "qbroad": float(qbroad),
+            },
+        )
+    frame = pd.DataFrame({"r (A)": r_values, "G_sim(r)": g_values})
+    return {
+        "profile": frame.to_dict(orient="records"),
+        "q_range": [float(q_range[0]), float(q_range[1])],
+        "r_range": [float(r_range[0]), float(r_range[1])],
+    }
+
+
+def compare_pdf_profiles(
+    *,
+    simulated_r: list[float],
+    simulated_g: list[float],
+    experimental_r: list[float],
+    experimental_g: list[float],
+    normalization: str = "zscore",
+) -> dict[str, object]:
+    """Interpolate, normalize, and linearly fit simulated PDF data to experiment."""
+
+    sim_r = np.asarray(simulated_r, dtype=float)
+    sim_g = np.asarray(simulated_g, dtype=float)
+    exp_r = np.asarray(experimental_r, dtype=float)
+    exp_g = np.asarray(experimental_g, dtype=float)
+    if min(len(sim_r), len(sim_g), len(exp_r), len(exp_g)) < 2:
+        raise ValueError("PDF comparison requires at least two simulated and experimental points.")
+    if len(sim_r) != len(sim_g) or len(exp_r) != len(exp_g):
+        raise ValueError("Each PDF coordinate array must match its value array.")
+    if np.any(np.diff(sim_r) < 0) or np.any(np.diff(exp_r) < 0):
+        raise ValueError("PDF r coordinates must be sorted in increasing order.")
+
+    interpolated = np.interp(exp_r, sim_r, sim_g)
+    eps = 1e-12
+    if normalization == "zscore":
+        x_origin, x_scale = float(interpolated.mean()), max(float(interpolated.std()), eps)
+        y_origin, y_scale = float(exp_g.mean()), max(float(exp_g.std()), eps)
+    elif normalization == "minmax":
+        x_origin, x_scale = float(interpolated.min()), max(float(np.ptp(interpolated)), eps)
+        y_origin, y_scale = float(exp_g.min()), max(float(np.ptp(exp_g)), eps)
+    else:
+        raise ValueError("normalization must be `zscore` or `minmax`.")
+
+    x_norm = (interpolated - x_origin) / x_scale
+    y_norm = (exp_g - y_origin) / y_scale
+    a_norm, b_norm = np.polyfit(x_norm, y_norm, 1)
+    effective_slope = float(y_scale * a_norm / x_scale)
+    effective_intercept = float(y_origin + y_scale * b_norm - effective_slope * x_origin)
+    fitted = effective_slope * interpolated + effective_intercept
+    residual = exp_g - fitted
+    original_pcc = float(np.corrcoef(exp_g, interpolated)[0, 1])
+    normalized_pcc = float(np.corrcoef(y_norm, x_norm)[0, 1])
+    table = pd.DataFrame(
+        {
+            "r (A)": exp_r,
+            "G_sim": interpolated,
+            "G_exp": exp_g,
+            "G_fit": fitted,
+            "Residual": residual,
+            "G_sim (norm)": x_norm,
+            "G_exp (norm)": y_norm,
+            "G_fit (norm)": a_norm * x_norm + b_norm,
+        }
+    )
+    return {
+        "table": table.to_dict(orient="records"),
+        "effective_slope": effective_slope,
+        "effective_intercept": effective_intercept,
+        "pcc_original": original_pcc,
+        "pcc_normalized": normalized_pcc,
+        "normalization": normalization,
+    }
+
+
+def simulate_rdf_from_upload(
+    *,
+    file_name: str,
+    file_bytes: bytes,
+    atom_list: list[str],
+    r_max: float,
+    bins: int,
+    weighted: bool,
+) -> dict[str, object]:
+    """Calculate pair RDF tables once for reuse by either UI plotting backend."""
+
+    from hps.domain.pdf import compute_rdf_weighted
+
+    if not atom_list or len(atom_list) > 20:
+        raise ValueError("atom_list must contain between 1 and 20 element labels.")
+    if r_max <= 0 or bins < 10:
+        raise ValueError("r_max must be positive and bins must be at least 10.")
+    atoms = read_structure_bytes(file_bytes, get_file_format(file_name))
+    pairs = []
+    for pair in combinations_with_replacement(atom_list, 2):
+        r_values, g_values = compute_rdf_weighted(
+            atoms, pair=pair, r_max=float(r_max), bins=int(bins), w=bool(weighted)
+        )
+        if r_values is None:
+            continue
+        pairs.append(
+            {
+                "pair": list(pair),
+                "r": np.asarray(r_values, dtype=float).tolist(),
+                "g": np.asarray(g_values, dtype=float).tolist(),
+            }
+        )
+    return {"pairs": pairs, "pair_count": len(pairs), "bins": int(bins)}

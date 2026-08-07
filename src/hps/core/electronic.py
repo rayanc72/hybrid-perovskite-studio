@@ -262,3 +262,90 @@ def parse_pdos_payload(
             for element, data in dos_data.items()
         },
     }
+
+
+SPIN_TEXTURE_COLUMNS = [
+    "k_point", "kx", "ky", "kz", "state", "eigenvalue",
+    "sigma_x", "sigma_y", "sigma_z", "rel_kx", "rel_ky", "rel_kz",
+]
+
+
+def parse_band_payload(
+    uploaded_files: list[dict[str, object]], energy_shift: float = 0.0
+) -> dict[str, object]:
+    """Parse FHI-aims ``band####.out`` files into reusable JSON data."""
+
+    band_files = sorted(
+        (
+            file for file in uploaded_files
+            if re.fullmatch(r"band\d{4}\.out", str(file["name"]), re.IGNORECASE)
+        ),
+        key=lambda file: int(str(file["name"])[4:8]),
+    )
+    if not band_files:
+        raise ValueError("No band files were found; expected names such as `band0001.out`.")
+
+    segments = []
+    band_count = None
+    for file in band_files:
+        data = np.loadtxt(StringIO(bytes(file["content"]).decode("utf-8", errors="strict")))
+        data = np.atleast_2d(np.asarray(data, dtype=float))
+        if data.shape[1] < 6 or (data.shape[1] - 4) % 2:
+            raise ValueError(f"`{file['name']}` does not contain occupation/energy pairs.")
+        current_band_count = (data.shape[1] - 4) // 2
+        if band_count is None:
+            band_count = current_band_count
+        elif current_band_count != band_count:
+            raise ValueError("All band files must contain the same number of bands.")
+        segments.append(
+            {
+                "name": str(file["name"]),
+                "k_point_index": data[:, 0].astype(int).tolist(),
+                "k_points": data[:, 1:4].tolist(),
+                "occupations": data[:, 4::2].tolist(),
+                "energies": (data[:, 5::2] - float(energy_shift)).tolist(),
+            }
+        )
+
+    all_energies = np.concatenate(
+        [np.asarray(segment["energies"], dtype=float).ravel() for segment in segments]
+    )
+    return {
+        "segments": segments,
+        "segment_count": len(segments),
+        "band_count": int(band_count or 0),
+        "energy_shift": float(energy_shift),
+        "energy_range": [float(all_energies.min()), float(all_energies.max())],
+    }
+
+
+def parse_spin_texture_payload(uploaded_files: list[dict[str, object]]) -> dict[str, object]:
+    """Parse a spin-texture table once for both 2D and 3D UI renderers."""
+
+    candidates = [
+        file for file in uploaded_files
+        if str(file["name"]).lower().endswith(".dat")
+    ]
+    if len(candidates) != 1:
+        raise ValueError("Provide exactly one spin-texture `.dat` file.")
+    file = candidates[0]
+    frame = pd.read_csv(
+        StringIO(bytes(file["content"]).decode("utf-8", errors="strict")),
+        sep=r"\s+",
+        comment="#",
+        header=None,
+    )
+    if frame.shape[1] not in {9, 12}:
+        raise ValueError("Spin-texture data must contain either 9 or 12 columns.")
+    frame.columns = SPIN_TEXTURE_COLUMNS[: frame.shape[1]]
+    numeric_columns = list(frame.columns)
+    frame[numeric_columns] = frame[numeric_columns].apply(pd.to_numeric, errors="raise")
+    states = sorted(int(value) for value in frame["state"].unique())
+    return {
+        "file_name": str(file["name"]),
+        "columns": list(frame.columns),
+        "table": frame.to_dict(orient="records"),
+        "row_count": int(len(frame)),
+        "states": states,
+        "state_range": [states[0], states[-1]],
+    }

@@ -32,6 +32,9 @@
 
 ## Unreleased
 
+- Split the remaining Structure, Electronic, Dynamics, and Utilities renderers out of `app_main.py`, leaving it as the workspace coordinator.
+- Added backend PDF simulation, bandstructure parsing, spin-texture parsing, and trajectory archive preprocessing contracts.
+- Added artifact-size retention, stale-job recovery, cache-hit accounting, and missing-artifact cache safeguards.
 - Replaced unrestricted dataset-expression evaluation with an allowlisted mathematical expression engine.
 - Added safe trajectory ZIP extraction with traversal, symlink, file-count, and expanded-size protections.
 - Added backend upload and numerical range validation.

@@ -9,10 +9,20 @@ import os
 from concurrent.futures import Future, ProcessPoolExecutor
 from threading import Lock
 
-from hps.core.electronic import parse_pdos_payload
-from hps.core.md import parse_md_outputs
+from hps.core.electronic import (
+    parse_band_payload,
+    parse_pdos_payload,
+    parse_spin_texture_payload,
+)
+from hps.core.md import inspect_trajectory_archive, parse_md_outputs
 from hps.core.structure import summarize_structure_upload
-from hps.core.structure import calculate_space_group_sweep, simulate_pxrd_from_upload
+from hps.core.structure import (
+    calculate_space_group_sweep,
+    compare_pdf_profiles,
+    simulate_pdf_from_upload,
+    simulate_pxrd_from_upload,
+    simulate_rdf_from_upload,
+)
 from hps.services.backend_store import BackendStore
 
 
@@ -59,6 +69,40 @@ def _run_structure_pxrd(payload: dict[str, object]) -> dict[str, object]:
     )
 
 
+def _run_structure_pdf(payload: dict[str, object]) -> dict[str, object]:
+    file_bytes = base64.b64decode(str(payload["file_bytes_b64"]).encode("utf-8"))
+    return simulate_pdf_from_upload(
+        file_name=str(payload["file_name"]),
+        file_bytes=file_bytes,
+        q_range=tuple(payload.get("q_range", (1.0, 20.0))),
+        r_range=tuple(payload.get("r_range", (0.1, 20.0))),
+        qdamp=float(payload.get("qdamp", 0.06)),
+        qbroad=float(payload.get("qbroad", 0.06)),
+    )
+
+
+def _run_structure_pdf_compare(payload: dict[str, object]) -> dict[str, object]:
+    return compare_pdf_profiles(
+        simulated_r=list(payload["simulated_r"]),
+        simulated_g=list(payload["simulated_g"]),
+        experimental_r=list(payload["experimental_r"]),
+        experimental_g=list(payload["experimental_g"]),
+        normalization=str(payload.get("normalization", "zscore")),
+    )
+
+
+def _run_structure_rdf(payload: dict[str, object]) -> dict[str, object]:
+    file_bytes = base64.b64decode(str(payload["file_bytes_b64"]).encode("utf-8"))
+    return simulate_rdf_from_upload(
+        file_name=str(payload["file_name"]),
+        file_bytes=file_bytes,
+        atom_list=[str(value) for value in payload["atom_list"]],
+        r_max=float(payload["r_max"]),
+        bins=int(payload["bins"]),
+        weighted=bool(payload.get("weighted", True)),
+    )
+
+
 def _decode_named_files(payload_files: list[dict[str, object]]) -> list[dict[str, object]]:
     normalized_files = []
     for file in payload_files:
@@ -79,9 +123,25 @@ def _run_electronic_pdos(payload: dict[str, object]) -> dict[str, object]:
     )
 
 
+def _run_electronic_band(payload: dict[str, object]) -> dict[str, object]:
+    return parse_band_payload(
+        _decode_named_files(list(payload.get("files", []))),
+        energy_shift=float(payload.get("energy_shift", 0.0)),
+    )
+
+
+def _run_electronic_spin(payload: dict[str, object]) -> dict[str, object]:
+    return parse_spin_texture_payload(_decode_named_files(list(payload.get("files", []))))
+
+
 def _run_md_parse(payload: dict[str, object]) -> dict[str, object]:
     files = _decode_named_files(list(payload.get("files", [])))
     return parse_md_outputs(files)
+
+
+def _run_md_trajectory_prepare(payload: dict[str, object]) -> dict[str, object]:
+    content = base64.b64decode(str(payload["file_bytes_b64"]).encode("utf-8"))
+    return inspect_trajectory_archive(content, float(payload["timestep_fs"]))
 
 
 WORKFLOW_REGISTRY = {
@@ -89,8 +149,19 @@ WORKFLOW_REGISTRY = {
     "structure_context": _run_structure_context,
     "structure_symmetry": _run_structure_symmetry,
     "structure_pxrd": _run_structure_pxrd,
+    "structure_pdf": _run_structure_pdf,
+    "structure_pdf_compare": _run_structure_pdf_compare,
+    "structure_rdf": _run_structure_rdf,
     "electronic_pdos": _run_electronic_pdos,
+    "electronic_band": _run_electronic_band,
+    "electronic_spin": _run_electronic_spin,
     "md_parse": _run_md_parse,
+    "md_trajectory_prepare": _run_md_trajectory_prepare,
+}
+
+ARTIFACT_TYPES = {
+    workflow: {"content_type": "application/json", "suffix": ".json"}
+    for workflow in WORKFLOW_REGISTRY
 }
 
 
@@ -107,6 +178,14 @@ class BackendJobManager:
 
     def __init__(self, store: BackendStore | None = None, *, max_workers: int | None = None) -> None:
         self.store = store or BackendStore()
+        self.store.recover_stale_jobs(
+            stale_after_seconds=int(os.getenv("HPS_STALE_JOB_SECONDS", "3600"))
+        )
+        self.store.prune_artifacts(
+            max_age_days=int(os.getenv("HPS_ARTIFACT_MAX_AGE_DAYS", "30")),
+            max_total_bytes=int(os.getenv("HPS_ARTIFACT_MAX_BYTES", "2000000000")),
+            keep_at_least=int(os.getenv("HPS_ARTIFACT_KEEP_AT_LEAST", "20")),
+        )
         self._executor = ProcessPoolExecutor(max_workers=max_workers or max(1, min(2, os.cpu_count() or 1)))
         self._futures: dict[str, Future] = {}
         self._lock = Lock()
@@ -166,11 +245,12 @@ class BackendJobManager:
     def _finalize_job(self, job_id: str, workflow: str, future: Future) -> None:
         try:
             result = future.result()
+            artifact_type = ARTIFACT_TYPES[workflow]
             artifact_id = self.store.create_artifact(
                 kind=workflow,
                 data=json.dumps(result, indent=2, sort_keys=True).encode("utf-8"),
-                content_type="application/json",
-                suffix=".json",
+                content_type=artifact_type["content_type"],
+                suffix=artifact_type["suffix"],
             )
             self.store.update_job(
                 job_id,

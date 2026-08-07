@@ -10,10 +10,16 @@ from pydantic import ValidationError
 
 from hps import __version__
 from hps.api.schemas import (
+    ElectronicBandRequest,
     ElectronicPdosRequest,
+    ElectronicSpinRequest,
     HealthResponse,
     JobStatusResponse,
     MdParseRequest,
+    MdTrajectoryRequest,
+    StructurePdfRequest,
+    StructurePdfCompareRequest,
+    StructureRdfRequest,
     StructurePxrdRequest,
     StructureSummaryRequest,
     StructureSymmetryRequest,
@@ -27,8 +33,14 @@ WORKFLOW_SCHEMAS = {
     "structure_context": StructureSummaryRequest,
     "structure_symmetry": StructureSymmetryRequest,
     "structure_pxrd": StructurePxrdRequest,
+    "structure_pdf": StructurePdfRequest,
+    "structure_pdf_compare": StructurePdfCompareRequest,
+    "structure_rdf": StructureRdfRequest,
     "electronic_pdos": ElectronicPdosRequest,
+    "electronic_band": ElectronicBandRequest,
+    "electronic_spin": ElectronicSpinRequest,
     "md_parse": MdParseRequest,
+    "md_trajectory_prepare": MdTrajectoryRequest,
 }
 
 
@@ -43,6 +55,7 @@ def _serialize_job(job: dict[str, object] | None) -> JobStatusResponse:
         messages=list(job["messages"]),
         result_ref=job["result_ref"],
         error=job["error"],
+        cache_hit=bool(job.get("cache_hit", False)),
     )
 
 

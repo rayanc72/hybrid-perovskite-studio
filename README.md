@@ -62,7 +62,7 @@ To run the current backend-focused regression suite:
 
 ```bash
 source .venv/bin/activate
-python -m pytest tests/test_backend_store.py tests/test_backend_api.py tests/test_core_workflows.py -q
+python -m pytest tests/test_backend_store.py tests/test_backend_api.py tests/test_backend_phase3_workflows.py tests/test_core_workflows.py -q
 ```
 
 ## Docs
@@ -106,4 +106,4 @@ mkdocs build
 - Runtime files belong under `tmp/` and `output/`
 - Navigation is defined in `src/hps/ui/navigation.py`
 - The Streamlit app now attempts to auto-start a local backend service for cached/background workflows
-- Backend-migrated workflows currently include structure context, symmetry sweep, PXRD simulation, PDOS parsing, and MD output parsing
+- Backend-migrated workflows include structure context, symmetry sweep, PXRD/PDF simulation, PDOS/band/spin preprocessing, MD output parsing, and trajectory archive validation

@@ -2,8 +2,8 @@ import numpy as np
 from pymatgen.io.ase import AseAtomsAdaptor
 import pandas as pd
 from pymatgen.core.structure import Molecule, Structure
-from pymatgen.analysis.graphs import MoleculeGraph, StructureGraph
 from pymatgen.analysis.local_env import CovalentBondNN, JmolNN
+from pymatgen.core.graphs import MoleculeGraph, StructureGraph
 import matplotlib.pyplot as plt
 import networkx as nx
 
@@ -73,7 +73,7 @@ def update_coordinates_function(structure):
     """Translate sites to connected periodic images for a molecular fragment."""
 
     jnn = JmolNN()
-    new_structure_graph = StructureGraph.with_local_env_strategy(structure, jnn)
+    new_structure_graph = StructureGraph.from_local_env_strategy(structure, jnn)
     indices_need_update = set()
     lattice_vectors = structure.lattice.matrix
 
@@ -133,7 +133,7 @@ def update_coordinates_function(structure):
 def test_connectivity_in_molecule(species, coords):
     test_mol = Molecule(species, coords)
     cnn = CovalentBondNN(tol=0.2)
-    test_mol_graph = MoleculeGraph.with_local_env_strategy(test_mol, cnn)
+    test_mol_graph = MoleculeGraph.from_local_env_strategy(test_mol, cnn)
     disconnected_fragment = test_mol_graph.get_disconnected_fragments()
 
     all_connected = all(test_mol_graph.get_connected_sites(i) for i in range(len(test_mol)))

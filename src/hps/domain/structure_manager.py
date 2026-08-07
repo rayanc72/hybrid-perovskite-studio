@@ -47,9 +47,8 @@ import warnings
 from pymatgen.symmetry.groups import SpaceGroup
 from pymatgen.core.structure import Molecule
 from pymatgen.core.structure import Structure
-from pymatgen.analysis.graphs import MoleculeGraph
 from pymatgen.core.operations import SymmOp
-from pymatgen.analysis.graphs import MoleculeGraph, ConnectedSite
+from pymatgen.core.graphs import ConnectedSite, MoleculeGraph
 from pymatgen.util.coord import find_in_coord_list
 import networkx as nx
 from bokeh.models import ColumnDataSource
@@ -586,7 +585,7 @@ def rotate_molecules_v2(atoms, molecule, axis, angle):
 
     mol = Molecule(mol_structure.species, joined_coords)
     cnn = CovalentBondNN(tol=0.5)
-    mol_graph = MoleculeGraph.with_local_env_strategy(mol, cnn)
+    mol_graph = MoleculeGraph.from_local_env_strategy(mol, cnn)
 
 
     # Check if all the atoms in the molecule are connected
@@ -685,7 +684,7 @@ def rotate_molecules_v3(atoms, molecules, molecule_indices, axis, angle,
 
         mol = Molecule(mol_structure.species, joined_coords)
         cnn = CovalentBondNN(tol=0.5)
-        mol_graph = MoleculeGraph.with_local_env_strategy(mol, cnn)
+        mol_graph = MoleculeGraph.from_local_env_strategy(mol, cnn)
 
         # Check if all the atoms in the molecule are connected
         all_connected = True

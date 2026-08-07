@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
@@ -11,6 +12,7 @@ BACKEND_HEALTH = {
     "version": "test",
     "base_url": "http://127.0.0.1:8765",
 }
+APP_PATH = Path(__file__).resolve().parents[1] / "src" / "hps" / "app.py"
 
 
 def test_packaged_app_opens_dynamics_trajectory_view() -> None:
@@ -18,7 +20,7 @@ def test_packaged_app_opens_dynamics_trajectory_view() -> None:
         "hps.services.backend_runtime.validate_backend_connection",
         return_value=BACKEND_HEALTH,
     ):
-        app = AppTest.from_file("src/hps/app.py", default_timeout=30).run()
+        app = AppTest.from_file(APP_PATH, default_timeout=30).run()
         assert not app.exception
         assert {button.label for button in app.button} >= {
             "Open Structure",

@@ -29,7 +29,6 @@ from hps.domain.md_analysis import (
     plot_data,
     plot_hbond_data,
     replace_indices_with_original,
-    run_perl_script,
 )
 from hps.domain.structure_manager import (
     calculate_angle_variance,
@@ -265,30 +264,6 @@ def render_dynamics_workspace(
                     file_name="md_output.csv",
                     mime="text/csv",
                 )
-
-            # Button to generate files
-            if st.button("Generate files"):
-                # zip_file, spt_file, movie_file = run_perl_script(file_buffer_md)
-                zip_file, spt_file = run_perl_script(file_buffer_md)
-
-                # Provide native download option for zip_file
-                with open(zip_file, "rb") as f:
-                    zip_data = f.read()
-                st.download_button(
-                    label=f"Download {zip_file}",
-                    data=zip_data,
-                    file_name="geometries.zip",
-                    mime="application/zip"
-                )
-
-                # Remove the files after they have been downloaded
-                os.remove(zip_file)
-                os.remove(spt_file)
-                # os.remove("joined_file.out")
-                # os.remove(movie_file)
-
-
-
 
     if MDanalysis_option:
         render_section_header("Analysis on MD Trajectory", kicker="Dynamics Workspace")

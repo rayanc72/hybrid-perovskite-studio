@@ -3,7 +3,6 @@ import glob
 import os
 import re
 import shutil
-import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
@@ -25,11 +24,7 @@ from MDAnalysis.analysis.hydrogenbonds.hbond_analysis import HydrogenBondAnalysi
 from MDAnalysis.analysis.rdf import InterRDF, InterRDF_s
 from MDAnalysis.coordinates.memory import MemoryReader
 from MDAnalysis.transformations import nojump
-from natsort import natsorted
 from scipy.ndimage import gaussian_filter
-
-from hps.io.paths import APP_TMP_DIR, REPO_ROOT
-
 
 def try_float_conversion(value):
     try:
@@ -186,58 +181,6 @@ def plot_data(df):
     fig4.update_layout(**generate_layout(title='Time vs. Conserved Hamiltonian', xaxis_title='Time [ps]', yaxis_title='Cons. H [eV]'))
     fig4.update_layout(yaxis=dict(tickformat=".6e"))
     col4.plotly_chart(fig4)
-def run_perl_script(input_files):
-    perl_script_path = str(REPO_ROOT / 'create_geometry_zip.pl')
-    APP_TMP_DIR.mkdir(exist_ok=True)
-    joined_file_path = APP_TMP_DIR / 'joined_file.out'
-
-    # Create a new file by joining all input files in natural order
-    input_files = natsorted(input_files, key=lambda x: x.name)
-
-    # Define pattern for the line to start from in subsequent files
-    start_line_pattern = " Advancing structure using Born-Oppenheimer Molecular Dynamics:"
-
-    with open(joined_file_path, 'wb') as outfile:
-        for i, file in enumerate(input_files):
-            # If it's not the first file, find the first mention of the line and discard information before that
-            if i != 0:
-                start_line_found = False
-                for line in file.getvalue().decode().split('\n'):
-                    if line.strip():  # Ignore empty or blank lines
-                        if start_line_pattern in line:
-                            start_line_found = True
-                        if start_line_found:
-                            outfile.write((line + '\n').encode())
-            else:
-                # If it's the first file, write it entirely
-                outfile.write(file.getbuffer())
-
-    # call the perl script with the new joined file
-    process = subprocess.Popen(
-        ['perl', perl_script_path, str(joined_file_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        cwd=APP_TMP_DIR,
-    )
-
-    # # Prepare markdown display
-    # markdown_display = st.empty()
-    # markdown_output = ""
-    #
-    # # Stream output to Streamlit as it's generated
-    # for line in iter(process.stdout.readline, b''):
-    #     # Append to markdown_output string
-    #     markdown_output += line.decode().replace(" ", "\n") + "\n"
-    #     # Update markdown display
-    #     markdown_display.markdown(f'<div style="height:200px; text-align: center; width:50%; overflow:auto; background-color:#333333; color:#FFFFFF; border-radius:10px; padding: 0px;"><pre>{markdown_output}</pre></div>', unsafe_allow_html=True)
-
-    # Ensure all output has been read after the subprocess stops
-    process.communicate()
-
-    joined_file_path.unlink(missing_ok=True)
-
-    return APP_TMP_DIR / 'geometries.zip', APP_TMP_DIR / 'geometries.spt'
-
 def _strip_first_n_lines_inplace(path: Path, n: int = 6) -> None:
     """
     Remove the first n lines from `path` in-place:

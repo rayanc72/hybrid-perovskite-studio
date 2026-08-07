@@ -119,6 +119,12 @@ class PackageLayoutTests(unittest.TestCase):
                 f"Removed pymatgen graph constructor in {path}",
             )
 
+    def test_removed_legacy_geometry_zip_helper_is_not_referenced(self) -> None:
+        self.assertFalse((ROOT / "create_geometry_zip.pl").exists())
+        for path in (ROOT / "src" / "hps").rglob("*.py"):
+            self.assertNotIn("create_geometry_zip.pl", path.read_text())
+            self.assertNotIn("run_perl_script", path.read_text())
+
     def test_backend_entrypoint_is_declared(self) -> None:
         pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
         scripts = pyproject["project"]["scripts"]

@@ -59,14 +59,14 @@ This view expects a zipped trajectory directory and a timestep value. Once loade
 - Plotly charts
 - Data tables
 - CSV export
-- Generated geometry ZIP output
 - Average-structure export
 
 ## Notes And Limitations
 
 - MD workflows depend on optional MDAnalysis-related packages.
 - Trajectory analysis assumes specific input conventions for extracted frame data.
-- The helper script [create_geometry_zip.pl](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/create_geometry_zip.pl) remains part of the direct MD-output path.
+- Direct MD-output analysis produces plots and a CSV table. Structure-frame analysis
+  uses a separately uploaded trajectory ZIP.
 
 ## Code Touchpoints
 
@@ -76,9 +76,6 @@ This view expects a zipped trajectory directory and a timestep value. Once loade
   [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 - MD logic:
   [src/hps/domain/md_analysis.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/md_analysis.py)
-- Helper script:
-  [create_geometry_zip.pl](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/create_geometry_zip.pl)
-
 ## Last Verified
 
-- Date: 2026-03-19
+- Date: 2026-08-07

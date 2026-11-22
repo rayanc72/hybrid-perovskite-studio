@@ -11,8 +11,13 @@ combination of material, simulation code, or optional dependency has been valida
 - Backend jobs run in the local Python process. They improve rerun behavior and artifact
   reuse, but are not a distributed queue and do not survive deletion of the local HPS
   runtime directory.
-- Uploaded scientific data stays local unless the user explicitly exports or shares it.
-  Job metadata excludes base64-encoded upload contents.
+- Scientific processing uses the machine hosting HPS. Backend jobs may retain inputs
+  and derived artifacts in local runtime storage. Job metadata excludes base64-encoded
+  upload contents. Browser-hosted tools and online resources have separate network
+  and filesystem behavior; JupyterLite cannot access other workspace uploads.
+- A cold backend start can exceed the five-second readiness window. Wait and refresh;
+  see [Troubleshooting](../user-guide/troubleshooting.md#backend-not-ready-on-first-launch)
+  if the warning persists.
 
 ## Scientific scope
 
@@ -29,12 +34,14 @@ combination of material, simulation code, or optional dependency has been valida
 - PDF workflows based on `diffpy` are an optional installation because compatible
   binary dependencies vary by platform.
 - Some visualization and authentication features require the `viz` or `auth` optional
-  dependency groups. Install `hybrid-perovskite-studio[full]` for the supported complete
-  application stack.
+  dependency groups. The `[full]` extra supplies those groups but excludes DiffPy PDF
+  dependencies; use the version-specific [installation guide](../user-guide/getting-started.md).
 
-## Modernization status
+## Input conventions
 
-The backend-facing core, service, API, examples, and Structure workspace layers are
-covered by the strengthened release lint gate. Older Electronic, Dynamics, Utilities,
-and domain visualization modules remain functional and tested, but retain formatting
-and session-state debt. Remaining modernization work is not treated as completed release work.
+The backend trajectory inventory accepts more formats than the interactive
+MDAnalysis path, which expects `geometry*.in`. See [input formats](input-formats.md)
+for filenames, timing, units, and archive limits. The current MDAnalysis builder
+loads frames after the first into its trajectory, so interactive analyses can have
+one fewer frame than the backend summary. Verify the effective frame count and
+time origin before interpreting time-dependent results.

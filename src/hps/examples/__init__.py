@@ -64,12 +64,60 @@ def build_example_bundle(project_id: str) -> bytes:
     archive = BytesIO()
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as handle:
         handle.writestr("project.json", json.dumps(manifest, indent=2, sort_keys=True))
+        handle.writestr("README.md", _render_bundle_readme(manifest))
+        if project_id == "dynamics":
+            frames = BytesIO()
+            with zipfile.ZipFile(frames, "w", zipfile.ZIP_DEFLATED) as frame_archive:
+                for file_set in manifest["file_sets"]:
+                    if file_set["role"] == "trajectory_frames":
+                        for path in _expand_file_set(file_set):
+                            frame_archive.write(path, f"frames/{path.name}")
+            handle.writestr("trajectory-frames.zip", frames.getvalue())
         for shared_name in ("PROVENANCE.md", "expected_results.json"):
             handle.write(EXAMPLES_ROOT / "data" / shared_name, shared_name)
         for file_set in manifest["file_sets"]:
             for path in _expand_file_set(file_set):
                 handle.write(path, path.relative_to(EXAMPLES_ROOT).as_posix())
     return archive.getvalue()
+
+
+def _render_bundle_readme(manifest: dict[str, object]) -> str:
+    """Render human-readable instructions from the same guide used by project.json."""
+
+    lines = [
+        f"# {manifest['title']}",
+        "",
+        str(manifest["description"]),
+        "",
+        "Application baseline: GitHub v0.3.0. Extract this project ZIP first.",
+        "Install: https://rayanc72.github.io/hybrid-perovskite-studio/user-guide/getting-started/",
+        "",
+        "## Workflow",
+        "",
+    ]
+    for index, step in enumerate(manifest["guide"], start=1):
+        route = " → ".join(
+            str(step[key]) for key in ("workspace", "view", "group", "tool") if step.get(key)
+        )
+        lines.append(f"{index}. **{route}**: {step['action']}")
+    tutorial = {"structure": "structure", "electronic": "bands", "dynamics": "dynamics"}[
+        str(manifest["id"])
+    ]
+    lines.extend(
+        [
+            "",
+            "Complete tutorial with interpretation and limitations:",
+            f"https://rayanc72.github.io/hybrid-perovskite-studio/tutorials/{tutorial}/",
+            "",
+            "## Reference and attribution",
+            "",
+            "Compare results with expected_results.json. Read PROVENANCE.md for source",
+            "citations, sampling details, and checksums. Cite the underlying data separately",
+            "from the HPS software. Geometric bonded groups are not chemical identities.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _load_manifest(path: Path) -> dict[str, object]:

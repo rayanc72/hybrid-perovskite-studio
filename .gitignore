@@ -27,3 +27,6 @@ pdfanalysis_temp/
 src/hps/pdfanalysis_temp/
 
 *.log
+
+# Generated documentation example downloads
+docs/downloads/

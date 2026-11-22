@@ -1,102 +1,60 @@
-# Releasing To The Public Repo
+# Public releases
 
-This repository now has two Git remotes:
+This procedure applies to a fresh clone of the public repository. Its maintained
+branch is `main`; no private remote or internal tracking branch is required.
 
-- `origin`: the private internal repository
-- `public`: the public release repository
+## Prepare a candidate
 
-The local branches are set up to match that split:
+1. Start from current public `main` and review the exact diff to be published.
+   Bring selected changes forward without merging obsolete or private history.
+2. Set the application version in `src/hps/__init__.py` when making an application
+   release, and update the changelog and dependency metadata as needed.
+3. Align workspace guides, tutorials, example manifests, expected results, README,
+   and the documentation's version labels.
+4. Review the changed files and built distributions for private data, local filesystem
+   paths, credentials, caches, and generated research artifacts.
+5. Run the [release acceptance checklist](docs/reference/release-acceptance.md) and
+   complete the application smoke checks. Record the candidate SHA and results.
 
-- `main`: internal development branch tracked against `origin/main`
-- `public-main`: local tracking branch for `public/main`
-
-## Recommended workflow
-
-1. Do day-to-day development in the private repo on `main` and short-lived feature branches.
-2. Keep commits small and self-contained so public releases can cherry-pick only the work that is ready.
-3. Keep internal release notes in `docs/changelog.md`, especially under `## Unreleased`.
-4. When a set of commits is ready for public release, run `scripts/release_public.sh` from `main`.
-5. Review and test the generated release branch before pushing or merging it to the public repo.
-
-## Choosing commits for a public release
-
-List the candidate commits from private `main`:
+From the cloned repository on macOS/Linux:
 
 ```bash
-git log --oneline public-main..main
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[full,dev,docs]"
+PYTHON=.venv/bin/python scripts/check_release.sh
 ```
 
-That range shows commits that exist privately but are not yet on the public branch. Pick only the commits that are ready to ship.
+Windows environment setup is described in [Contributing](CONTRIBUTING.md). The gate
+runs correctness lint, the full test suite, example-download generation, a strict docs
+build, and source/wheel builds. CI must pass on the exact public candidate commit.
 
-## Scripted release flow
+## Publish an application release
 
-Create a public release branch and cherry-pick the approved commits:
+1. Merge the verified change into public `main` and wait for its CI result.
+2. Create an annotated version tag on that tested commit, push the tag, and publish
+   a GitHub release with artifacts built from that tag.
+3. State installation instructions, new behavior, known limitations, and validation
+   evidence in the release notes. Check the resulting source archive and assets.
+4. Install the published artifact in a clean environment and verify the version,
+   launch, and representative workflows.
+5. Delete temporary release branches after merging; retain `main` and release tags.
 
-```bash
-scripts/release_public.sh \
-  --commits <sha1,sha2,...> \
-  --release-branch release/public-v0.4.0
-```
+Treat published tags and release assets as immutable. Documentation-only maintenance
+can be published on `main` without retagging the application or replacing its wheels.
+Improved example downloads can likewise follow `main`; identify that distinction in
+the docs when tagged packages still create an older bundle layout.
 
-Push the release branch to the public remote after local review:
+## Documentation publication
 
-```bash
-git push -u public release/public-v0.4.0
-```
+The documentation workflow builds MkDocs and deploys an artifact to GitHub Pages
+from `main`. No `gh-pages` branch is needed. The canonical site is
+<https://rayanc72.github.io/hybrid-perovskite-studio/>. Verify its home page, tutorials,
+images, and example downloads after a deployment.
 
-Or let the script push and tag for you:
+## PyPI is a separate publication
 
-```bash
-scripts/release_public.sh \
-  --commits <sha1,sha2,...> \
-  --release-branch release/public-v0.4.0 \
-  --tag v0.4.0 \
-  --push
-```
-
-## What the script checks
-
-- the modern package layers pass Ruff correctness checks
-- the full test suite passes with a headless plotting backend
-- the documentation builds in strict mode
-- source and wheel distributions build successfully
-- the working tree is clean
-- you are running from `main`
-- `public` exists
-- `main` and `public-main` exist locally
-- each selected commit exists and is reachable from private `main`
-- the release branch does not already exist locally or on the public remote
-
-## After the script runs
-
-1. Review the release branch diff against `public-main`.
-2. Run the tests and any manual checks you want for the public release.
-3. Update `docs/changelog.md` if you want the public release branch to carry a dated release section.
-4. Push the release branch to `public`.
-5. Open a PR against the public repository or merge directly if that is your preferred release process.
-
-## Useful commands
-
-Show private-only commits:
-
-```bash
-git log --oneline public-main..main
-```
-
-Inspect what the release branch changed:
-
-```bash
-git diff public-main...HEAD
-```
-
-See which remote each branch tracks:
-
-```bash
-git branch -vv
-```
-
-## Notes
-
-- The script uses `git cherry-pick -x` so the public commit message keeps a reference to the original private commit.
-- If a cherry-pick conflicts, Git will stop and let you resolve it manually. After that, continue with `git cherry-pick --continue`.
-- If you decide to abandon the release branch, switch away from it and delete it with `git branch -D <release-branch>`.
+A GitHub release or documentation deployment does not publish to PyPI. Publish there
+only as an explicitly selected release step, after reviewing the distribution and
+package credentials. Until then, state the two versions clearly: GitHub **0.3.0**,
+PyPI **0.2.1**. Do not imply that a GitHub-only update changes `pip install` results.

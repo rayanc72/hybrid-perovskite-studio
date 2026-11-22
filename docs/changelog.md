@@ -1,5 +1,13 @@
 # Changelog
 
+## Documentation maintenance — 2026-11-22
+
+- Publish the documentation through GitHub Pages from `main`, replacing the unavailable Read the Docs address.
+- Add installation/version guidance, troubleshooting, input conventions, and complete Structure, band/Excel, and trajectory tutorials.
+- Reorganize user and developer documentation; correct bonded-group terminology and export summaries.
+- Update packaged example navigation and add generated README instructions plus a ready-to-upload trajectory ZIP.
+- Add example-route checks and weekly external-link checks. Existing application tags, release assets, and PyPI publications are unchanged.
+
 ## 0.3.0 - 2026-11-22
 
 This release is available on GitHub. PyPI remains at 0.2.1.

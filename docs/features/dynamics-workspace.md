@@ -32,6 +32,10 @@ This view expects a zipped trajectory directory and a timestep value. Once loade
 - Pair Distribution Function
 - Anisotropic Displacement Parameter
 
+Start with the [trajectory tutorial](../tutorials/dynamics.md). Read the
+[archive layout, timing conventions, and limits](../reference/input-formats.md#trajectory-archives)
+before preparing your own data.
+
 ## Typical Workflow
 
 1. Open the `Dynamics` workspace.
@@ -59,22 +63,18 @@ This view expects a zipped trajectory directory and a timestep value. Once loade
 - Data tables
 - CSV export
 - Average-structure export
+- Backend trajectory metrics CSV and first/last frame downloads
 
 ## Notes And Limitations
 
 - MD workflows depend on optional MDAnalysis-related packages.
-- Trajectory analysis assumes specific input conventions for extracted frame data.
+- Full interactive trajectory analysis expects zero-padded `geometry*.in` frames
+  with consistent atom count and order; other suffixes accepted by the backend inventory
+  are not supported by the downstream MDAnalysis builder.
 - Direct MD-output analysis produces plots and a CSV table. Structure-frame analysis
   uses a separately uploaded trajectory ZIP.
 
-## Code Touchpoints
-
-- Workspace UI:
-  [src/hps/ui/workspaces/dynamics.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/dynamics.py)
-- Navigation registry:
-  [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
-- MD logic:
-  [src/hps/domain/md_analysis.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/md_analysis.py)
 ## Last Verified
 
-- Date: 2026-08-07
+- Application baseline: [GitHub v0.3.0](https://github.com/rayanc72/hybrid-perovskite-studio/releases/tag/v0.3.0)
+- Documentation reviewed: 2026-11-22

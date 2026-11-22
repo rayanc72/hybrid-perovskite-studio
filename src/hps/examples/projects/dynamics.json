@@ -11,11 +11,29 @@
     }
   ],
   "file_sets": [
-    {"role": "trajectory_frames", "path": "data/md/frames", "pattern": "*.in", "count": 101, "sha256": "5ef83233c4380b120ab77c400d9feb6d3134616a87e19f83fefb1c9884cee129"}
+    {
+      "role": "trajectory_frames",
+      "path": "data/md/frames",
+      "pattern": "*.in",
+      "count": 101,
+      "sha256": "5ef83233c4380b120ab77c400d9feb6d3134616a87e19f83fefb1c9884cee129"
+    }
   ],
   "guide": [
-    {"workspace": "Dynamics", "view": "Trajectory analysis", "action": "Zip the data/md/frames directory if using the unpacked source tree, or upload the frames from this bundle as a ZIP."},
-    {"workspace": "Dynamics", "view": "Trajectory analysis", "action": "Set the timestep to 0.5 fs and confirm 101 frames over 0.05 ps."},
-    {"workspace": "Dynamics", "view": "Trajectory analysis", "action": "Download the generated metrics CSV plus first and last structure exports."}
+    {
+      "workspace": "Dynamics",
+      "view": "Trajectory analysis",
+      "action": "Extract this project bundle, then upload the included trajectory-frames.zip. Do not upload the outer project ZIP. If working from loose source frames, zip only data/md/frames."
+    },
+    {
+      "workspace": "Dynamics",
+      "view": "Trajectory analysis",
+      "action": "Set the timestep to 0.5 fs and confirm 101 frames over 0.05 ps."
+    },
+    {
+      "workspace": "Dynamics",
+      "view": "Trajectory analysis",
+      "action": "Download the generated metrics CSV plus first and last structure exports."
+    }
   ]
 }

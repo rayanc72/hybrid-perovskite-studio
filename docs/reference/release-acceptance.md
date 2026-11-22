@@ -19,13 +19,16 @@ The gate must pass all of the following:
 - import, syntax, statement-style, and correctness lint checks for maintained package layers;
 - undefined-name lint checks for the full test suite;
 - unit, API, scientific-regression, cache-performance, and Streamlit smoke tests;
-- a strict MkDocs build;
+- example-download generation and a strict MkDocs build;
 - isolated source-distribution and wheel builds.
 
 ## Manual application smoke check
 
 - [ ] Launch `hps` from the built wheel in a fresh environment.
-- [ ] Confirm no backend-readiness warning appears and `/health` reports the same version.
+- [ ] Confirm `/health` identifies `hps-backend` and reports the installed version.
+- [ ] Check cold startup: if the five-second readiness warning appears, confirm the
+      backend finishes starting and a refresh clears it. Persistent failure blocks
+      publication; record cold-start timing and the documented limitation.
 - [ ] Open Structure, Electronic, Dynamics, and Utilities from the start page.
 - [ ] Upload the maintained structure fixture and confirm formula and space group.
 - [ ] Load the PDOS, band, and spin fixtures and compare against the validation report.
@@ -39,7 +42,8 @@ The gate must pass all of the following:
 - [ ] Inspect wheel and source archive contents; no secrets, caches, or private data are present.
 - [ ] Confirm scientific fixture provenance and citations are visible in the documentation.
 - [ ] Check README installation commands from a fresh environment.
-- [ ] Verify the public documentation site and repository links.
+- [ ] Verify the public documentation site, tutorial routes, screenshots, and all example downloads.
+- [ ] Check packaged example guides against the UI and identify bundle-layout differences from tags.
 - [ ] Review the changelog, known limitations, license, citation, security, and contribution files.
 
 The maintained release limitations are documented in

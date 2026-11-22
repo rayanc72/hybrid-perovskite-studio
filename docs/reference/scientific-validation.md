@@ -22,9 +22,15 @@ reference values before the fixtures are treated as release-approved scientific 
 | --- | --- |
 | Formula | `C32H88I24N8Pb4` |
 | Atoms | 156 |
-| Detected molecular groups | 10 |
+| Detected bonded groups (finite molecules plus periodic networks) | 10 |
+| Finite molecules | 8 |
+| Periodic networks | 2 |
 | Space group | `Aea2` (No. 41) |
 | Lattice lengths represented by the orthogonal vectors | 28.5598, 9.03496, 8.8604 Å |
+
+The group total is a geometric connectivity result, not a count of ten isolated
+molecules. Finite groups and periodic networks are classified separately in the
+current interface; see [bonding conventions](input-formats.md#structures-and-bonded-groups).
 
 ### Electronic data
 

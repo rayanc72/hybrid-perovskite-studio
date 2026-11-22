@@ -63,6 +63,9 @@ The Electronic workspace focuses on plotting and inspecting electronic-structure
   - text size and background-grid visibility
   - export settings
 
+For a complete band workflow, follow the [bands and Excel tutorial](../tutorials/bands.md).
+See [input conventions](../reference/input-formats.md#electronic-data) for band, PDOS, and spin data.
+
 ## Outputs
 
 - Plotly plots
@@ -70,25 +73,14 @@ The Electronic workspace focuses on plotting and inspecting electronic-structure
 - Parsed data tables
 - Downloadable HTML plot exports
 - Downloadable preset JSON exports
+- Band Structure Studio PNG/PDF figures and momentum–energy `.xlsx` workbooks
+- Direct no-SOC band-file support and multi-dataset SOC/no-SOC comparisons
 
 ## Notes And Limitations
 
-- Several plotting flows still rely on legacy-style helper functions and domain wrappers.
 - The 3D spin-texture workflow currently restores saved plot parameters, but not a manually rotated in-browser camera angle.
-- The current navigation is registry-driven, but the underlying tool implementations are still mostly imperative.
-
-## Code Touchpoints
-
-- Workspace UI:
-  [src/hps/ui/workspaces/electronic.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/electronic.py)
-- Navigation registry:
-  [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
-- Electronic logic:
-  [src/hps/domain/electronic_property.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/electronic_property.py)
-- Tool helpers:
-  [src/hps/tools/plot_band.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/tools/plot_band.py)
-  [src/hps/tools/scan_cbm.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/tools/scan_cbm.py)
 
 ## Last Verified
 
-- Date: 2026-08-07
+- Application baseline: [GitHub v0.3.0](https://github.com/rayanc72/hybrid-perovskite-studio/releases/tag/v0.3.0)
+- Documentation reviewed: 2026-11-22

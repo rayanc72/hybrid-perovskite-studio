@@ -16,6 +16,8 @@
 - View: `Bands and Spin`
 - Tool: `Plot bandstructure`
 
+Start with the [bands and Excel tutorial](../tutorials/bands.md) for a complete example.
+
 ## Core Purpose
 
 - Plot one or more band structures.
@@ -69,7 +71,7 @@
 - Each summary card includes:
   - legend label
   - selected color
-  - number of detected `band*.out` files
+  - number of detected band files of the selected type (`.out` or `.out.no_soc`)
   - whether `geometry.in` was found
   - whether `control.in` was found
   - VBM state
@@ -267,15 +269,6 @@
 - Mixing both filename types in a single backend dataset is rejected; the UI selects one type
   before submitting the dataset.
 
-## Current Implementation Notes
-
-- Bandstructure plotting uses Matplotlib.
-- Brillouin-zone plotting uses Plotly.
-- The workspace UI lives in:
-  - [src/hps/ui/workspaces/electronic.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/electronic.py)
-- Domain and plotting helpers live in:
-  - [src/hps/domain/electronic_property.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/electronic_property.py)
-
 ## Typical Workflow
 
 - Open `Electronic`.
@@ -289,11 +282,15 @@
   - optionally edit advanced settings
   - generate the plot
   - export as `PNG` or `PDF`
-- Open `Brillouin Zone`:
+- Open `Excel export`:
+  - select datasets, VBM-relative state offsets, and segments
+  - download the momentum–energy `.xlsx` workbook
+- Open `Brillouin Zone` (requires `geometry.in`):
   - select a dataset
   - generate the plot
   - export as `PNG` or `PDF`
 
 ## Last Verified
 
-- Date: 2026-08-07
+- Application baseline: [GitHub v0.3.0](https://github.com/rayanc72/hybrid-perovskite-studio/releases/tag/v0.3.0)
+- Documentation reviewed: 2026-11-22

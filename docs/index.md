@@ -1,45 +1,46 @@
-# Hybrid Perovskite Studio Docs
+# Hybrid Perovskite Studio
 
-This documentation set is organized around the current workspace-based UI. The goal is to help someone understand the app quickly, then drill into the relevant workspace and tool family.
+Inspect crystal structures, transform finite molecular groups, visualize electronic
+outputs, and analyze trajectories in a local workspace-based application.
 
-## Start Here
+!!! note "Documentation version"
+    These guides describe the **GitHub v0.3.0 application**. Documentation and example
+    packaging fixes follow public `main`. **PyPI v0.2.1** has fewer features; install
+    the GitHub release to follow the v0.3.0 workflows.
 
-- [Getting Started](user-guide/getting-started.md)
-- [Guided Examples](user-guide/guided-examples.md)
-- [Screenshots](user-guide/navigation-and-workspaces.md#workspace-gallery)
-- [Feature Map](user-guide/navigation-and-workspaces.md#feature-map)
-- [Navigation and Workspaces](user-guide/navigation-and-workspaces.md)
-- [Architecture](architecture.md)
-- [Backend Modernization](reference/backend-modernization.md)
-- [Scientific Fixture Validation](reference/scientific-validation.md)
-- [Release Acceptance Checklist](reference/release-acceptance.md)
-- [Known Limitations](reference/known-limitations.md)
-- [Documentation Workflow](reference/documentation-workflow.md)
+## Start with a result
+
+1. [Install and launch HPS](user-guide/getting-started.md).
+2. [Download a guided example](user-guide/guided-examples.md).
+3. Complete a tutorial:
+    - [Inspect a structure, rotate a molecule, and export a CIF](tutorials/structure.md).
+    - [Plot bands and export momentum–energy data to Excel](tutorials/bands.md).
+    - [Validate a trajectory and download its metrics](tutorials/dynamics.md).
+
+![Structure workspace and current structure summary](images/screenshots/structure-workspace.png)
+
+The upload and **Current Structure** summary remain available above the Structure
+workspace's analysis and transformation controls.
+
+## Find a tool
+
+| Workspace | Typical tasks |
+| --- | --- |
+| [Structure](features/structure-workspace.md) | Inspect symmetry and bonded groups; rotate, translate, label, and export structures; simulate PXRD/PDF |
+| [Electronic](features/electronic-workspace.md) | Plot bands, PDOS, spin texture, polarization, and absorption |
+| [Band Structure Studio](features/band-structure-studio.md) | Compare SOC/no-SOC datasets, export Excel workbooks, and inspect reciprocal space |
+| [Dynamics](features/dynamics-workspace.md) | Parse AIMS MD outputs and analyze frame archives |
+| [Utilities](features/utilities-workspace.md) | Plot tables, transform columns, and use JupyterLite |
+
+See [navigation and screenshots](user-guide/navigation-and-workspaces.md) for the
+workspace map. For file requirements and interpretation, use the
+[input and scientific reference](reference/input-formats.md),
+[known limitations](reference/known-limitations.md), and
+[troubleshooting guide](user-guide/troubleshooting.md).
+
+## Scientific and project context
+
+- [Scientific fixture validation and data citations](reference/scientific-validation.md)
+- [About HPS](about.md)
 - [Changelog](changelog.md)
-
-## Workspace Guides
-
-- [Structure Workspace](features/structure-workspace.md)
-- [Electronic Workspace](features/electronic-workspace.md)
-- [Band Structure Studio](features/band-structure-studio.md)
-- [Dynamics Workspace](features/dynamics-workspace.md)
-- [Utilities Workspace](features/utilities-workspace.md)
-
-## What The Docs Cover
-
-The docs focus on:
-
-- how the current UI is organized
-- what each workspace does
-- the major tools available in each workspace
-- what inputs and outputs each workspace expects
-- where the active code lives
-- which workflows already use the local backend job/cache layer
-
-## Source Of Truth For Navigation
-
-The current workspace map and feature tree are defined in:
-
-- [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
-
-If the visible navigation changes, that file and the matching workspace doc should be updated together.
+- [Developer guide](developer/index.md)

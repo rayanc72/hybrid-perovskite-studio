@@ -1,134 +1,78 @@
 # Hybrid Perovskite Studio
 
-Hybrid perovskites are a highly tunable family of functional semiconductors with broad relevance across materials science,
-chemistry, and condensed-matter physics. Their hybrid organic-inorganic character makes them especially valuable for 
-studying structure-property relationships through systematic changes in composition, molecular orientation, and 
-lattice symmetry. At the same time, that same hybrid character makes them difficult to analyze with many conventional
-structural-chemistry workflows, since the organic and inorganic sublattices often need to be treated differently.
+Hybrid Perovskite Studio (HPS) is a local application for inspecting and transforming
+crystal structures, plotting electronic-structure outputs, and analyzing molecular
+dynamics trajectories. It focuses on hybrid perovskites and also supports other
+organic and inorganic materials.
 
-Hybrid Perovskite Studio (HPS) is a workspace-oriented environment, built on top of Streamlit, designed to support analysis and modelling of hybrid organic-inorganic materials. Although it focuses upon hybrid perovskites (following its development purpose), the tools are equally applicable to other materials classes, including typical organic or inorganic compositions.
-Its Structure Workspace focuses on tools for parsing, analyzing, and transforming crystal structures while explicitly distinguishing 
-between molecular and inorganic building blocks. Starting from experimental or simulated structures, users can inspect symmetry, molecular connectivity, bond lengths, bond angles, distortion metrics,
-anisotropic displacement information, pair distribution functions, and polarization-related quantities. 
-The same workspace also supports structure editing and modelling operations, including molecule-specific rotations, reflections, translations, deletions, and interpolation-based transformations.
+- **Structure:** symmetry, bonded-group inspection, molecular transformations, CIF/AIMS exports, PXRD, and optional PDF analysis.
+- **Electronic:** FHI-aims bands with SOC/no-SOC comparison, Excel band-data exports, PDOS, spin texture, polarization, and absorption plots.
+- **Dynamics:** AIMS MD output parsing, trajectory summaries, and structural analyses.
+- **Utilities:** general plotting, mathematical column transformations, and a browser-based Python workspace.
 
-Beyond structure chemistry, HPS also provides tools for analyzing computational outputs. The Electronic Workspace is currently tailored especially to FHI-aims-style inputs and outputs, and includes functionality for plotting band structures, spin textures, densities of states, polarization-related quantities, absorption spectra, and Brillouin-zone map. The Dynamics Workspace extends the analysis to time-dependent simulation data, with tools for extracting trajectory-based structural metrics and monitoring how distortions and related descriptors evolve over time. A Utilities Workspace collects supporting tools for plotting and lightweight custom scripting.
+[Documentation](https://rayanc72.github.io/hybrid-perovskite-studio/) ·
+[Getting started](docs/user-guide/getting-started.md) ·
+[Tutorials and example downloads](https://rayanc72.github.io/hybrid-perovskite-studio/user-guide/guided-examples/) ·
+[Scientific scope](docs/reference/known-limitations.md)
 
-HPS is an active research software project and is still evolving. 
-It grew out of a longer collection of notebook-based and script-based workflows developed for hybrid-perovskite research, 
-and is gradually being consolidated into a more structured, reusable application. While the codebase is already useful for day-to-day analysis, some workflows remain under active refinement and 
-edge cases may still appear. The broader goal is to continue expanding HPS into a flexible and maintainable platform for 
-hybrid perovskite modelling, analysis, and visualization.
+![Structure workspace with the current structure summary and analysis controls](docs/images/screenshots/structure-workspace.png)
 
-## Install
+## Install and launch
 
-The current GitHub release is **0.3.0**. PyPI remains at **0.2.1**.
-To install 0.3.0 with the functional application stack from GitHub (requires Git):
+**Python 3.11 or newer and Git are required.** Python 3.11 is used by the release checks.
+The current GitHub application release is **v0.3.0**; PyPI provides **v0.2.1**.
+These instructions install the GitHub release with the application dependencies.
 
-```bash
-pip install "hybrid-perovskite-studio[full] @ git+https://github.com/rayanc72/hybrid-perovskite-studio.git@v0.3.0"
-hps
-```
-
-To install the published PyPI version:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install hybrid-perovskite-studio
-hps
-```
-
-The base package provides the launcher and dependency guidance. To install the functional application stack directly:
-
-```bash
-pip install "hybrid-perovskite-studio[full]"
-```
-
-## Run
-
-```bash
-hps
-```
-
-For local development:
+On macOS or Linux:
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[full,dev,docs]"
+python -m pip install --upgrade pip
+python -m pip install "hybrid-perovskite-studio[full] @ git+https://github.com/rayanc72/hybrid-perovskite-studio.git@v0.3.0"
 hps
 ```
 
-To run the local backend service directly:
+On Windows PowerShell, create the environment with `py -3.11 -m venv .venv`, activate
+it with `.venv\Scripts\Activate.ps1`, then run the same installation and `hps` commands.
+See [Getting started](docs/user-guide/getting-started.md) for activation alternatives,
+optional DiffPy PDF dependencies, version checks, and the older PyPI installation.
+
+## Get a first result
+
+1. Download the [Structure example](https://rayanc72.github.io/hybrid-perovskite-studio/downloads/hps-example-structure.zip) and extract it.
+2. Launch `hps`, open **Structure**, and upload `data/structure/MC3I_PbI_100K.in`.
+3. Check **Current Structure**: 156 atoms and formula `C32H88I24N8Pb4`.
+4. Follow the [structure inspection and rotation tutorial](docs/tutorials/structure.md) to inspect bonded groups and export a transformed CIF.
+
+Additional walkthroughs cover [bands and Excel exports](docs/tutorials/bands.md) and
+[trajectory analysis](docs/tutorials/dynamics.md). Each downloadable bundle includes
+readable instructions, expected results, provenance, and checksum-validated inputs.
+The `hps-examples` command can also build bundles locally; see the
+[version notes](docs/user-guide/guided-examples.md#bundle-versions).
+
+## Help and contributions
+
+- [Troubleshooting](docs/user-guide/troubleshooting.md)
+- [Workspace guides and screenshots](docs/user-guide/navigation-and-workspaces.md)
+- [Input formats and scientific conventions](docs/reference/input-formats.md)
+- [Contributing and development setup](CONTRIBUTING.md)
+- [Public release procedure](RELEASING.md)
+- [Report a bug](https://github.com/rayanc72/hybrid-perovskite-studio/issues)
+
+HPS is research software; check assumptions and numerical results before publication.
+See [validation and data attribution](docs/reference/scientific-validation.md),
+[CITATION.cff](CITATION.cff), and the [Apache-2.0 license](LICENSE).
+
+## Build the documentation
+
+From a source checkout:
 
 ```bash
-source .venv/bin/activate
-hps-backend --host 127.0.0.1 --port 8765
+python -m pip install -r requirements-docs.txt
+python scripts/build_doc_examples.py
+python -m mkdocs serve
 ```
 
-To run the current backend-focused regression suite:
-
-```bash
-source .venv/bin/activate
-python -m pytest tests/test_backend_store.py tests/test_backend_api.py tests/test_backend_phase3_workflows.py tests/test_core_workflows.py -q
-```
-
-## Guided Examples
-
-Published, provenance-aware example projects are included in the package:
-
-```bash
-hps-examples list
-hps-examples build structure
-hps-examples build electronic
-hps-examples build dynamics
-```
-
-Each generated ZIP includes a guided workflow, source citation, expected numerical
-results, provenance notes, and checksum-validated inputs.
-
-## Docs
-
-- [Getting Started](docs/user-guide/getting-started.md)
-- [Feature Map](docs/user-guide/navigation-and-workspaces.md#feature-map)
-- [Workspace Guides](docs/index.md)
-- [Backend Modernization](docs/reference/backend-modernization.md)
-- [Guided Examples](docs/user-guide/guided-examples.md)
-
-To preview the documentation locally:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-docs.txt
-mkdocs serve
-```
-
-To build the static docs site locally:
-
-```bash
-mkdocs build
-```
-
-## Gallery
-
-![Landing Page](docs/images/screenshots/landing-page.png)
-
-![Structure Workspace](docs/images/screenshots/structure-workspace.png)
-
-![Band Structure Studio](docs/images/screenshots/band-structure-studio.png)
-
-![Dynamics Workspace](docs/images/screenshots/dynamics-workspace.png)
-
-![Feature Map](docs/images/screenshots/feature-map.png)
-
-## Notes
-
-- PyPI/package entrypoint: `hps`
-- Local backend entrypoint: `hps-backend`
-- Main entrypoint: `streamlit run src/hps/app.py`
-- Runtime files belong under `tmp/` and `output/`
-- Navigation is defined in `src/hps/ui/navigation.py`
-- The Streamlit app now attempts to auto-start a local backend service for cached/background workflows
-- Backend-migrated workflows include structure context, symmetry sweep, PXRD/PDF simulation, PDOS/band/spin preprocessing, MD output parsing, and trajectory archive validation
+Use `python -m mkdocs build --strict` for a static build. GitHub Actions builds and
+publishes the documentation from `main` to GitHub Pages; no additional branch is used.

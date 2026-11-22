@@ -1,46 +1,62 @@
 # Guided examples
 
-HPS ships three self-contained examples built from the public scientific regression
-data. Each project records its citation, license, intended workflow, file roles, counts,
-and aggregate SHA-256 checksums.
+Three examples use redistributable scientific regression data. Each includes a
+citation, input roles, file counts, aggregate SHA-256 checksums, and expected results.
 
-## Build a project bundle
+## Download a ready-to-use bundle
 
-List the installed projects:
+| Example | Download | Walkthrough |
+| --- | --- | --- |
+| Structure | [Structure ZIP](../downloads/hps-example-structure.zip) | [Inspect, rotate, and export a CIF](../tutorials/structure.md) |
+| Electronic | [Electronic ZIP](../downloads/hps-example-electronic.zip) | [Plot bands and export Excel data](../tutorials/bands.md) |
+| Dynamics | [Dynamics ZIP](../downloads/hps-example-dynamics.zip) | [Validate and inspect a trajectory](../tutorials/dynamics.md) |
+
+Extract the bundle before uploading individual inputs. For Dynamics, upload the
+included **`trajectory-frames.zip`**, without extracting that inner archive.
+
+Every current documentation download contains:
+
+- `README.md`: numbered instructions and links to the complete tutorial;
+- `project.json`: the machine-readable guide and provenance manifest;
+- `PROVENANCE.md`: publication citations and source checksums;
+- `expected_results.json`: numerical regression references;
+- checksum-validated input files under `data/`.
+
+The Dynamics bundle also includes a ready-to-upload `trajectory-frames.zip` containing
+only frame files. Do not upload the outer project ZIP: it contains duplicate frame
+representations and documentation rather than a single trajectory.
+
+## Build locally
 
 ```bash
 hps-examples list
-```
-
-Build one or more ZIP bundles:
-
-```bash
 hps-examples build structure
 hps-examples build electronic
 hps-examples build dynamics
 ```
 
-Use `--output PATH` to choose the resulting filename. Every bundle contains:
+Use `--output PATH` to choose the resulting filename.
 
-- `project.json`, the machine-readable guide and provenance manifest;
-- `PROVENANCE.md`, including the complete publication citations and source checksums;
-- `expected_results.json`, containing the release regression references;
-- the checksum-validated input files under `data/`.
+### Bundle versions
 
-## Structure example
+The commands use the **installed package**. The immutable v0.3.0 package creates the
+original bundles with JSON instructions, provenance, references, and input files.
+It does not add `README.md` or the inner trajectory ZIP. Use the documentation
+**downloads above** for those additions, or build from current public `main`.
+For an original Dynamics bundle, zip only `data/md/frames` before uploading it.
 
-Open the Structure workspace and upload `MC3I_PbI_100K.in`. The overview should report
-156 atoms and formula `C32H88I24N8Pb4`; the symmetry reference is `Aea2` (No. 41).
+The documented application steps apply to v0.3.0. Example packaging improvements do
+not change the scientific input data, its checksums, or the existing release assets.
 
-## Electronic example
+## Expected results and interpretation
 
-The Electronic bundle contains three band segments, six PDOS files, and the compact
-spin-texture dataset. Follow the `guide` entries in `project.json` for upload grouping
-and compare the parsed results with `expected_results.json`.
+- **Structure:** 156 atoms, `C32H88I24N8Pb4`, space group `Aea2` (No. 41).
+- **Electronic:** three compact band segments with six retained states; per-segment
+  gaps are recorded in `expected_results.json`. The compact PDOS and spin data are
+  sampled fixtures, not the full original datasets.
+- **Dynamics:** 101 frames, 62 atoms per frame, 0.5 fs spacing, and 0.05 ps duration.
+  This short slice supports workflow checks, not long-time statistical conclusions.
 
-## Dynamics example
-
-The Dynamics bundle contains the centered 101-frame trajectory slice. Zip the
-`data/md/frames` directory, open Dynamics → Trajectory analysis, set the timestep to
-0.5 fs, and upload it. HPS should report a 0.05 ps duration and provide metrics CSV plus
-first/last structure downloads.
+See [Scientific fixture validation](../reference/scientific-validation.md) for original
+versus compact dataset values and [About HPS](../about.md#citation-and-data-attribution)
+for citation guidance.

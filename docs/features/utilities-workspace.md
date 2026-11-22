@@ -31,6 +31,9 @@ Capabilities in the current implementation include:
 - transform datasets with math expressions
 - generate custom visualizations
 
+See [table parsing and expression examples](../reference/input-formats.md#general-tables-and-math-expressions)
+for safe column names, supported functions, and units.
+
 ## Typical Workflow
 
 1. Open the `Utilities` workspace.
@@ -49,20 +52,14 @@ Capabilities in the current implementation include:
 
 - transformed datasets
 - plots
-- downloadable exports where supported
+- PNG and PDF plot downloads
+- reusable plot configuration JSON
 
 ## Notes And Limitations
 
 - Utility workflows are broader and less constrained than the domain-specific workspaces.
-- Utility workflows are implemented in a focused workspace module and coordinated by the main app.
-
-## Code Touchpoints
-
-- Workspace UI:
-  [src/hps/ui/workspaces/utilities.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/utilities.py)
-- Navigation registry:
-  [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
 
 ## Last Verified
 
-- Date: 2026-08-07
+- Application baseline: [GitHub v0.3.0](https://github.com/rayanc72/hybrid-perovskite-studio/releases/tag/v0.3.0)
+- Documentation reviewed: 2026-11-22

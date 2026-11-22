@@ -1,53 +1,111 @@
-# Getting Started
+# Getting started
 
-## Overview
+## Choose the matching version
 
-Hybrid Perovskite Studio is a Streamlit app for hybrid perovskite structure analysis, structure transformation, electronic-output visualization, molecular-dynamics workflows, and utility-style plotting or scripting tools.
+| Source | Application version | Use these guides for |
+| --- | --- | --- |
+| GitHub tag `v0.3.0` | 0.3.0 | Current application workflows, including CIF and Excel exports and no-SOC bands |
+| Public GitHub `main` | 0.3.0 plus subsequent source changes | Current documentation and improved example packaging |
+| PyPI | 0.2.1 | Older application; some controls in these guides are unavailable |
 
-## Install and run the app
+For the application described here, install the **GitHub tag**. Documentation changes
+do not move existing release tags or replace published packages.
 
-Version 0.3.0 is available on GitHub; PyPI currently provides 0.2.1.
-Install this release from its GitHub tag (requires Git):
+## Prerequisites
+
+- Python **3.11 or newer**; Python 3.11 is the release-check baseline.
+- Git for the GitHub installation command.
+- A writable Python virtual environment and a browser.
+
+Check `python3.11 --version` and `git --version` on macOS/Linux, or
+`py -3.11 --version` and `git --version` on Windows. A newer compatible Python can
+replace 3.11, although optional scientific binaries may have narrower support.
+
+## Install and run
+
+### macOS and Linux
 
 ```bash
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
-pip install "hybrid-perovskite-studio[full] @ git+https://github.com/rayanc72/hybrid-perovskite-studio.git@v0.3.0"
+python -m pip install --upgrade pip
+python -m pip install "hybrid-perovskite-studio[full] @ git+https://github.com/rayanc72/hybrid-perovskite-studio.git@v0.3.0"
 hps
 ```
 
-## Local development
+### Windows PowerShell
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[full]"
-streamlit run src/hps/app.py
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install "hybrid-perovskite-studio[full] @ git+https://github.com/rayanc72/hybrid-perovskite-studio.git@v0.3.0"
+hps
 ```
 
-## First-Time Workflow
+If PowerShell blocks activation, use Command Prompt with
+`.venv\Scripts\activate.bat`, or run `.venv\Scripts\python.exe -m pip` and
+`.venv\Scripts\hps.exe` directly. Activation is a convenience, not a requirement.
 
-1. Start the app.
-2. On the landing page, choose a workspace from the four options below the hero.
-3. If you are working with structures, open `Structure`.
-4. Use the upload box at the top of the Structure workspace to load a file in `.in`, `.cif`, or `.next_step` format.
-5. Use the `Current Structure` summary to inspect the loaded structure and export geometry files.
-6. Choose `Analysis` or `Transformations` as needed. The upload box and summary remain above the view controls.
+Open the local URL printed in the terminal, usually `http://localhost:8501`.
+Keep the terminal running; stop the application with **Ctrl+C**. On subsequent runs,
+activate the same environment and run `hps`.
 
-## Workspaces
+Verify the installed version in a second terminal using that environment:
 
-- `Structure`: upload, inspect, analyze, transform, and export structures
-- `Electronic`: plot polarization, DOS, bandstructure, spin texture, and absorption outputs
-- `Dynamics`: process MD outputs and perform trajectory analysis
-- `Utilities`: open JupyterLite or use generic plotting/data helpers
+```bash
+python -c "import hps; print(hps.__version__)"
+python -m pip show hybrid-perovskite-studio
+```
 
-## Navigation Notes
+The tagged installation should report `0.3.0`. If the first launch briefly reports
+that the backend is not ready, allow startup to finish and refresh. See
+[Troubleshooting](troubleshooting.md#backend-not-ready-on-first-launch) if it persists.
 
-- The app starts on a minimal landing page instead of opening directly into a workflow.
-- The `Explore every tool` link opens the full registry-driven feature map.
-- The visible workspace selectors and feature map are generated from a shared registry in [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py).
+## Optional pair distribution function dependencies
 
-## Runtime notes
+The `[full]` extra supplies the application stack but **does not include DiffPy PDF
+simulation dependencies**. To add them to the same tagged installation:
 
-- Local secrets belong in `.streamlit/secrets.toml`.
-- Runtime-generated artifacts should live under `tmp/` or `output/`.
+```bash
+python -m pip install "hybrid-perovskite-studio[full,pdf] @ git+https://github.com/rayanc72/hybrid-perovskite-studio.git@v0.3.0"
+```
+
+`diffpy.pdffit2` and `diffpy.structure` availability depends on the operating system,
+Python version, and binary build requirements. Other workspaces can be used without
+these dependencies. See [Known limitations](../reference/known-limitations.md).
+
+## If you need the older PyPI release
+
+In a separate virtual environment, install:
+
+```bash
+python -m pip install "hybrid-perovskite-studio[full]==0.2.1"
+hps
+```
+
+Installing only the base package provides the launcher and dependency guidance;
+`[full]` adds the application dependencies. This does not upgrade PyPI to v0.3.0.
+
+## First-time workflow
+
+1. Download and extract the [Structure example](../downloads/hps-example-structure.zip).
+2. Open **Structure** from the start page.
+3. Upload `data/structure/MC3I_PbI_100K.in` using the upload box at the top.
+4. Inspect **Current Structure**: 156 atoms and formula `C32H88I24N8Pb4`.
+5. Follow the [structure tutorial](../tutorials/structure.md), or choose another
+   [guided example](guided-examples.md).
+
+The four workspaces are **Structure**, **Electronic**, **Dynamics**, and **Utilities**.
+Return using **Start Page**; **Explore every tool** opens the feature map.
+
+## Local runtime and data
+
+The standard launch uses a local Streamlit server and a backend at
+`http://127.0.0.1:8765`. Scientific processing runs on the machine hosting HPS;
+backend jobs may retain inputs or derived artifacts in its runtime directories.
+Browser-hosted JupyterLite has a separate filesystem and does not see files uploaded
+elsewhere in HPS. Online documentation, browser tools, and package installation
+require their respective network access. See [runtime limitations](../reference/known-limitations.md#runtime-model).
+
+For source development, use the [developer setup](../developer/index.md).

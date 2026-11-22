@@ -34,6 +34,8 @@ jobs:
         run: ruff check tests --select F
       - name: Run tests
         run: python -m pytest -q
+      - name: Generate documentation example downloads
+        run: python scripts/build_doc_examples.py
       - name: Build documentation
         run: python -m mkdocs build --strict
       - name: Build distribution artifacts

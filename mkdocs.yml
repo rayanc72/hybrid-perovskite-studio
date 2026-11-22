@@ -1,6 +1,6 @@
 site_name: Hybrid Perovskite Studio
-site_description: Documentation for the Hybrid Perovskite Studio project.
-site_url: https://hybrid-perovskite-studio.readthedocs.io/
+site_description: Install HPS and follow scientific workflows for structures, electronic outputs, and trajectories.
+site_url: https://rayanc72.github.io/hybrid-perovskite-studio/
 repo_url: https://github.com/rayanc72/hybrid-perovskite-studio
 repo_name: rayanc72/hybrid-perovskite-studio
 docs_dir: docs
@@ -14,23 +14,36 @@ theme:
 markdown_extensions:
   - admonition
   - tables
+validation:
+  links:
+    anchors: warn
 nav:
   - Home: index.md
-  - User Guide:
-      - Getting Started: user-guide/getting-started.md
-      - Navigation and Workspaces: user-guide/navigation-and-workspaces.md
-      - Guided Examples: user-guide/guided-examples.md
-  - Features:
-      - Structure Workspace: features/structure-workspace.md
-      - Electronic Workspace: features/electronic-workspace.md
+  - Get started:
+      - Installation and first result: user-guide/getting-started.md
+      - Examples and downloads: user-guide/guided-examples.md
+      - Navigation and screenshots: user-guide/navigation-and-workspaces.md
+  - Tutorials:
+      - Structure inspection and CIF export: tutorials/structure.md
+      - Bands and Excel exports: tutorials/bands.md
+      - Trajectory metrics: tutorials/dynamics.md
+  - Workspace guides:
+      - Structure: features/structure-workspace.md
+      - Electronic: features/electronic-workspace.md
       - Band Structure Studio: features/band-structure-studio.md
-      - Dynamics Workspace: features/dynamics-workspace.md
-      - Utilities Workspace: features/utilities-workspace.md
-  - Reference:
+      - Dynamics: features/dynamics-workspace.md
+      - Utilities: features/utilities-workspace.md
+  - Scientific reference:
+      - Input formats and conventions: reference/input-formats.md
+      - Scientific fixture validation: reference/scientific-validation.md
+      - Known limitations: reference/known-limitations.md
+  - Troubleshooting: user-guide/troubleshooting.md
+  - About and citation: about.md
+  - Changelog: changelog.md
+  - Developer guide:
+      - Setup and documentation builds: developer/index.md
       - Architecture: architecture.md
-      - Backend Modernization: reference/backend-modernization.md
-      - Scientific Fixture Validation: reference/scientific-validation.md
-      - Release Acceptance: reference/release-acceptance.md
-      - Known Limitations: reference/known-limitations.md
-      - Documentation Workflow: reference/documentation-workflow.md
-      - Changelog: changelog.md
+      - Backend modernization: reference/backend-modernization.md
+      - Implementation map: developer/implementation-map.md
+      - Release acceptance: reference/release-acceptance.md
+      - Documentation workflow: reference/documentation-workflow.md

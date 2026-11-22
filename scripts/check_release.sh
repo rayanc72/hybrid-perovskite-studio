@@ -15,6 +15,7 @@ export MPLBACKEND="${MPLBACKEND:-Agg}"
   --select E4,E7,E9,F,I
 "${PYTHON_BIN}" -m ruff check tests --select F
 "${PYTHON_BIN}" -m pytest -q
+"${PYTHON_BIN}" scripts/build_doc_examples.py
 "${PYTHON_BIN}" -m mkdocs build --strict --site-dir tmp/release-site
 "${PYTHON_BIN}" -m build
 

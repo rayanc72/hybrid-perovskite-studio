@@ -45,7 +45,7 @@ When a structure is loaded, the workspace shows a persistent summary directly be
 - file name
 - detected format
 - atom count
-- molecule-group count
+- bonded-group count (finite molecules and periodic networks)
 - download button for the current AIMS geometry
 - download button for the labelled structure
 - remove-current-structure action
@@ -191,49 +191,12 @@ labels are retained in CIF site names, with atom indices added to keep them uniq
   input structure unchanged. Rebuild graphs after changing coordinates or bonds.
   Classification depends on the configured geometric bond thresholds; it does
   not establish chemical identity or bond order.
-- Structure upload, active-state lifecycle, typed navigation, summary status, metadata, downloads, the initial viewer, analysis workflows, and transformation renderers are implemented under `src/hps/ui/workspaces/structure/`. [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py) coordinates those focused renderers.
 - PXRD broadening is currently specified in degrees of `2theta`, even when the displayed x-axis is `q`.
 - PDF analysis uses a short-lived temporary directory when converting the active structure for DiffPy and cleans it automatically after calculation.
 - The 3D viewer is opt-in and can be heavier than the basic export paths.
 - Custom molecule labelling preserves non-selected atom symbols as plain element labels in the exported `geometry.in`.
 
-## Code Touchpoints
-
-- UI and routing:
-  [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py)
-- Structure overview renderer:
-  [src/hps/ui/workspaces/structure/overview.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/overview.py)
-- Structure workspace state:
-  [src/hps/ui/workspaces/structure/state.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/state.py)
-- Structure workspace navigation:
-  [src/hps/ui/workspaces/structure/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/navigation.py)
-- Symmetry renderer:
-  [src/hps/ui/workspaces/structure/analysis/symmetry.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/symmetry.py)
-- PXRD renderer and plotting helpers:
-  [src/hps/ui/workspaces/structure/analysis/pxrd.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/pxrd.py)
-- PDF renderer and reduced-PDF parser:
-  [src/hps/ui/workspaces/structure/analysis/pdf.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/pdf.py)
-- Charge-analysis parsers:
-  [src/hps/ui/workspaces/structure/analysis/charge.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/charge.py)
-- Molecule-analysis renderer:
-  [src/hps/ui/workspaces/structure/analysis/molecules.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/molecules.py)
-- Structure metric renderers and lattice-deviation helpers:
-  [src/hps/ui/workspaces/structure/analysis/metrics.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/analysis/metrics.py)
-- Rotation workflows:
-  [src/hps/ui/workspaces/structure/transformations/rotation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/transformations/rotation.py)
-- Reflection, translation, deletion, labelling, and interpolation workflows:
-  [src/hps/ui/workspaces/structure/transformations/operations.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/workspaces/structure/transformations/operations.py)
-- Navigation registry:
-  [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
-- Structure logic:
-  [src/hps/domain/structure_manager.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/structure_manager.py)
-- Molecule helpers:
-  [src/hps/domain/molecule_builder.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/molecule_builder.py)
-- PXRD logic:
-  [src/hps/domain/structure_manager.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/structure_manager.py)
-- PDF logic:
-  [src/hps/domain/pdf_analysis.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/domain/pdf_analysis.py)
-
 ## Last Verified
 
-- Date: 2026-08-07
+- Application baseline: [GitHub v0.3.0](https://github.com/rayanc72/hybrid-perovskite-studio/releases/tag/v0.3.0)
+- Documentation reviewed: 2026-11-22

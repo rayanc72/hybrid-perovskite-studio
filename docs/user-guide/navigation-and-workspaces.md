@@ -61,17 +61,7 @@ Users can return to the start page with the `Start Page` button.
 
 The `Explore every tool` link opens a dedicated page showing the app’s current capability tree. The page includes a link back to the main app.
 
-This tree is generated from:
-
-- [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py)
-
-That file is the current single source of truth for:
-
-- workspace names
-- workspace descriptions
-- workspace views
-- grouped tools
-- feature-map structure
+Use the feature map to locate a tool, then follow its workspace guide for input and output requirements.
 
 ## Structure Workspace Pattern
 
@@ -100,10 +90,3 @@ The current `Structure -> Analysis` groups include:
 - Electronic uses `View` plus `Tool`.
 - Dynamics uses `View` to switch between direct MD output and trajectory analysis.
 - Utilities uses `View` to select between script execution and generic plotting/data utilities.
-
-## Why This Matters For Docs
-
-When the app navigation changes, the documentation should be updated in two places:
-
-- the relevant workspace guide in `docs/features/`
-- [src/hps/ui/navigation.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/navigation.py) if the visible feature tree changed

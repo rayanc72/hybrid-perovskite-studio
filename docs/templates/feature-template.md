@@ -1,48 +1,41 @@
-# Workspace Or Feature Name
+# Workspace or feature name
 
-## Overview
+## Purpose and location
 
-Short description of the workspace or feature and the problem it solves.
-
-## Where It Appears In The UI
-
-- Workspace:
-- View:
-- Group:
-- Tool:
+State the scientific task and the exact workspace → view → group → tool route.
 
 ## Inputs
 
-- Required:
-- Optional:
-- Supported file types:
+| Input | Required? | Filename / format | Units and assumptions |
+| --- | --- | --- | --- |
+| Describe input | Yes | Describe format | Describe conventions |
 
-## Outputs
+Link a small, redistributable example and its provenance. Distinguish supported
+import formats from formats supported throughout the analysis.
 
-- Tables and summaries:
-- Plots:
-- Downloadable files:
+## Complete workflow
 
-## How To Use It
+1. Obtain the example and open the exact tool.
+2. Upload the required inputs and enter concrete settings.
+3. Run the action and compare with an expected numerical or visual result.
+4. Download an output and explain how to inspect or reuse it.
 
-1. Open the relevant workspace.
-2. Provide the required inputs.
-3. Select the relevant view/group/tool if applicable.
-4. Configure any optional settings.
-5. Run the action and inspect the outputs.
+Add a screenshot with a caption that connects it to a step or interpretation.
 
-## Notes And Limitations
+## Outputs and interpretation
 
-- List current limitations based on repo evidence only.
+List actual export formats, units, reference choices, and expected results. Explain
+which comparisons are meaningful and which scientific assumptions require checking.
 
-## Code Touchpoints
+## Common problems and limitations
 
-- UI:
-- Navigation registry:
-- Domain logic:
-- Tooling/helpers:
+Give actionable help for missing inputs, invalid selections, and unsupported cases.
+Link the relevant troubleshooting and scientific reference sections.
 
-## Last Verified
+## Last verified
 
-- Date:
-- Files reviewed:
+- Application baseline: link the exact release tag.
+- Documentation reviewed: YYYY-MM-DD.
+- Evidence: representative input, expected result, and relevant validation.
+
+Keep code ownership and implementation pointers in the developer implementation map.

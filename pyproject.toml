@@ -35,7 +35,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/rayanc72/hybrid-perovskite-studio"
-Documentation = "https://github.com/rayanc72/hybrid-perovskite-studio/tree/main/docs"
+Documentation = "https://rayanc72.github.io/hybrid-perovskite-studio/"
 Repository = "https://github.com/rayanc72/hybrid-perovskite-studio"
 Issues = "https://github.com/rayanc72/hybrid-perovskite-studio/issues"
 

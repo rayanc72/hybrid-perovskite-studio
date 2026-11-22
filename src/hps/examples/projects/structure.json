@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "citations": [
     {
-      "short": "Chakraborty et al., J. Am. Chem. Soc. 146 (2024), 34811–34821",
+      "short": "Chakraborty et al., J. Am. Chem. Soc. 146 (2024), 34811\u201334821",
       "doi": "10.1021/jacs.4c13597"
     }
   ],
@@ -20,8 +20,27 @@
     }
   ],
   "guide": [
-    {"workspace": "Structure", "view": "Overview", "action": "Upload MC3I_PbI_100K.in."},
-    {"workspace": "Structure", "view": "Overview", "action": "Confirm formula C32H88I24N8Pb4 and 156 atoms."},
-    {"workspace": "Structure", "view": "Analysis / Symmetry", "action": "Confirm Aea2 (No. 41) before exploring the symmetry controls."}
+    {
+      "workspace": "Structure",
+      "action": "Upload data/structure/MC3I_PbI_100K.in using the upload box at the top of the workspace."
+    },
+    {
+      "workspace": "Structure",
+      "action": "In Current Structure, confirm formula C32H88I24N8Pb4 and 156 atoms. Expand symmetry details and compare Aea2 (No. 41)."
+    },
+    {
+      "workspace": "Structure",
+      "view": "Analysis",
+      "group": "Symmetry",
+      "tool": "Symmetrize structure",
+      "action": "Inspect the symmetry controls; changes to tolerance can change the reported space group."
+    },
+    {
+      "workspace": "Structure",
+      "view": "Transformations",
+      "group": "Molecule Operations",
+      "tool": "Rotation",
+      "action": "Choose Rotate Individual Molecules and a finite group from Molecule groups and names. Set direction 0 0 1 and angle 10 degrees; save its parameters, apply the rotation, and download the transformed CIF."
+    }
   ]
 }

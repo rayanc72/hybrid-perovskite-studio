@@ -1,6 +1,52 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-11-22
+
+This release is available on GitHub. PyPI remains at 0.2.1.
+
+### Structure workspace
+
+- Removed the Overview view. Structure upload and the current structure summary
+  remain above the Analysis and Transformations controls, with no view selected
+  initially. Molecule names and symmetry information have separate expanders.
+- Added on-demand CIF downloads for transformations and custom molecule labels,
+  plus CIF ZIP archives for rotation batches, rotation series, and interpolation.
+  Conversion uses snapshots of the generated structures without rerunning the
+  transformation. Custom CIF site labels retain unique atom indices.
+
+- Retained periodic-image shifts and self-image bonds in the shared bond graph.
+  Cycle translations now distinguish finite molecules from 1D/2D/3D networks.
+- Replaced iterative molecule reconstruction and separate rotation/center-of-mass
+  bond logic with graph-based unwrapping that preserves atom order and PBC flags.
+- Added periodic classification to structure summaries and details. Molecular
+  operations select finite groups while retaining original group numbers.
+
+- Shared molecule-group detection between backend and UI, replacing dense all-pairs
+  matrices and recursive traversal with neighbor lists and iterative traversal.
+  Existing bond thresholds, exception pairs, and group/atom ordering are preserved.
+- Fixed molecular coordinate reconstruction rejecting a successful connection on
+  its final allowed iteration.
+
+### Electronic workspace
+
+- Added direct support for FHI-aims `band####.out.no_soc` files. Mixed uploads offer
+  a file-family selector; separate datasets can compare standard and no-SOC files
+  with independent band counts and VBM references.
+- Added an Excel export tab with VBM-relative state and k-path segment selection.
+  Workbooks contain one sheet per state and side-by-side columns for multiple
+  datasets, aligned by segment and fractional k-point without interpolation.
+  Energies include raw and VBM-relative values; geometry enables momentum in Å⁻¹.
+- Enabled band plotting without `control.in` or `geometry.in`, using uploaded
+  k-points and fractional path distances when needed. Added control-file sampling
+  validation and support for unequal segment sampling during comparison scaling.
+
+### Dependencies and documentation
+
+- Raised the minimum Streamlit version to 1.67 for the current UI and deferred
+  download APIs. Added XlsxWriter to the core/full extras and openpyxl to dev.
+- Updated spin-texture state filtering for pandas 3.1 compatibility.
+- Updated workspace guides, getting-started instructions, and screenshots for the
+  new navigation and exports.
 
 ## 0.2.1 - 2026-08-07
 

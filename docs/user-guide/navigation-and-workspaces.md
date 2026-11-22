@@ -75,11 +75,15 @@ That file is the current single source of truth for:
 
 ## Structure Workspace Pattern
 
-The Structure workspace is more layered than the others:
+The Structure workspace keeps the upload box and current structure summary above
+two optional views:
 
-- `Overview`
 - `Analysis`
 - `Transformations`
+
+Neither view is selected initially. Molecule-group names, finite/periodic
+classification, symmetry information, and the structure viewer are available from
+the summary without selecting a tool.
 
 `Analysis` and `Transformations` each introduce a second selection level such as `Group` and then `Tool`.
 

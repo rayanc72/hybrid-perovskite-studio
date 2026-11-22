@@ -7,13 +7,6 @@ NAVIGATION_REGISTRY = {
     "Structure": {
         "description": "Upload structures, inspect geometry, run transformations, and access <strong>PDF</strong> and <strong>PXRD</strong> analysis.",
         "views": {
-            "Overview": {
-                "summary": [
-                    "Upload structure",
-                    "Review loaded structure",
-                    "Remove current structure",
-                ]
-            },
             "Analysis": {
                 "groups": {
                     "Symmetry": {

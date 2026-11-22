@@ -11,6 +11,11 @@ import pandas as pd
 import plotly.io as pio
 import streamlit as st
 
+from hps.core.band_export import (
+    build_band_workbook,
+    build_band_export_table,
+    parse_relative_states,
+)
 from hps.domain.electronic_property import (
     add_pdos_combination_traces,
     build_brillouin_zone_figure,
@@ -19,6 +24,8 @@ from hps.domain.electronic_property import (
     create_dataframe_from_absorption_out_files,
     get_file_uploads,
     get_pdos_combination_labels,
+    get_rec_vector,
+    parse_band_uploads,
     parse_label_offset_map,
     parse_out_file,
     parse_segment_selection,
@@ -44,6 +51,151 @@ def clear_pdos_results() -> None:
     st.session_state.pdos_table = None
     st.session_state.pdos_figure = None
     st.session_state.pdos_roles = None
+
+
+@st.cache_data(max_entries=8, show_spinner=False)
+def _band_workbook_bytes(tables):
+    return build_band_workbook(tables)
+
+
+def render_band_excel_export(uploaded_files_list, dataset_summaries):
+    """Keep data export available independently of the plot-generation button."""
+    st.subheader("Export band data as Excel (.xlsx)")
+    st.write(
+        "Select VBM-relative states and k-path segments. Choose multiple datasets "
+        "for a side-by-side SOC / no-SOC comparison. Each selected state gets its own sheet "
+        "(VBM-1, VBM, VBM+1, etc.)."
+    )
+    if not uploaded_files_list:
+        st.info("Upload band files in Inputs above to configure your Excel export.")
+        return
+    selected_datasets = st.multiselect(
+        "Datasets to export",
+        options=list(range(len(uploaded_files_list))),
+        default=list(range(len(uploaded_files_list))),
+        format_func=lambda index: (
+            f"Data set {dataset_summaries[index]['dataset_index']}: "
+            f"{dataset_summaries[index]['legend_label']}"
+        ),
+        key=f"band_csv_datasets_{len(uploaded_files_list)}",
+    )
+    if not selected_datasets:
+        st.info("Select at least one dataset to export.")
+        return
+    try:
+        parsed_datasets = {}
+        for index in selected_datasets:
+            summary = dataset_summaries[index]
+            if summary["vbm_state"] is None or summary["vbm_energy"] is None:
+                raise ValueError(
+                    f"{summary['legend_label']}: upload band files with a detected VBM."
+                )
+            parsed = parse_band_uploads(uploaded_files_list[index])
+            parsed_datasets[index] = parsed
+            vbm_state = int(summary["vbm_state"])
+            st.caption(
+                f"Data set {summary['dataset_index']} ({summary['legend_label']}): "
+                f"0 = VBM (state {vbm_state}); "
+                f"available offsets {1 - vbm_state} to {parsed['band_count'] - vbm_state}."
+            )
+        states_text = st.text_input(
+            "States relative to VBM",
+            value="0,1",
+            help="0 = VBM; -1 = one state below; +1 = one state above. "
+                 "Use offsets or inclusive colon ranges, e.g. -2,-1,0,1:3. "
+                 "The same offsets use each dataset's own VBM. Degenerate states count separately.",
+            key="band_csv_states",
+        )
+        # Use file identifiers, rather than upload-list positions, so missing segments
+        # cannot silently pair different portions of two paths.
+        segment_names = {
+            segment["name"][4:8]: segment["name"][:12]
+            for parsed in parsed_datasets.values() for segment in parsed["segments"]
+        }
+        segment_options = sorted(segment_names)
+        selected_segments = st.multiselect(
+            "K-path segments to export",
+            options=segment_options,
+            default=segment_options,
+            format_func=lambda value: segment_names[value] + " / .no_soc",
+            key="band_csv_segments_" + "_".join(segment_options)
+                + f"_{st.session_state.get('file_uploader_key', 0)}",
+        )
+        if not selected_segments:
+            raise ValueError("Select at least one k-path segment.")
+        st.caption(
+            "Energies include raw values and E − VBM in eV. Export uses all sampled k-points "
+            "of the selected segments, independent of plot filters and x-axis scaling. "
+            "Path distance retains the full uploaded path; segment distance starts at zero."
+        )
+        if len(selected_datasets) > 1:
+            st.caption(
+                "Side-by-side worksheets: rows match by band-file segment number and exact fractional "
+                "k coordinates. Unmatched samples are blank; no interpolation is applied. "
+                "Each dataset keeps its own state numbers, VBM energy and momentum columns."
+            )
+        tables = []
+        for index in selected_datasets:
+            summary = dataset_summaries[index]
+            parsed = parsed_datasets[index]
+            files = uploaded_files_list[index]
+            segments = [
+                number for number, segment in enumerate(parsed["segments"], start=1)
+                if segment["name"][4:8] in selected_segments
+            ]
+            if not segments:
+                raise ValueError(
+                    f"{summary['legend_label']}: no selected segments in this dataset."
+                )
+            geometry = next((file for file in files if file.name == "geometry.in"), None)
+            reciprocal = get_rec_vector(geometry) if geometry is not None else None
+            st.caption(
+                f"Data set {summary['dataset_index']}: " + (
+                    "momentum in Å⁻¹, with Cartesian and fractional k coordinates."
+                    if reciprocal is not None else
+                    "fractional k coordinates and distances. Include geometry.in for Å⁻¹."
+                )
+            )
+            try:
+                offsets = parse_relative_states(
+                    states_text,
+                    vbm_state=int(summary["vbm_state"]),
+                    band_count=parsed["band_count"],
+                )
+            except ValueError as exc:
+                raise ValueError(f"{summary['legend_label']}: {exc}") from exc
+            table = build_band_export_table(
+                parsed,
+                dataset_label=summary["legend_label"],
+                vbm_state=int(summary["vbm_state"]),
+                vbm_energy=summary["vbm_energy"],
+                state_offsets=offsets,
+                selected_segments=segments,
+                reciprocal_lattice=reciprocal,
+            )
+            prefix = f"dataset_{summary['dataset_index']}[{summary['legend_label']}]"
+            tables.append((prefix, table))
+        filename = (
+            "band_data_comparison.xlsx" if len(tables) > 1 else
+            f"band_data_dataset_{summary['dataset_index']}_{parsed['file_variant']}.xlsx"
+        )
+        st.caption(
+            f"{len(offsets)} state sheets · {len(selected_segments)} segments · "
+            f"{len(tables)} datasets"
+        )
+        st.download_button(
+            "Download Excel workbook (.xlsx)",
+            data=_band_workbook_bytes(tables),
+            file_name=filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="band_csv_download",
+            on_click="ignore",
+            type="primary",
+            icon=":material/download:",
+            width="stretch",
+        )
+    except ValueError as exc:
+        st.error(str(exc))
 
 
 def _parse_uploaded_json(uploaded_file):
@@ -534,7 +686,7 @@ def render_electronic_workspace(
                 <div class="section-kicker">Electronic Workspace</div>
                 <div class="section-head-title">Band Structure Studio</div>
                 <div class="section-head-copy">
-                    Band plots require <code>band*.out</code>. Brillouin-zone plots require <code>geometry.in</code>, and path labels additionally require <code>control.in</code>.
+                    Band plots accept <code>band####.out</code> or <code>band####.out.no_soc</code> (without SOC). Include <code>geometry.in</code> and <code>control.in</code> for the reciprocal-space path and labels.
                 </div>
             </div>
             """,
@@ -542,6 +694,10 @@ def render_electronic_workspace(
         )
 
         st.markdown("**Inputs**")
+        st.caption(
+            "To compare SOC and no-SOC bands, use two datasets with separate colors and "
+            "legend labels. Each dataset is aligned to its own VBM."
+        )
         num_data_sets = st.number_input(
             "How many plot data sets do you want to provide?",
             min_value=1,
@@ -581,6 +737,7 @@ def render_electronic_workspace(
                                     <div class="workspace-card-copy">
                                         <strong>Color:</strong> <span style="color:{summary['color']};">{summary['color']}</span><br>
                                         <strong>Band files:</strong> {summary['band_file_count']}<br>
+                                        <strong>File type:</strong> {summary['band_file_type']}<br>
                                         <strong>geometry.in:</strong> {geometry_status}<br>
                                         <strong>control.in:</strong> {control_status}<br>
                                         <strong>VBM:</strong><br>{vbm_text}<br>
@@ -592,7 +749,13 @@ def render_electronic_workspace(
                                 unsafe_allow_html=True,
                             )
 
-        band_tab, bz_tab = st.tabs(["Band Structure", "Brillouin Zone"])
+        if st.session_state.get("band_studio_tab") == "CSV export":
+            st.session_state["band_studio_tab"] = "Excel export"
+        band_tab, excel_tab, bz_tab = st.tabs(
+            ["Band Structure", "Excel export", "Brillouin Zone"],
+            key="band_studio_tab",
+            on_change="rerun",
+        )
 
         with band_tab:
             st.markdown("**Plot Settings**")
@@ -658,6 +821,11 @@ def render_electronic_workspace(
                             user_defined_eshifts,
                             selected_segments=selected_segments,
                         )
+                        if any(data["path_units"] == "fractional" for data in all_data):
+                            st.caption(
+                                "Without geometry.in, k-path distances use fractional coordinates. "
+                                "Upload geometry.in for reciprocal-space distances."
+                            )
                         if apply_scaling:
                             scaling_factors = calculate_scaling_factors(all_data)
                             all_data = scale_data(all_data, scaling_factors)
@@ -697,7 +865,7 @@ def render_electronic_workspace(
                                 data=buf,
                                 file_name="band_structure.png",
                                 mime="application/png",
-                                use_container_width=True,
+                                width="stretch",
                             )
                         with export_col2:
                             st.download_button(
@@ -705,13 +873,17 @@ def render_electronic_workspace(
                                 data=pdf_buf,
                                 file_name="band_structure.pdf",
                                 mime="application/pdf",
-                                use_container_width=True,
+                                width="stretch",
                             )
 
                     except ValueError as exc:
                         st.error(str(exc))
             else:
                 st.info("Upload at least one dataset above to generate a band-structure plot.")
+
+        with excel_tab:
+            if excel_tab.open:
+                render_band_excel_export(uploaded_files_list, dataset_summaries)
 
         with bz_tab:
             if uploaded_files_list:

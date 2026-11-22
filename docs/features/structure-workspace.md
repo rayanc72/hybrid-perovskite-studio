@@ -8,21 +8,23 @@ The Structure workspace is the entry point for uploaded crystal structures. It c
 
 - Landing-page workspace: `Structure`
 - Workspace views:
-  - `Overview`
   - `Analysis`
   - `Transformations`
 
 ## Main Workflow
 
 1. Open the `Structure` workspace from the landing page.
-2. In `Overview`, upload a structure file in `.in`, `.cif`, or `.next_step` format.
+2. Upload a structure file in `.in`, `.cif`, or `.next_step` format using the upload box at the top of the workspace.
 3. Review the `Current Structure` summary.
 4. Move to `Analysis` or `Transformations` depending on your task.
 5. Export geometry or labelled structure files from the summary or downstream tools, including custom-labelled `geometry.in` exports for selected molecules.
 
-## Overview View
+The workspace opens with no view selected. The current structure summary and its
+collapsible details remain available until you choose `Analysis` or `Transformations`.
 
-The `Overview` view is where users load and manage the active structure.
+## Structure Upload
+
+The upload box remains visible above the current structure summary in both workspace views.
 
 Key actions:
 
@@ -38,7 +40,7 @@ Current behavior:
 
 ## Current Structure Summary
 
-When a structure is loaded, the workspace shows a persistent summary with:
+When a structure is loaded, the workspace shows a persistent summary directly below the upload box and above the view controls, with:
 
 - file name
 - detected format
@@ -48,7 +50,7 @@ When a structure is loaded, the workspace shows a persistent summary with:
 - download button for the labelled structure
 - remove-current-structure action
 - optional symmetry details
-- optional detected-molecule listing
+- a collapsible `Molecule groups and names` listing with original group numbers, finite-molecule or periodic-network classification, and atom names such as `C1` and `H2`
 - optional 3D viewer
 
 ## Analysis View
@@ -130,6 +132,12 @@ Each PDF task opens as its own workflow instead of appearing as an optional sect
 
 `Interpolation` under lattice operations uses its own multi-file upload workflow.
 
+Each transformation offers a CIF download alongside its AIMS geometry download.
+Rotation batches and interpolation series offer a separate ZIP of CIF files.
+CIF conversion and CIF ZIP creation run only when their download button is clicked,
+using the generated structures without rerunning the transformation. Custom molecule
+labels are retained in CIF site names, with atom indices added to keep them unique.
+
 ## Inputs
 
 - Required for most tools:
@@ -151,6 +159,7 @@ Each PDF task opens as its own workflow instead of appearing as an optional sect
 - Symmetry metadata
 - Molecule listings
 - AIMS structure downloads
+- On-demand CIF downloads and CIF ZIP archives for transformed structures
 - Labelled structure downloads
 - Custom-labelled `geometry.in` exports for one or more selected molecules
 - Tables of structural metrics
@@ -160,6 +169,28 @@ Each PDF task opens as its own workflow instead of appearing as an optional sect
 
 ## Notes And Limitations
 
+- Detected molecules are geometric bonded groups, including isolated atoms and
+  periodic inorganic networks; they are not validated chemical molecule identities.
+  Structure details distinguish finite groups from 1D, 2D, and 3D networks.
+  Backend and UI use the same detector, respecting the structure's periodic axes
+  and excluding configured element pairs in either order.
+- A bond is detected when the distance is strictly below the sum of ASE covalent
+  radii and per-atom tolerances: 0.1 Å for C/H/N/O/S, 0.5 Å for Cl, and
+  0.25 Å plus configured bond padding for other elements. Padding does not change
+  the C/H/N/O/S/Cl tolerances. Detection and reconstruction share these criteria.
+- Molecular coordinates are unwrapped by accumulating the lattice-image shifts
+  stored on bonds. A boundary-crossing molecule remains finite when every cycle
+  closes in the same image. Nonzero cycle translations identify periodic networks;
+  the number of independent translations determines their dimension.
+- Rotation, reflection, center-of-mass, and dipole analysis select finite groups
+  using their original group numbers. Periodic networks remain available for
+  group labelling, translation, and deletion, but cannot be reconstructed as a
+  finite molecule. Single isolated atoms count as finite groups.
+- Unwrapping anchors the first selected atom in its supplied image, preserves atom
+  order, supports skewed cells and partial periodic boundaries, and leaves the
+  input structure unchanged. Rebuild graphs after changing coordinates or bonds.
+  Classification depends on the configured geometric bond thresholds; it does
+  not establish chemical identity or bond order.
 - Structure upload, active-state lifecycle, typed navigation, summary status, metadata, downloads, the initial viewer, analysis workflows, and transformation renderers are implemented under `src/hps/ui/workspaces/structure/`. [src/hps/ui/app_main.py](https://github.com/rayanc72/hybrid-perovskite-studio/blob/main/src/hps/ui/app_main.py) coordinates those focused renderers.
 - PXRD broadening is currently specified in degrees of `2theta`, even when the displayed x-axis is `q`.
 - PDF analysis uses a short-lived temporary directory when converting the active structure for DiffPy and cleans it automatically after calculation.

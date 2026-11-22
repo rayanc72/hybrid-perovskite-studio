@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urldefrag
+from urllib.parse import unquote, urldefrag, urlsplit
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,14 +16,24 @@ LINK = re.compile(r"\[[^\]]*\]\((https?://[^\s)]+)\)|<(https?://[^\s>]+)>")
 
 
 def check_url(url: str) -> tuple[str, str | None]:
+    parsed = urlsplit(url)
+    is_doi = parsed.hostname in {"doi.org", "dx.doi.org"}
+    headers = {"User-Agent": "HPS-documentation-link-check/1.0"}
+    if is_doi:
+        headers["Accept"] = "application/vnd.citationstyles.csl+json"
     for attempt in range(3):
         try:
-            request = Request(url, headers={"User-Agent": "HPS-documentation-link-check/1.0"})
+            request = Request(url, headers=headers)
             with urlopen(request, timeout=20) as response:
                 if response.status < 400:
+                    if is_doi:
+                        metadata = json.load(response)
+                        expected = unquote(parsed.path.lstrip("/")).lower()
+                        if str(metadata.get("DOI", "")).lower() != expected:
+                            return url, "DOI metadata does not match the requested identifier"
                     return url, None
                 return url, f"HTTP {response.status}"
-        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
             if attempt == 2:
                 return url, str(exc)
             time.sleep(attempt + 1)

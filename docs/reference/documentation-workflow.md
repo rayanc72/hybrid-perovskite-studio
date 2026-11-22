@@ -36,8 +36,12 @@ Example tests validate manifest routes against the navigation registry and exerc
 bundle contents, including the ready-to-upload trajectory archive. MkDocs checks
 local links and builds the site. These checks do not establish that external services
 are available; the scheduled documentation-link workflow checks external Markdown
-links weekly and can also be run manually. Authentication, rate limits, and bot
-blocking may require manual investigation of a reported external failure.
+links weekly and can also be run manually. DOI links are verified against their
+registered citation metadata through
+[DOI content negotiation](https://www.crossref.org/documentation/retrieve-metadata/content-negotiation/);
+this checks the identifier without requiring automated access to a publisher article
+page. It does not check subscription access. Authentication, rate limits, and bot
+blocking on other links may require manual investigation of a reported failure.
 
 After deployment, open the home page, one complete tutorial, and all example download
 links. Confirm the visible version baseline matches the application instructions.

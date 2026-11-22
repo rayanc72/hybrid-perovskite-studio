@@ -11,7 +11,7 @@ from hps.ui.navigation import group_names, tool_options, view_names
 
 @dataclass(frozen=True)
 class StructureSelection:
-    mode: str
+    mode: str | None
     group: str | None = None
     tool: str | None = None
 
@@ -85,13 +85,16 @@ class StructureSelection:
 
 
 def render_structure_navigation() -> StructureSelection:
-    mode = st.radio("View", options=view_names("Structure"), horizontal=True)
+    mode = st.radio(
+        "View",
+        options=view_names("Structure"),
+        index=None,
+        horizontal=True,
+        key="structure_workspace_view",
+    )
 
-    if mode == "Overview":
-        st.info(
-            "Review the current structure, then move into analysis or transformations as needed."
-        )
-        return StructureSelection(mode=mode)
+    if mode is None:
+        return StructureSelection(mode=None)
 
     if mode == "Analysis":
         group = st.radio(

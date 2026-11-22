@@ -6,7 +6,9 @@ from collections.abc import Callable, MutableMapping, Sequence
 from typing import Any
 
 import streamlit as st
+from ase import Atoms
 
+from hps.core.molecules import BOND_SETTINGS_KEY, build_bond_graph
 from hps.domain.structure_manager import (
     atoms_to_speck,
     create_aims_download_file,
@@ -93,7 +95,7 @@ def render_current_structure_card(
             summary.get("atom_count", len(current_atoms)) if summary else len(current_atoms),
         )
         meta_col4.metric(
-            "Molecule Groups",
+            "Bonded Groups",
             summary.get("molecule_group_count", len(current_molecules))
             if summary
             else len(current_molecules),
@@ -115,13 +117,12 @@ def render_current_structure_card(
             if st.button(
                 "Remove current structure",
                 key="remove_structure_context",
-                use_container_width=True,
+                width="stretch",
             ):
                 clear_loaded_structure(state)
                 st.rerun()
 
-        if st.checkbox("Show structure details", value=False, key="show_structure_details"):
-            _render_structure_details(current_atoms, current_molecules, current_modified_symbols)
+        _render_structure_details(current_atoms, current_molecules, current_modified_symbols)
 
         with st.expander("3D structure viewer", expanded=False):
             load_viewer = st.checkbox(
@@ -145,14 +146,44 @@ def _render_structure_details(
     current_molecules: Sequence[Sequence[int]],
     current_modified_symbols: Sequence[str],
 ) -> None:
-    space_group = print_space_group(current_atoms)
+    # CIF metadata can contain unhashable objects, such as ASE Spacegroup.
+    # Cache only the geometry and bonding settings used to compute these details.
+    structure_data = {
+        "numbers": current_atoms.numbers.tolist(),
+        "positions": current_atoms.positions.tolist(),
+        "cell": current_atoms.cell.array.tolist(),
+        "pbc": current_atoms.pbc.tolist(),
+        "info": {BOND_SETTINGS_KEY: current_atoms.info.get(BOND_SETTINGS_KEY, {})},
+    }
+    space_group, molecule_text = _structure_detail_text(
+        structure_data, current_molecules, current_modified_symbols
+    )
+    with st.expander("Molecule groups and names", expanded=False):
+        st.markdown(f"```\n{molecule_text}\n```")
+
     with st.expander("Symmetry information", expanded=False):
         st.markdown(f"```\n{space_group}\n```")
 
+
+@st.cache_data(max_entries=8, show_spinner=False)
+def _structure_detail_text(
+    structure_data: dict[str, Any],
+    current_molecules: Sequence[Sequence[int]],
+    current_modified_symbols: Sequence[str],
+) -> tuple[str, str]:
+    current_atoms = Atoms(**structure_data)
+    components = {
+        frozenset(component.indices): component
+        for component in build_bond_graph(current_atoms).components
+    }
     molecule_lines = []
     for index, molecule in enumerate(current_molecules, 1):
         labels = [current_modified_symbols[atom_index] for atom_index in molecule]
-        molecule_lines.append(f"Molecule {index}: {', '.join(labels)}")
-    molecule_text = "\n".join(molecule_lines)
-    with st.expander("Detected molecules", expanded=False):
-        st.markdown(f"```\n{molecule_text}\n```")
+        component = components.get(frozenset(molecule))
+        kind = (
+            "finite molecule" if component and component.is_finite
+            else f"{component.periodic_dimension}D periodic network" if component
+            else "unclassified group"
+        )
+        molecule_lines.append(f"Group {index} ({kind}): {', '.join(labels)}")
+    return print_space_group(current_atoms), "\n".join(molecule_lines)

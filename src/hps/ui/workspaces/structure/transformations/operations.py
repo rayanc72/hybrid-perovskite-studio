@@ -21,13 +21,17 @@ from hps.domain.structure_manager import (
     create_labelled_download_file,
     delete_molecules,
     find_local_indices,
-    generate_labelled_cif,
     get_atom_labels,
     get_file_format,
     plane_params_from_hkl,
     process_uploaded_files,
     reflect_molecules,
     translate_molecule,
+)
+from hps.ui.workspaces.structure.molecule_selection import finite_molecule_numbers
+from hps.ui.workspaces.structure.transformations.downloads import (
+    create_cif_archive_download,
+    create_cif_download_file,
 )
 
 TRANSLATION_AXES = ("x", "y", "z", "xy", "xz", "yz", "xyz", "custom")
@@ -53,9 +57,15 @@ def render_reflection(
     render_section_header: Callable[..., None],
 ) -> Any:
     render_section_header("Reflect molecules on a plane", kicker="Structure Workspace")
+    finite_numbers = finite_molecule_numbers(modified_atoms, molecules)
+    if len(finite_numbers) != len(molecules):
+        st.caption("Only finite molecules can be reflected; original group numbers are retained.")
+    if not finite_numbers:
+        st.info("No finite molecules are available for reflection.")
+        return modified_atoms
     selected = st.multiselect(
         "Select molecule indices",
-        options=range(1, len(molecules) + 1),
+        options=finite_numbers,
     )
     if "reflection_parameters" not in st.session_state:
         st.session_state.reflection_parameters = [None] * len(molecules)
@@ -97,6 +107,7 @@ def render_reflection(
         )
     root = structure_file_root(file_name)
     create_aims_download_file(modified_atoms, root, "_reflected")
+    create_cif_download_file(modified_atoms, root, "_reflected")
     create_labelled_download_file(modified_atoms, root, "_reflected")
     return modified_atoms
 
@@ -174,6 +185,7 @@ def render_translation(
         )
         root = structure_file_root(file_name)
         create_aims_download_file(modified_atoms, root, "_translated")
+        create_cif_download_file(modified_atoms, root, "_translated")
         create_labelled_download_file(modified_atoms, root, "_translated")
     with st.expander("See structure"):
         atoms_to_speck(modified_atoms, f"translation_{scope}")
@@ -198,6 +210,7 @@ def render_deletion(
         modified_atoms = delete_molecules(modified_atoms, molecules, selected)
         root = structure_file_root(file_name)
         create_aims_download_file(modified_atoms, root, "_deleted")
+        create_cif_download_file(modified_atoms, root, "_deleted")
         create_labelled_download_file(modified_atoms, root, "_deleted")
     with st.expander("See structure"):
         atoms_to_speck(modified_atoms, "deletion")
@@ -260,6 +273,13 @@ def render_labelling(
         original_content=original_content,
         download_label="Download custom-labelled geometry.in",
     )
+    create_cif_download_file(
+        modified_atoms,
+        "geometry.in",
+        "_" + "_".join(parts),
+        atom_label_overrides=overrides,
+        download_label="Download custom-labelled CIF",
+    )
 
 
 def render_interpolation(*, render_section_header: Callable[..., None]) -> None:
@@ -294,8 +314,10 @@ def render_interpolation(*, render_section_header: Callable[..., None]) -> None:
         st.error("The final structure could not be matched to the initial structure.")
         return
     if st.checkbox("Do you want labelled atoms for checking?"):
-        generate_labelled_cif(initial, f"{initial_name}_labelled")
-        generate_labelled_cif(reordered_final, f"{final_name}_reordered_labelled")
+        create_cif_download_file(initial_atoms, initial_name, "_labelled")
+        create_cif_download_file(
+            AseAtomsAdaptor.get_atoms(reordered_final), final_name, "_reordered_labelled"
+        )
     if not st.button("Generate Interpolated Structures"):
         return
     try:
@@ -307,5 +329,13 @@ def render_interpolation(*, render_section_header: Callable[..., None]) -> None:
         )
         atoms = [AseAtomsAdaptor.get_atoms(structure) for structure in structures]
         create_interpolated_structures_zip(atoms)
+        create_cif_archive_download(
+            [
+                (f"interpolated_structure_{index}.cif", structure)
+                for index, structure in enumerate(atoms[:-1], start=1)
+            ],
+            "interpolated_structures_cif.zip",
+            download_label="Download CIF ZIP of interpolated structures",
+        )
     except Exception as exc:
         st.error(f"Error: {exc}")

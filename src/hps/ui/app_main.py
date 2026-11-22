@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib as mpl
 import streamlit as st
 
+from hps.core.molecules import PeriodicNetworkError
 from hps.io.paths import APP_TMP_DIR
 from hps.ui.backend_workflows import ensure_workflow_registry
 from hps.ui.navigation import (
@@ -1278,6 +1279,7 @@ else:
 
 if primary_section == "Structure":
     render_structure_upload_panel(st.session_state, debug_log=_debug_log)
+    structure_context = st.container()
     structure_selection = render_structure_navigation()
     symmetry_option = structure_selection.symmetry
     com_option = structure_selection.center_of_mass
@@ -1380,7 +1382,7 @@ structure_tool_selected = any(
 )
 if current_atoms is None and structure_tool_selected:
     st.warning(
-        "Load a structure from Structure -> Overview before using structure-dependent tools."
+        "Upload a structure using the box above before using structure-dependent tools."
     )
     symmetry_option = False
     com_option = False
@@ -1403,12 +1405,13 @@ if current_atoms is None and structure_tool_selected:
 
 
 if current_atoms is not None and primary_section == "Structure":
-    render_current_structure_card(
-        st.session_state,
-        current_atoms,
-        current_molecules,
-        current_modified_symbols,
-    )
+    with structure_context:
+        render_current_structure_card(
+            st.session_state,
+            current_atoms,
+            current_molecules,
+            current_modified_symbols,
+        )
 
     modified_atoms = current_atoms.copy()
     molecules = current_molecules.copy()
@@ -1416,20 +1419,26 @@ if current_atoms is not None:
     modified_atoms = current_atoms.copy()
     molecules = current_molecules.copy()
     if rotate_option:
-        modified_atoms = render_rotation(
-            modified_atoms,
-            molecules,
-            st.session_state.file_name,
-            render_section_header=render_section_header,
-        )
+        try:
+            modified_atoms = render_rotation(
+                modified_atoms,
+                molecules,
+                st.session_state.file_name,
+                render_section_header=render_section_header,
+            )
+        except PeriodicNetworkError as exc:
+            st.error(str(exc))
 
     if reflect_option:
-        modified_atoms = render_reflection(
-            modified_atoms,
-            molecules,
-            st.session_state.file_name,
-            render_section_header=render_section_header,
-        )
+        try:
+            modified_atoms = render_reflection(
+                modified_atoms,
+                molecules,
+                st.session_state.file_name,
+                render_section_header=render_section_header,
+            )
+        except PeriodicNetworkError as exc:
+            st.error(str(exc))
 
     if translation_option:
         modified_atoms = render_translation(
@@ -1471,15 +1480,18 @@ if current_atoms is not None:
             render_section_header=render_section_header,
         )
 
-    render_molecule_analysis(
-        polarization_option=polarization_option,
-        charge_analysis_option=charge_analysis_option,
-        com_option=com_option,
-        dm_option=dm_option,
-        modified_atoms=modified_atoms,
-        molecules=molecules,
-        render_section_header=render_section_header,
-    )
+    try:
+        render_molecule_analysis(
+            polarization_option=polarization_option,
+            charge_analysis_option=charge_analysis_option,
+            com_option=com_option,
+            dm_option=dm_option,
+            modified_atoms=modified_atoms,
+            molecules=molecules,
+            render_section_header=render_section_header,
+        )
+    except PeriodicNetworkError as exc:
+        st.error(str(exc))
     if PXRD_option:
         render_pxrd_analysis(
             st.session_state,

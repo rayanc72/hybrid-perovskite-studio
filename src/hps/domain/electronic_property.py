@@ -12,6 +12,8 @@ from plotly.subplots import make_subplots
 from scipy.interpolate import griddata
 from scipy.spatial import Voronoi
 
+from hps.core.electronic import band_file_variant, parse_band_payload
+
 hv.extension('bokeh')
 
 
@@ -767,35 +769,26 @@ def build_brillouin_zone_figure(uploaded_files, dataset_label=None):
     return fig
 
 
+@st.cache_data(max_entries=16, show_spinner=False)
+def _parse_band_contents(files, energyshift):
+    return parse_band_payload(
+        [{"name": name, "content": content} for name, content in files],
+        energy_shift=energyshift,
+    )
+
+
+def parse_band_uploads(uploaded_files, energyshift=0.0):
+    files = tuple(
+        (file.name, file.getvalue())
+        for file in uploaded_files
+        if band_file_variant(file.name) is not None
+    )
+    return _parse_band_contents(files, float(energyshift or 0.0))
+
+
 def parse_band_out_files(uploaded_files, energyshift=None):
-    # Filtering and sorting the relevant files
-    bandfiles = [f for f in uploaded_files if f.name.startswith('band') and f.name.endswith('.out') and len(f.name) == 12]
-    bandfiles.sort(key=lambda x: int(x.name[4:-4]))
-
-    bands_all_files = []
-    for uploaded_file in bandfiles:
-        energys = []
-
-        # Reading file content
-        for line in uploaded_file:
-            line = line.decode('utf-8')  # Decoding for binary files
-            words = line.strip().split()
-            energy = []
-            occ_ene = words[4:]
-            for i in range(0, len(occ_ene), 2):
-                energy.append(float(occ_ene[i + 1]) - energyshift)
-            energys.append(energy)
-
-        bands = []
-        for i in range(len(energy)):
-            band = []
-            for j in range(len(energys)):
-                band.append(energys[j][i])
-            bands.append(band)
-        bands_all_files.append(bands)
-        uploaded_file.seek(0)
-
-    return bands_all_files
+    parsed = parse_band_uploads(uploaded_files, energyshift)
+    return [np.asarray(segment["energies"]).T.tolist() for segment in parsed["segments"]]
 
 
 def plot_bands(ax, bands_all_files, xvals=None, plot_color='blue', legend_label=None):
@@ -825,7 +818,7 @@ def filter_state_data(uploaded_file, target_state):
     df = _read_spin_texture_dataframe(uploaded_file)
     filtered_df = df[df['State'] == target_state].copy()
     filtered_df = filtered_df.drop('State', axis=1)
-    filtered_df.reset_index(drop=True, inplace=True)
+    filtered_df = filtered_df.reset_index(drop=True)
     return filtered_df
 
 
@@ -1122,9 +1115,10 @@ def get_file_uploads(num_data_sets, default_colors):
         st.text(f"Upload files for data set {i + 1}:")
         files = st.file_uploader(
             f"Data set {i + 1} files",
-            type=['in', 'out'],
+            type=['in', 'out', 'no_soc'],
             accept_multiple_files=True,
             key=dataset_uploader_key,
+            help="Upload band####.out or band####.out.no_soc, plus geometry.in and control.in.",
         )
         color = st.text_input(f"Color for data set {i + 1} (optional):",
                               value=default_colors[i % len(default_colors)], key=dataset_color_key)
@@ -1136,11 +1130,30 @@ def get_file_uploads(num_data_sets, default_colors):
         # energyshift = st.number_input('Enter shift value:', value=0.000, min_value=-30.000, max_value=30.000, key=i)
 
         if files:
+            variants = {band_file_variant(file.name) for file in files} - {None}
+            file_variant = next(iter(variants)) if len(variants) == 1 else None
+            if len(variants) > 1:
+                file_variant = st.selectbox(
+                    f"Band files for data set {i + 1}",
+                    options=["standard", "no_soc"],
+                    format_func=lambda value: {
+                        "standard": "Standard (.out)",
+                        "no_soc": "Without SOC (.out.no_soc)",
+                    }[value],
+                    key=f"bandstructure_variant_{uploader_generation}_{i}",
+                    help="Use two datasets to overlay the two calculations in one plot.",
+                )
+                files = [
+                    file for file in files
+                    if band_file_variant(file.name) in {None, file_variant}
+                ]
+            if file_variant == "no_soc":
+                st.caption("Without SOC · using band####.out.no_soc files")
             current_band = Band()
             all_band_data_VBM = []
             all_band_data_CBM = []
             # Filter files based on your criteria
-            filtered_files = [file for file in files if file.name.startswith('band') and file.name.endswith('.out')]
+            filtered_files = [file for file in files if band_file_variant(file.name) is not None]
             for file in filtered_files:
                 # Use the .getvalue() method if the content needs to be read as bytes
                 content = file.getvalue()  # Reading the content of the file directly
@@ -1167,6 +1180,10 @@ def get_file_uploads(num_data_sets, default_colors):
                     "legend_label": legend_label.strip() or f"Data set {i + 1}",
                     "color": color,
                     "band_file_count": len(filtered_files),
+                    "band_file_type": (
+                        "Without SOC (.out.no_soc)" if file_variant == "no_soc"
+                        else "Standard (.out)" if file_variant == "standard" else "None"
+                    ),
                     "has_geometry": any(file.name == "geometry.in" for file in files),
                     "has_control": any(file.name == "control.in" for file in files),
                     "vbm_state": max_energy_band["State"] if max_energy_band is not None else None,
@@ -1241,14 +1258,44 @@ def process_files(
     all_data = []
     for index, uploaded_files in enumerate(uploaded_files_list):
         energyshift = user_defined_energyshifts[index]
-        bands_all_files = parse_band_out_files(uploaded_files, energyshift=energyshift)
-        lattice_vectors, reciprocal_lattice_vectors, k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot = (None,)*8
+        parsed = parse_band_uploads(uploaded_files, energyshift)
+        bands_all_files = [
+            np.asarray(segment["energies"]).T.tolist() for segment in parsed["segments"]
+        ]
+        reciprocal_lattice_vectors = np.eye(3)
         geometry_file = next((file for file in uploaded_files if file.name == 'geometry.in'), None)
         control_file = next((file for file in uploaded_files if file.name == 'control.in'), None)
 
-        if geometry_file and control_file:
-            lattice_vectors, reciprocal_lattice_vectors = process_geometry_file(geometry_file)
-            k_label, kpoint, band_len, k_label_reduce, xvals, band_len_tot = process_control_file(control_file, reciprocal_lattice_vectors)
+        if geometry_file:
+            _, reciprocal_lattice_vectors = process_geometry_file(geometry_file)
+        if control_file:
+            k_label, _, band_len, k_label_reduce, xvals, band_len_tot = process_control_file(
+                control_file, reciprocal_lattice_vectors
+            )
+            if len(xvals) != len(bands_all_files) or any(
+                len(x) != len(segment["k_points"])
+                for x, segment in zip(xvals, parsed["segments"])
+            ):
+                raise ValueError("The band files do not match the k-path sampling in control.in.")
+        else:
+            # Band files carry their own k-points, so a standalone upload can be plotted.
+            xvals, band_len, k_label, k_label_reduce = [], [], [], []
+            band_len_tot = [0.0]
+            for segment in parsed["segments"]:
+                points = np.asarray(segment["k_points"])
+                steps = np.linalg.norm(np.diff(points, axis=0) @ reciprocal_lattice_vectors, axis=1)
+                distances = np.r_[0.0, np.cumsum(steps)]
+                xvals.append((distances + band_len_tot[-1]).tolist())
+                band_len.append(float(distances[-1]))
+                band_len_tot.append(band_len_tot[-1] + band_len[-1])
+                labels = ["(" + ", ".join(f"{v:g}" for v in point) + ")"
+                          for point in (points[0], points[-1])]
+                k_label.append(labels)
+                if not k_label_reduce:
+                    k_label_reduce.append(labels[0])
+                elif k_label_reduce[-1] != labels[0]:
+                    k_label_reduce[-1] += "|" + labels[0]
+                k_label_reduce.append(labels[1])
 
         plot_color = user_defined_colors[index]
         data = {
@@ -1260,6 +1307,7 @@ def process_files(
             "legend_label": user_defined_legends[index],
             "k_label": k_label,
             "band_len": band_len,
+            "path_units": "1/angstrom" if geometry_file else "fractional",
         }
         all_data.append(filter_band_segments(data, selected_segments))
     return all_data
@@ -1275,9 +1323,8 @@ def scale_data(all_data, scaling_factors):
     for index, data in enumerate(all_data):
         if index > 0:
             scale = scaling_factors[index]
-            xvals = np.array(data["xvals"], dtype=np.float64)
             band_len_tot = np.array(data["band_len_tot"], dtype=np.float64)
-            data["xvals"] = [x * scale for x in xvals]
+            data["xvals"] = [np.asarray(x, dtype=float) * scale for x in data["xvals"]]
             data["band_len_tot"] = [x * scale for x in band_len_tot]
     return all_data
 

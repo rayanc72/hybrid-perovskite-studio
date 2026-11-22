@@ -34,7 +34,7 @@ class UnknownWorkflowError(ValueError):
 
 
 INTERNAL_ARTIFACTS_KEY = "_hps_artifacts"
-CACHE_SCHEMA_VERSION = "2"
+CACHE_SCHEMA_VERSION = "3"
 
 
 def _run_structure_summary(payload: dict[str, object]) -> dict[str, object]:

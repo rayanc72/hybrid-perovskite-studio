@@ -276,21 +276,40 @@ SPIN_TEXTURE_COLUMNS = [
 ]
 
 
+BAND_FILE_RE = re.compile(r"band(\d{4})\.out(\.no_soc)?$", re.IGNORECASE)
+
+
+def band_file_variant(name: str) -> str | None:
+    """Identify the filename family, without inferring SOC from occupations."""
+    match = BAND_FILE_RE.fullmatch(name)
+    if match is None:
+        return None
+    return "no_soc" if match.group(2) else "standard"
+
+
 def parse_band_payload(
     uploaded_files: list[dict[str, object]], energy_shift: float = 0.0
 ) -> dict[str, object]:
-    """Parse FHI-aims ``band####.out`` files into reusable JSON data."""
+    """Parse one family of FHI-aims band files, including ``.out.no_soc``."""
 
     band_files = sorted(
         (
             file
             for file in uploaded_files
-            if re.fullmatch(r"band\d{4}\.out", str(file["name"]), re.IGNORECASE)
+            if band_file_variant(str(file["name"])) is not None
         ),
         key=lambda file: int(str(file["name"])[4:8]),
     )
     if not band_files:
-        raise ValueError("No band files were found; expected names such as `band0001.out`.")
+        raise ValueError(
+            "No band files were found; expected `band1001.out` or `band1001.out.no_soc`."
+        )
+    variants = {band_file_variant(str(file["name"])) for file in band_files}
+    if len(variants) > 1:
+        raise ValueError(
+            "Both .out and .out.no_soc band files were provided. "
+            "Select one file type per dataset; use separate datasets to compare them."
+        )
 
     segments = []
     band_count = None
@@ -299,6 +318,8 @@ def parse_band_payload(
         data = np.atleast_2d(np.asarray(data, dtype=float))
         if data.shape[1] < 6 or (data.shape[1] - 4) % 2:
             raise ValueError(f"`{file['name']}` does not contain occupation/energy pairs.")
+        if not np.isfinite(data).all():
+            raise ValueError(f"`{file['name']}` contains non-finite band data.")
         current_band_count = (data.shape[1] - 4) // 2
         if band_count is None:
             band_count = current_band_count
@@ -321,6 +342,7 @@ def parse_band_payload(
         "segments": segments,
         "segment_count": len(segments),
         "band_count": int(band_count or 0),
+        "file_variant": next(iter(variants)),
         "energy_shift": float(energy_shift),
         "energy_range": [float(all_energies.min()), float(all_energies.max())],
     }

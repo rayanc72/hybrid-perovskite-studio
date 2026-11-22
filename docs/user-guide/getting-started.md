@@ -6,10 +6,13 @@ Hybrid Perovskite Studio is a Streamlit app for hybrid perovskite structure anal
 
 ## Install and run the app
 
+Version 0.3.0 is available on GitHub; PyPI currently provides 0.2.1.
+Install this release from its GitHub tag (requires Git):
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install "hybrid-perovskite-studio[full]"
+pip install "hybrid-perovskite-studio[full] @ git+https://github.com/rayanc72/hybrid-perovskite-studio.git@v0.3.0"
 hps
 ```
 
@@ -27,9 +30,9 @@ streamlit run src/hps/app.py
 1. Start the app.
 2. On the landing page, choose a workspace from the four options below the hero.
 3. If you are working with structures, open `Structure`.
-4. In `Structure -> Overview`, upload a structure file in `.in`, `.cif`, or `.next_step` format.
+4. Use the upload box at the top of the Structure workspace to load a file in `.in`, `.cif`, or `.next_step` format.
 5. Use the `Current Structure` summary to inspect the loaded structure and export geometry files.
-6. Move into `Analysis` or `Transformations` as needed.
+6. Choose `Analysis` or `Transformations` as needed. The upload box and summary remain above the view controls.
 
 ## Workspaces
 

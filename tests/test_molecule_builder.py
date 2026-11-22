@@ -56,32 +56,27 @@ class MoleculeBuilderTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             molecule_builder.get_connected_coordinates(structure, max_iterations=-1)
 
+    def test_get_connected_coordinates_accepts_connection_on_final_iteration(self) -> None:
+        structure = Structure(
+            Lattice.cubic(10),
+            ["C", "C"],
+            [[0.1, 0.0, 0.0], [8.6, 0.0, 0.0]],
+            coords_are_cartesian=True,
+        )
+        self.assertIsNone(
+            molecule_builder.get_connected_coordinates(structure, max_iterations=0)
+        )
+        result = molecule_builder.get_connected_coordinates(structure, max_iterations=1)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(np.linalg.norm(result[1] - result[0]), 1.5)
+        np.testing.assert_allclose(structure.cart_coords, [[0.1, 0, 0], [8.6, 0, 0]])
+
     def test_get_molecule_object_raises_when_connectivity_cannot_be_resolved(self) -> None:
-        class DummyAtoms:
-            def __getitem__(self, item):
-                return item
+        from ase import Atoms
 
-        original = molecule_builder.AseAtomsAdaptor
-        original_get_connected = molecule_builder.get_connected_coordinates
-
-        class FakeAdaptor:
-            def get_structure(self, _molecule_atoms):
-                lattice = Lattice.cubic(10)
-                return Structure(
-                    lattice,
-                    ["H", "H"],
-                    [[0.0, 0.0, 0.0], [0.0, 0.0, 0.074]],
-                    coords_are_cartesian=True,
-                )
-
-        try:
-            molecule_builder.AseAtomsAdaptor = lambda: FakeAdaptor()
-            molecule_builder.get_connected_coordinates = lambda *_args, **_kwargs: None
-            with self.assertRaises(ValueError):
-                molecule_builder.get_molecule_object(DummyAtoms(), [0, 1])
-        finally:
-            molecule_builder.AseAtomsAdaptor = original
-            molecule_builder.get_connected_coordinates = original_get_connected
+        atoms = Atoms("HH", positions=[[0, 0, 0], [5, 0, 0]])
+        with self.assertRaisesRegex(ValueError, "connected bonded group"):
+            molecule_builder.get_molecule_object(atoms, [0, 1])
 
 
 if __name__ == "__main__":

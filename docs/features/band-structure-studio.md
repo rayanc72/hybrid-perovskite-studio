@@ -3,8 +3,9 @@
 ## Overview
 
 - `Band Structure Studio` lives in the `Electronic` workspace.
-- It combines two related outputs:
+- It combines three related outputs:
   - `Band Structure`
+  - `Excel export`
   - `Brillouin Zone`
 - It supports single-dataset and multi-dataset workflows.
 - It is designed for uploaded FHI-aims output files.
@@ -27,7 +28,9 @@
 ## Required Files
 
 - For band structure plotting:
-  - `band*.out`
+  - `band####.out` or `band####.out.no_soc` (without SOC), for example `band1001.out.no_soc`
+  - Both formats contain a k-point index, three k-point coordinates, then occupation/energy pairs.
+  - No-SOC files are read directly; renaming them is unnecessary.
 - For Brillouin-zone plotting:
   - `geometry.in`
 - For x-axis path labels and k-path reconstruction:
@@ -49,8 +52,14 @@
 - Each dataset gets its own widget key.
 - This avoids duplicate Streamlit widget-key errors.
 - The uploader accepts multiple files at once.
+- A dataset containing only `.out.no_soc` band files is recognized automatically.
+- If both filename types are uploaded, a selector chooses which type to plot for that dataset.
+- To overlay SOC and no-SOC results, use two datasets with distinct colors and legend labels.
+  Each dataset is aligned to its own VBM; their numbers of bands may differ.
+- The standard `.out` suffix alone does not establish whether a calculation used SOC.
 - The module looks for:
   - `band*.out`
+  - `band*.out.no_soc`
   - `geometry.in`
   - `control.in`
 
@@ -74,6 +83,7 @@
 ## Band-Edge Detection
 
 - The module scans the uploaded `band*.out` files for each dataset.
+- For a no-SOC dataset, the same scan uses its selected `band*.out.no_soc` files.
 - It computes:
   - VBM information
   - CBM information
@@ -155,6 +165,41 @@
   - `PDF`
 - The PDF export is suitable for later editing in vector-friendly tools.
 
+### Momentum–energy Excel export
+
+![Band-data Excel export controls](../images/screenshots/band-excel-export.png)
+
+- Open the **Excel export** tab beside **Band Structure**. The tab is always visible;
+  upload band files above to enable the export controls. Generating a plot is not required.
+- Choose one or more datasets, then enter state offsets relative to each dataset's detected VBM:
+  `0` is the VBM state, `-1` is the preceding state, and `+1` is the next state.
+  Use comma-separated offsets (`-1,0,1`) or inclusive colon ranges (`-2:3`).
+  States refer to individual file columns, including degenerate states.
+- Select one or more k-path segments; the selector shows their source filenames.
+- Download an `.xlsx` workbook with one sheet per selected relative state, named `VBM-1`,
+  `VBM`, `VBM+1`, etc. Sheets have frozen headers and column filters.
+- With one dataset selected, each sheet contains that state at every selected k-point, with
+  dataset/file identifiers, original one-based state and segment numbers, the VBM offset,
+  occupation, fractional k coordinates, raw energy, and energy relative to the dataset VBM in eV.
+- With multiple datasets selected, each state sheet uses side-by-side column groups for every
+  dataset. This supports SOC/no-SOC comparisons with
+  different absolute state numbers and band counts. Column prefixes include the dataset index
+  and legend label, so identical legend labels remain distinguishable.
+- Comparison rows align by the four-digit band-file identifier and exact fractional k coordinates.
+  Repeated coordinates match by occurrence within a segment. Different sampling grids are
+  retained with blanks for unmatched values; no interpolation is performed. Rows follow the first
+  dataset's sampling order, followed by points unique to later datasets. Each dataset retains
+  its own path distances and units, including when their lattices differ.
+- With `geometry.in`, the workbook also includes Cartesian k components in Å⁻¹. Path and segment
+  distances then use Å⁻¹; otherwise they use fractional-coordinate distances. The
+  `momentum_units` column records this distinction.
+- `segment_distance` starts at zero for each segment. `path_distance` retains the cumulative
+  distance along the full uploaded path, including omitted segments, without adding a jump
+  between disconnected segments.
+- Workbook selections are independent of the plot's segment filter, energy window, and x-axis
+  comparison scaling. Energies always use the VBM of the full dataset as their reference.
+- Empty or out-of-range selections display an error and remove the download button.
+
 ## Brillouin Zone Tab
 
 - Main purpose:
@@ -215,7 +260,12 @@
 - Invalid label-offset input shows a user-facing error.
 - Missing `geometry.in` blocks Brillouin-zone generation.
 - Missing `control.in` prevents path-label reconstruction.
-- Missing `band*.out` prevents useful band plotting.
+- Without `control.in`, the plot uses k-point coordinates from the band files as endpoint labels.
+- Without `geometry.in`, path lengths use fractional-coordinate distances; upload the geometry
+  for reciprocal-space distances.
+- Missing both `band####.out` and `band####.out.no_soc` prevents band plotting.
+- Mixing both filename types in a single backend dataset is rejected; the UI selects one type
+  before submitting the dataset.
 
 ## Current Implementation Notes
 

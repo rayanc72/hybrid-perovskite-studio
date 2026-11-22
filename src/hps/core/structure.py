@@ -11,13 +11,14 @@ from itertools import combinations_with_replacement
 import numpy as np
 import pandas as pd
 import spglib
-from ase.geometry import get_distances
 from ase.io import read
-from ase.neighborlist import natural_cutoffs
 from pymatgen.analysis.diffraction.xrd import XRDCalculator
 from pymatgen.io.ase import AseAtomsAdaptor
 from pymatgen.io.cif import CifWriter
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+from hps.core.molecules import build_bond_graph
+from hps.core.molecules import detect_molecules as detect_molecules
 
 
 def get_file_format(file_name: str) -> str:
@@ -51,59 +52,6 @@ def read_structure_bytes(file_bytes: bytes, file_format: str):
     return atoms
 
 
-def detect_molecules(
-    atoms, exceptions: list[tuple[str, str]] | None = None, bond_padding: float = 0.0
-):
-    exceptions = exceptions if exceptions else []
-
-    element_tolerance = [
-        0.1
-        if atom.symbol in ["C", "H", "N", "O", "S"]
-        else 0.5
-        if atom.symbol in ["Cl"]
-        else (0.25 + bond_padding)
-        for atom in atoms
-    ]
-    cutoffs = [
-        natural_cutoff + tolerance
-        for natural_cutoff, tolerance in zip(natural_cutoffs(atoms), element_tolerance)
-    ]
-    coords = atoms.get_positions()
-    cutoffs = np.array(cutoffs)
-
-    vec_diffs, _ = get_distances(coords, coords, cell=atoms.cell, pbc=atoms.pbc)
-    dist_matrix = np.linalg.norm(vec_diffs, axis=-1)
-    bonded_atoms = dist_matrix < cutoffs[:, None] + cutoffs
-
-    for i, atom_i in enumerate(atoms):
-        for j, atom_j in enumerate(atoms):
-            if (atom_i.symbol, atom_j.symbol) in exceptions or (
-                atom_j.symbol,
-                atom_i.symbol,
-            ) in exceptions:
-                bonded_atoms[i, j] = False
-                bonded_atoms[j, i] = False
-
-    graph = {i: bonded_atoms[i].nonzero()[0].tolist() for i, _atom in enumerate(atoms)}
-
-    def dfs_visit(index: int, visited: list[bool], component: list[int]) -> None:
-        visited[index] = True
-        component.append(index)
-        for neighbor in graph[index]:
-            if not visited[neighbor]:
-                dfs_visit(neighbor, visited, component)
-
-    visited = [False] * len(atoms)
-    molecules: list[list[int]] = []
-    for index, _atom in enumerate(atoms):
-        if not visited[index]:
-            component: list[int] = []
-            dfs_visit(index, visited, component)
-            molecules.append(component)
-
-    return molecules
-
-
 def _spacegroup_cell(atoms):
     return (
         atoms.cell.array,
@@ -121,7 +69,8 @@ def summarize_structure_upload(
 ) -> dict[str, object]:
     file_format = get_file_format(file_name)
     atoms = read_structure_bytes(file_bytes, file_format=file_format)
-    molecules = detect_molecules(atoms, exceptions=exceptions, bond_padding=bond_padding)
+    graph = build_bond_graph(atoms, exceptions=exceptions, bond_padding=bond_padding)
+    molecules = [list(component.indices) for component in graph.components]
     dataset = spglib.get_symmetry_dataset(_spacegroup_cell(atoms), symprec=1e-3)
 
     if dataset is None:
@@ -140,6 +89,9 @@ def summarize_structure_upload(
         "atom_count": len(atoms),
         "molecule_group_count": len(molecules),
         "molecules": molecules,
+        "bonded_components": [component.as_dict() for component in graph.components],
+        "finite_molecule_count": sum(component.is_finite for component in graph.components),
+        "periodic_network_count": sum(not component.is_finite for component in graph.components),
         "modified_symbols": [f"{atom.symbol}{index + 1}" for index, atom in enumerate(atoms)],
         "lattice_vectors": atoms.cell.array.tolist(),
         "space_group": space_group,

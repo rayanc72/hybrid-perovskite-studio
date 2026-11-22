@@ -22,6 +22,16 @@ hybrid perovskite modelling, analysis, and visualization.
 
 ## Install
 
+The current GitHub release is **0.3.0**. PyPI remains at **0.2.1**.
+To install 0.3.0 with the functional application stack from GitHub (requires Git):
+
+```bash
+pip install "hybrid-perovskite-studio[full] @ git+https://github.com/rayanc72/hybrid-perovskite-studio.git@v0.3.0"
+hps
+```
+
+To install the published PyPI version:
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -85,7 +95,6 @@ results, provenance notes, and checksum-validated inputs.
 - [Workspace Guides](docs/index.md)
 - [Backend Modernization](docs/reference/backend-modernization.md)
 - [Guided Examples](docs/user-guide/guided-examples.md)
-- [Development TODO](TODO.md)
 
 To preview the documentation locally:
 

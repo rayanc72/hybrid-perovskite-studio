@@ -25,6 +25,11 @@ from hps.domain.structure_manager import (
     rotate_molecules_v5,
     rotation_axis_and_angle_from_matrix_v2,
 )
+from hps.ui.workspaces.structure.molecule_selection import finite_molecule_numbers
+from hps.ui.workspaces.structure.transformations.downloads import (
+    create_cif_archive_download,
+    create_cif_download_file,
+)
 
 ROTATION_TYPES = (
     "Rotate Individual Molecules",
@@ -47,12 +52,19 @@ def render_rotation(
 
     render_section_header("Rotation", kicker="Structure Workspace")
 
+    finite_numbers = finite_molecule_numbers(modified_atoms, molecules)
+    if len(finite_numbers) != len(molecules):
+        st.caption("Only finite molecules can be rotated; original group numbers are retained.")
+    if not finite_numbers:
+        st.info("No finite molecules are available for rotation.")
+        return modified_atoms
+
     rotate_type = st.selectbox("Select Rotation Type", ROTATION_TYPES)
 
     if rotate_type == "Rotate Individual Molecules":
         # Gather user inputs for rotation using Streamlit widgets
         molecule_indices = st.multiselect(
-            "Select molecule indices", options=range(1, len(molecules) + 1)
+            "Select molecule indices", options=finite_numbers
         )
 
         if molecule_indices is not None:
@@ -91,6 +103,7 @@ def render_rotation(
                 file_name = os.path.splitext(st.session_state.file_name)[0]
 
                 create_aims_download_file(modified_atoms, file_name, output_suffix)
+                create_cif_download_file(modified_atoms, file_name, output_suffix)
 
                 create_labelled_download_file(modified_atoms, file_name, output_suffix)
 
@@ -98,7 +111,7 @@ def render_rotation(
         st.header("Rotate Molecules (Same operation for all chosen molecules)")
         # Gather user inputs for rotation using Streamlit widgets
         molecule_indices = st.multiselect(
-            "Select molecule indices", options=range(1, len(molecules) + 1)
+            "Select molecule indices", options=finite_numbers
         )
 
         axis_option = st.selectbox(
@@ -158,6 +171,7 @@ def render_rotation(
             file_name = os.path.splitext(st.session_state.file_name)[0]
 
             create_aims_download_file(modified_atoms, file_name, output_suffix)
+            create_cif_download_file(modified_atoms, file_name, output_suffix)
 
             create_labelled_download_file(modified_atoms, file_name, output_suffix)
 
@@ -339,7 +353,7 @@ def render_rotation(
                 with c1:
                     pair = st.multiselect(
                         "Select exactly two molecule indices to form a partner pair",
-                        options=range(1, len(molecules) + 1),
+                        options=finite_numbers,
                         max_selections=2,
                         key="sym_pair_builder",
                     )
@@ -368,10 +382,10 @@ def render_rotation(
                                 f"Manual selection: indices must be different (got {pair[0]}, {pair[1]})."
                             )
                         elif not (
-                            1 <= pair[0] <= len(molecules) and 1 <= pair[1] <= len(molecules)
+                            pair[0] in finite_numbers and pair[1] in finite_numbers
                         ):
                             issues.append(
-                                f"Manual selection: indices out of range 1..{len(molecules)}."
+                                "Manual selection: choose indices of finite molecules."
                             )
                         else:
                             new_pairs.append(tuple(sorted(pair)))
@@ -403,9 +417,9 @@ def render_rotation(
                                             f"Row {i + 1}: indices must be different (got {a}, {b})."
                                         )
                                         continue
-                                    if not (1 <= a <= len(molecules) and 1 <= b <= len(molecules)):
+                                    if not (a in finite_numbers and b in finite_numbers):
                                         issues.append(
-                                            f"Row {i + 1}: indices out of range 1..{len(molecules)} (got {a}, {b})."
+                                            f"Row {i + 1}: choose finite molecule indices (got {a}, {b})."
                                         )
                                         continue
                                     new_pairs.append(tuple(sorted((a, b))))
@@ -542,7 +556,7 @@ def render_rotation(
 
                     # Show logs in a table
                     df = _log_table_to_df(all_logs)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    st.dataframe(df, hide_index=True)
 
                     file_name = os.path.splitext(st.session_state.file_name)[0]
 
@@ -550,6 +564,7 @@ def render_rotation(
                         # Single file output via your helper, preserve prior suffix style
                         output_suffix = "_rand_sym"
                         create_aims_download_file(generated_atoms[0], file_name, output_suffix)
+                        create_cif_download_file(generated_atoms[0], file_name, output_suffix)
                         st.success("Symmetric random rotation applied and file generated.")
                     else:
                         # Batch ZIP
@@ -567,6 +582,16 @@ def render_rotation(
                             file_name=f"{file_name}_rand_sym_batch.zip",
                             mime="application/zip",
                         )
+                        create_cif_archive_download(
+                            [
+                                (f"{file_name}_rand_sym_{index:02d}.cif", structure)
+                                for index, structure in enumerate(generated_atoms, start=1)
+                            ],
+                            f"{file_name}_rand_sym_batch_cif.zip",
+                            download_label=(
+                                "Download CIF ZIP of symmetric random-rotated structures"
+                            ),
+                        )
                         st.success(
                             f"Generated {int(num_structs)} symmetric random-rotated structures."
                         )
@@ -576,7 +601,7 @@ def render_rotation(
 
             target_indices = st.multiselect(
                 "Select molecule indices for asymmetric random rotation",
-                options=range(1, len(molecules) + 1),
+                options=finite_numbers,
                 key="pure_random_indices",
             )
 
@@ -663,13 +688,14 @@ def render_rotation(
 
                     # Show logs in a table
                     df = _log_table_to_df(all_logs)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
+                    st.dataframe(df, hide_index=True)
 
                     file_name = os.path.splitext(st.session_state.file_name)[0]
 
                     if int(num_structs) == 1:
                         output_suffix = "_rand_pure"
                         create_aims_download_file(generated_atoms[0], file_name, output_suffix)
+                        create_cif_download_file(generated_atoms[0], file_name, output_suffix)
                         st.success("Asymmetric random rotations applied and file generated.")
                     else:
                         buf = io.BytesIO()
@@ -686,6 +712,14 @@ def render_rotation(
                             file_name=f"{file_name}_rand_asym_batch.zip",
                             mime="application/zip",
                         )
+                        create_cif_archive_download(
+                            [
+                                (f"{file_name}_rand_pure_{index:02d}.cif", structure)
+                                for index, structure in enumerate(generated_atoms, start=1)
+                            ],
+                            f"{file_name}_rand_asym_batch_cif.zip",
+                            download_label="Download CIF ZIP of pure random-rotated structures",
+                        )
                         st.success(
                             f"Generated {int(num_structs)} asymmetric random-rotated structures."
                         )
@@ -695,7 +729,7 @@ def render_rotation(
 
         # Gather user inputs for rotation using Streamlit widgets
         molecule_indices = st.multiselect(
-            "Select molecule indices", options=range(1, len(molecules) + 1)
+            "Select molecule indices", options=finite_numbers
         )
 
         if molecule_indices is not None:
@@ -751,6 +785,14 @@ def render_rotation(
                 file_name = os.path.splitext(st.session_state.file_name)[0]
 
                 create_zip_with_rotated_structures(rotated_structures_list, file_name)
+                create_cif_archive_download(
+                    [
+                        (f"{angle:.2f}_deg/{file_name}_rotated_{angle:.2f}_deg.cif", structure)
+                        for structure, angle in rotated_structures_list
+                    ],
+                    f"{file_name}_rotated_structures_cif.zip",
+                    download_label="Download CIF ZIP of rotation series",
+                )
 
     if rotate_type == "Rotate Part of Molecules":
         st.header("Rotate Atoms in Molecule")
@@ -758,7 +800,7 @@ def render_rotation(
         # Gather user inputs for rotation using Streamlit widgets
         # molecules is a list of lists where each list contains indices from the atoms object that define a molecule
         molecule_indices = st.multiselect(
-            "Select molecule indices", options=range(1, len(molecules) + 1)
+            "Select molecule indices", options=finite_numbers
         )
 
         if "rotation_parameters" not in st.session_state:
@@ -823,6 +865,7 @@ def render_rotation(
             file_name = os.path.splitext(st.session_state.file_name)[0]
 
             create_aims_download_file(modified_atoms, file_name, output_suffix)
+            create_cif_download_file(modified_atoms, file_name, output_suffix)
 
             create_labelled_download_file(modified_atoms, file_name, output_suffix)
 
@@ -832,7 +875,7 @@ def render_rotation(
 
         # Gather user inputs for rotation using Streamlit widgets
         molecule_indices = st.multiselect(
-            "Select molecule indices", options=range(1, len(molecules) + 1)
+            "Select molecule indices", options=finite_numbers
         )
 
         if molecule_indices is not None:
@@ -876,6 +919,7 @@ def render_rotation(
                 file_name = os.path.splitext(st.session_state.file_name)[0]
 
                 create_aims_download_file(modified_atoms, file_name, output_suffix)
+                create_cif_download_file(modified_atoms, file_name, output_suffix)
 
                 create_labelled_download_file(modified_atoms, file_name, output_suffix)
 

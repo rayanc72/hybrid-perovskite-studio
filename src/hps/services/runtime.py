@@ -33,6 +33,7 @@ DEPENDENCY_GROUPS: tuple[DependencyGroup, ...] = (
             "scipy": "scipy",
             "spglib": "spglib",
             "yaml": "pyyaml",
+            "xlsxwriter": "XlsxWriter",
         },
     ),
     DependencyGroup(

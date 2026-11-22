@@ -28,6 +28,7 @@ from hps.ui.workspaces.structure.analysis.charge import (
     parse_bader_integrated_atomic_properties,
     parse_id_field,
 )
+from hps.ui.workspaces.structure.molecule_selection import finite_molecule_numbers
 
 
 def render_molecule_analysis(
@@ -40,6 +41,17 @@ def render_molecule_analysis(
     molecules,
     render_section_header,
 ) -> None:
+    finite_numbers = []
+    if com_option or dm_option:
+        finite_numbers = finite_molecule_numbers(modified_atoms, molecules)
+        if len(finite_numbers) != len(molecules):
+            st.info(
+                "Molecular analysis includes only finite connected groups. "
+                "Periodic networks are excluded; original group numbers are retained."
+            )
+        if not finite_numbers:
+            st.info("No finite molecules are available for molecular analysis.")
+            com_option = dm_option = False
     if polarization_option:
         render_section_header("Calculated Polarization direction", kicker="Structure Workspace")
         pymatgen_structure = generate_symmetrized_structure(modified_atoms, 0.001, 5.0)
@@ -197,7 +209,8 @@ def render_molecule_analysis(
         # scale_choice = st.checkbox("Scaled (Fractional) co-ordinates")
         scale_choice = False
         df_centroids, df_distance_matrix, lattice_vectors, df_merged = get_distance_matrix(
-            modified_atoms, molecules
+            modified_atoms, [molecules[i - 1] for i in finite_numbers],
+            molecule_numbers=finite_numbers,
         )
 
         # Print the distances
@@ -264,7 +277,7 @@ def render_molecule_analysis(
         render_section_header("Get dipole moment direction", kicker="Structure Workspace")
 
         # Gather user inputs for rotation using Streamlit widgets
-        all_options = list(range(1, len(molecules) + 1))
+        all_options = finite_numbers
         options_with_all = ["Select All"] + all_options
 
         molecule_indices = st.multiselect(

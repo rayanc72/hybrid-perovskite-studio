@@ -9,9 +9,7 @@ from io import StringIO
 import numpy as np
 from ase import Atom, Atoms
 from ase.io import read, write
-from ase.neighborlist import natural_cutoffs
 from ase.geometry import get_distances
-from ase.data import covalent_radii
 from ase.spacegroup import get_spacegroup
 from ase.build import make_supercell
 import spglib
@@ -33,10 +31,8 @@ from pymatgen.io.cif import CifWriter
 from pymatgen.analysis.diffraction.xrd import XRDCalculator
 try:
     from pymatgen.core.structure_matcher import StructureMatcher
-    from pymatgen.core.local_env import CovalentBondNN
 except ModuleNotFoundError:
     from pymatgen.analysis.structure_matcher import StructureMatcher
-    from pymatgen.analysis.local_env import CovalentBondNN
 import zipfile
 import tempfile
 import pandas as pd
@@ -60,9 +56,9 @@ from io import BytesIO
 import re
 from scipy.interpolate import PchipInterpolator
 
+from hps.core.molecules import BOND_SETTINGS_KEY, unwrap_molecule
+from hps.core.molecules import detect_molecules as _detect_molecules
 from hps.domain.molecule_builder import (
-    draw_molecule_graph,
-    get_connected_coordinates,
     get_molecule_object,
 )
 
@@ -128,6 +124,9 @@ def initialize_structure(uploaded_data, file_format, file_name, exceptions=None,
     atoms = read_structure_file(uploaded_data, file_format=file_format)
 
     print_space_group(atoms)
+    atoms.info[BOND_SETTINGS_KEY] = {
+        "exceptions": list(exceptions or []), "bond_padding": b_p,
+    }
     molecules = detect_molecules(atoms, exceptions=exceptions, b=b_p)
     modified_symbols = [f"{atom.symbol}{i + 1}" for i, atom in enumerate(atoms)]
     return atoms, molecules, modified_symbols
@@ -282,57 +281,10 @@ def write_modified_aims_file(atoms, file_name, atom_label_overrides=None):
             f.write(f"atom {atom.position[0]} {atom.position[1]} {atom.position[2]} {modified_symbols[i]}\n")
 
 
-def detect_molecules(atoms, exceptions: List[Tuple[str, str]] = None, b=0):
-    exceptions = exceptions if exceptions else []
+def detect_molecules(atoms, exceptions: List[Tuple[str, str]] = None, b=None):
+    """Compatibility entry point for shared bonded-group detection."""
+    return _detect_molecules(atoms, exceptions=exceptions, bond_padding=b)
 
-    cov_radii = [covalent_radii[a.number] for a in atoms]
-    element_tolerance = [0.1 if a.symbol in ["C", "H", "N", "O", "S"] else 0.5 if a.symbol in ["Cl"] else (0.25+b) for a in atoms]
-    cutoffs = [natural_cutoff + tolerance for natural_cutoff, tolerance in
-               zip(natural_cutoffs(atoms), element_tolerance)]
-    coords = atoms.get_positions()
-
-    # Convert cutoffs to a NumPy array
-    cutoffs = np.array(cutoffs)
-
-    # Calculate vector differences between all atoms, considering periodic boundary conditions
-    vec_diffs, _ = get_distances(coords, coords, cell=atoms.cell, pbc=atoms.pbc)
-
-    # Calculate scalar distances
-    dist_matrix = np.linalg.norm(vec_diffs, axis=-1)
-
-    # Initialize bonded_atoms matrix
-    bonded_atoms = dist_matrix < cutoffs[:, None] + cutoffs
-
-    # Handle exceptions: If there's a bond between atoms that shouldn't be considered, remove the bond
-    for i, atom_i in enumerate(atoms):
-        for j, atom_j in enumerate(atoms):
-            if (atom_i.symbol, atom_j.symbol) in exceptions or (atom_j.symbol, atom_i.symbol) in exceptions:
-                bonded_atoms[i, j] = False
-                bonded_atoms[j, i] = False
-
-
-    # Create a graph of bonded atoms
-    graph = {}
-    for i, atom in enumerate(atoms):
-        graph[i] = bonded_atoms[i].nonzero()[0].tolist()
-
-    def dfs_visit(i, visited, graph, component):
-        visited[i] = True
-        component.append(i)
-
-        for neighbor in graph[i]:
-            if not visited[neighbor]:
-                dfs_visit(neighbor, visited, graph, component)
-
-    visited = [False] * len(atoms)
-    molecules = []
-    for i, atom in enumerate(atoms):
-        if not visited[i]:
-            component = []
-            dfs_visit(i, visited, graph, component)
-            molecules.append(component)
-
-    return molecules
 
 def rotation_matrix(axis, theta):
     axis = np.asarray(axis)
@@ -578,30 +530,7 @@ def rotate_molecules_v2(atoms, molecule, axis, angle):
     angle_rad = np.deg2rad(angle)
 
     rotated_atoms = atoms.copy()
-    molecule_atoms = rotated_atoms[molecule]
-    mol_structure = AseAtomsAdaptor().get_structure(molecule_atoms)
-
-    joined_coords = get_connected_coordinates(mol_structure)
-
-    mol = Molecule(mol_structure.species, joined_coords)
-    cnn = CovalentBondNN(tol=0.5)
-    mol_graph = MoleculeGraph.from_local_env_strategy(mol, cnn)
-
-
-    # Check if all the atoms in the molecule are connected
-    all_connected = True
-
-    for i in range(len(mol)):
-        connected_sites = mol_graph.get_connected_sites(i)
-        if not connected_sites:
-            all_connected = False
-            break
-
-    if not all_connected:
-        st.write("Not all atoms are connected within the molecule.")
-        st.pyplot(draw_molecule_graph(mol_graph))
-        return None
-
+    mol = get_molecule_object(rotated_atoms, molecule)
 
     centroid = mol.center_of_mass
 
@@ -677,28 +606,7 @@ def rotate_molecules_v3(atoms, molecules, molecule_indices, axis, angle,
 
     for molecule in chosen_molecules:
 
-        molecule_atoms = rotated_atoms[molecule]
-        mol_structure = AseAtomsAdaptor().get_structure(molecule_atoms)
-
-        joined_coords = get_connected_coordinates(mol_structure)
-
-        mol = Molecule(mol_structure.species, joined_coords)
-        cnn = CovalentBondNN(tol=0.5)
-        mol_graph = MoleculeGraph.from_local_env_strategy(mol, cnn)
-
-        # Check if all the atoms in the molecule are connected
-        all_connected = True
-
-        for i in range(len(mol)):
-            connected_sites = mol_graph.get_connected_sites(i)
-            if not connected_sites:
-                all_connected = False
-                break
-
-        if not all_connected:
-            st.write("Not all atoms are connected within the molecule.")
-            st.pyplot(draw_molecule_graph(mol_graph))
-            return None
+        mol = get_molecule_object(rotated_atoms, molecule)
 
         if centroid_option == 2:
             centroid = custom_centroid
@@ -725,28 +633,13 @@ def rotate_molecules_v3(atoms, molecules, molecule_indices, axis, angle,
     return rotated_atoms
 
 def get_com(atoms, molecules, scale_choice = False):
-    selected_atoms = atoms.copy()
     centroid_list = []
-
-    for index in range(len(molecules)):
-        molecule = molecules[index]
-        molecule_atoms = selected_atoms[molecule]
-
-        for j, atom1 in enumerate(molecule_atoms):
-            for k, atom2 in enumerate(molecule_atoms):
-                if j != k:
-                    diff = atom2.position - atom1.position
-                    for vec in np.eye(3):  # loop over unit vectors (x, y, z)
-                        cell_vec = np.dot(vec, atoms.cell)
-                        img_diff = diff - cell_vec
-                        if np.linalg.norm(img_diff) < np.linalg.norm(diff):
-                            molecule_atoms.positions[k] = atom2.position - cell_vec
-                            diff = img_diff
-
-
+    for molecule in molecules:
+        molecule_atoms = atoms[molecule]
+        molecule_atoms.positions = unwrap_molecule(atoms, molecule)
         centroid_list.append(molecule_atoms.get_center_of_mass(scaled=scale_choice))
-
     return centroid_list
+
 
 def plot_dipole_moment_vectors(direction_df, atoms, chosen_molecules, camera_pos):
     fig = go.Figure()
@@ -867,13 +760,16 @@ def create_3d_scatter_plot(df, title, box_vectors):
 from ase.geometry import wrap_positions
 
 
-def get_distance_matrix(modified_atoms, molecules):
+def get_distance_matrix(modified_atoms, molecules, molecule_numbers=None):
+    if molecule_numbers is None:
+        molecule_numbers = range(1, len(molecules) + 1)
+    labels = [f'Molecule {i}' for i in molecule_numbers]
     scale_choice = False
     centroids = np.array(get_com(modified_atoms, molecules, scale_choice))
     lattice_vectors = modified_atoms.get_cell()
 
     # Wrap centroids inside the unit cell boundary
-    centroids = wrap_positions(centroids, cell=lattice_vectors)
+    centroids = wrap_positions(centroids, cell=lattice_vectors, pbc=modified_atoms.pbc)
 
     if scale_choice:
         centroids_frac = np.dot(np.linalg.inv(lattice_vectors.T), centroids.T).T
@@ -882,7 +778,7 @@ def get_distance_matrix(modified_atoms, molecules):
 
     # Create a pandas DataFrame for centroids
     df_centroids = pd.DataFrame(centroids, columns=['a', 'b', 'c'])
-    df_centroids.index = [f'Molecule {i}' for i in range(1, len(centroids) + 1)]
+    df_centroids.index = labels
 
     # Calculate the true center of the unit cell
     unit_cell_center = np.sum(lattice_vectors, axis=0) / 2
@@ -894,11 +790,11 @@ def get_distance_matrix(modified_atoms, molecules):
 
     # Calculate distances with periodic boundary conditions
     positions = np.vstack([centroids, unit_cell_center[np.newaxis, :]])
-    distances = get_distances(positions, cell=lattice_vectors, pbc=True)[1][-1, :-1]
+    distances = get_distances(positions, cell=lattice_vectors, pbc=modified_atoms.pbc)[1][-1, :-1]
 
     # Create a DataFrame for distances
     df_distances = pd.DataFrame(distances.reshape(-1, 1), columns=['Distance'],
-                                index=[f'Molecule {i}' for i in range(1, len(centroids) + 1)])
+                                index=labels)
 
     # Merge the DataFrames
     df_merged = df_centroids.copy()
@@ -906,9 +802,9 @@ def get_distance_matrix(modified_atoms, molecules):
 
     # Print the distance matrix
     distance_matrix = positions[:-1] - unit_cell_center
-    wrapped_distance_matrix = wrap_positions(distance_matrix, cell=lattice_vectors)
+    wrapped_distance_matrix = wrap_positions(distance_matrix, cell=lattice_vectors, pbc=modified_atoms.pbc)
     df_distance_matrix = pd.DataFrame(wrapped_distance_matrix, columns=['a', 'b', 'c'],
-                                      index=[f'Molecule {i}' for i in range(1, len(centroids) + 1)])
+                                      index=labels)
 
     # # Use Streamlit column containers to display the dfs
     # col1, col2 = st.columns(2)

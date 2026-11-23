@@ -1,7 +1,15 @@
 # Hybrid Perovskite Studio
 
-Inspect crystal structures, transform finite molecular groups, visualize electronic
-outputs, and analyze trajectories in a local workspace-based application.
+Hybrid perovskites are tunable semiconductors. Their composition, molecular
+orientation, and lattice symmetry give researchers ways to study how crystal structure
+shapes material properties. The challenge is that organic molecules and extended
+inorganic frameworks coexist in the same crystal and often call for different
+analysis tools.
+
+Hybrid Perovskite Studio (HPS) brings those tools together. It distinguishes finite
+molecular groups from periodic networks so you can inspect the framework and
+transform individual molecules within the same crystal structure. It also lets you
+visualize electronic outputs and analyze molecular dynamics trajectories.
 
 !!! note "Documentation version"
     These guides describe the **GitHub v0.3.0 application**. Documentation and example

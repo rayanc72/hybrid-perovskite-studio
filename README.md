@@ -1,9 +1,15 @@
 # Hybrid Perovskite Studio
 
-Hybrid Perovskite Studio (HPS) is a local application for inspecting and transforming
-crystal structures, plotting electronic-structure outputs, and analyzing molecular
-dynamics trajectories. It focuses on hybrid perovskites and also supports other
-organic and inorganic materials.
+Hybrid perovskites are tunable semiconductors. Their composition, molecular
+orientation, and lattice symmetry give researchers ways to study how crystal structure
+shapes material properties. The challenge is that organic molecules and extended
+inorganic frameworks coexist in the same crystal and often call for different
+analysis tools.
+
+Hybrid Perovskite Studio (HPS) is a local application that distinguishes finite
+molecular groups from periodic networks for structure analysis and transformations.
+It also provides tools for electronic-structure outputs and molecular dynamics, with
+workflows that can be used for other organic and inorganic materials.
 
 - **Structure:** symmetry, bonded-group inspection, molecular transformations, CIF/AIMS exports, PXRD, and optional PDF analysis.
 - **Electronic:** FHI-aims bands with SOC/no-SOC comparison, Excel band-data exports, PDOS, spin texture, polarization, and absorption plots.
